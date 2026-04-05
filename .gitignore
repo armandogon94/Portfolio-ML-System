@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Data (regenerated via scripts)
+data/raw/*.csv
+data/processed/*.csv
+
+# Model checkpoints (regenerated via training)
+checkpoints/*/
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter (not used, but just in case)
+.ipynb_checkpoints/
+
+# W&B
+wandb/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Cache
+.ruff_cache/
+
+# Claude Code - user specific
+.claude/projects/

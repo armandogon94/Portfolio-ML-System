@@ -1,0 +1,13 @@
+metric,value
+train_loss,0.10435415577100891
+test_autoencoder_accuracy,0.96255
+test_autoencoder_precision,0.3258483033932136
+test_autoencoder_recall,0.81625
+test_autoencoder_f1,0.4657631954350927
+test_autoencoder_auc_roc,0.9641320471938776
+test_isolation_forest_accuracy,0.987725
+test_isolation_forest_precision,0.6924034869240349
+test_isolation_forest_recall,0.695
+test_isolation_forest_f1,0.6936993137866501
+test_isolation_forest_auc_roc,0.973566198979592
+anomaly_threshold,0.18291547894477844

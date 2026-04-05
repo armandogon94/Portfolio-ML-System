@@ -1,0 +1,53 @@
+problem: fraud_detection
+
+data:
+  raw_data_path: data/raw/fraud_transactions.csv
+  processed_data_path: data/processed/fraud_transactions.csv
+  n_samples: 200000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - transaction_amount
+    - hour_of_day
+    - day_of_week
+    - distance_from_home
+    - card_age_days
+    - num_transactions_last_hour
+    - amount_vs_avg_ratio
+  categorical:
+    - merchant_category
+    - is_online
+  target: is_fraud
+
+model:
+  type: autoencoder
+  params:
+    hidden_dims: [64, 32, 16]
+    dropout: 0.1
+    learning_rate: 0.001
+    batch_size: 256
+    epochs: 50
+    early_stopping_patience: 5
+    threshold_percentile: 95
+
+  # Baseline comparison model
+  baseline:
+    type: isolation_forest
+    params:
+      contamination: 0.02
+      n_estimators: 100
+      random_state: 42
+
+training:
+  checkpoint_dir: checkpoints/fraud_detection
+  results_dir: results
+  device: auto  # Will use MPS on Apple Silicon
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - fraud_detection
+    - autoencoder
+    - anomaly_detection
+    - pytorch
+    - mps

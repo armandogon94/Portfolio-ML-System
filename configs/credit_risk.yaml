@@ -1,0 +1,42 @@
+problem: credit_risk
+
+data:
+  raw_data_path: data/raw/credit_risk.csv
+  processed_data_path: data/processed/credit_risk.csv
+  n_samples: 50000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - age
+    - annual_income
+    - credit_score
+    - num_open_accounts
+    - payment_history_pct
+    - debt_to_income_ratio
+    - employment_years
+    - loan_amount
+  target: is_default
+
+model:
+  type: xgboost
+  params:
+    max_depth: 6
+    learning_rate: 0.1
+    n_estimators: 200
+    objective: "binary:logistic"
+    eval_metric: auc
+    early_stopping_rounds: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    scale_pos_weight: 11.5  # ~1/0.08 for 8% default rate
+
+training:
+  checkpoint_dir: checkpoints/credit_risk
+  results_dir: results
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - credit_risk
+    - xgboost
+    - classification

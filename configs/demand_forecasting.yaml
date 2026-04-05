@@ -1,0 +1,38 @@
+problem: demand_forecasting
+
+data:
+  raw_data_path: data/raw/daily_demand.csv
+  processed_data_path: data/processed/daily_demand.csv
+  n_years: 3
+  n_products: 5
+  test_days: 90
+  random_seed: 42
+
+features:
+  window_size: 30      # 30 days lookback
+  forecast_horizon: 7  # Predict 7 days ahead
+  target: demand
+
+model:
+  type: lstm
+  params:
+    input_size: 1
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.2
+    learning_rate: 0.001
+    batch_size: 64
+    epochs: 100
+    early_stopping_patience: 10
+
+training:
+  checkpoint_dir: checkpoints/demand_forecasting
+  results_dir: results
+  device: auto  # Will use MPS on Apple Silicon
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - demand_forecasting
+    - lstm
+    - time_series
+    - pytorch
+    - mps

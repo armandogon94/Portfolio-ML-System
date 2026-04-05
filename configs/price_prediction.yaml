@@ -1,0 +1,45 @@
+problem: price_prediction
+
+data:
+  raw_data_path: data/raw/housing.csv
+  processed_data_path: data/processed/housing.csv
+  n_samples: 30000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - square_feet
+    - bedrooms
+    - bathrooms
+    - year_built
+    - lot_size_sqft
+    - garage_spaces
+    - proximity_to_city_center
+  categorical:
+    - has_pool
+    - neighborhood_tier
+  target: price
+
+model:
+  type: lightgbm
+  params:
+    objective: regression
+    metric: rmse
+    num_leaves: 63
+    learning_rate: 0.05
+    n_estimators: 500
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    early_stopping_rounds: 30
+    verbose: -1
+
+training:
+  checkpoint_dir: checkpoints/price_prediction
+  results_dir: results
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - price_prediction
+    - lightgbm
+    - regression
