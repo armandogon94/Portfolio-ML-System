@@ -3,26 +3,26 @@
 ## Slice 1: Docker Foundation + Dev Workflow
 **Skills:** `incremental-implementation`, `test-driven-development`, `source-driven-development`
 
-- [ ] **1.1** Create .dockerignore + rename docker-compose.yml → docker-compose.prod.yml _(XS)_
-- [ ] **1.2** Create Dockerfile.api — multi-stage, CPU PyTorch, non-root user _(S)_
-- [ ] **1.3** Create Dockerfile.ui + self-contained docker-compose.yml (SQLite MLflow) _(M)_
-- [ ] **1.4** Add Makefile docker targets (docker-build, docker-up, docker-down, docker-logs, docker-test) _(XS)_
+- [x] **1.1** Create .dockerignore + rename docker-compose.yml → docker-compose.prod.yml _(XS)_
+- [x] **1.2** Create Dockerfile.api — multi-stage, CPU PyTorch, non-root user _(S)_
+- [x] **1.3** Create Dockerfile.ui + self-contained docker-compose.yml (SQLite MLflow) _(M)_
+- [x] **1.4** Add Makefile docker targets (docker-build, docker-up, docker-down, docker-logs, docker-test) _(XS)_
 
-**Checkpoint 1:** `docker compose up --build` → 3 healthy services, `curl :8070/health` → ok
+**Checkpoint 1:** ✅ Committed `37c0db7`
 
 ---
 
 ## Slice 2: Test Infrastructure + 80% Coverage
 **Skills:** `test-driven-development`, `incremental-implementation`
 
-- [ ] **2.1** Configure pytest-cov + rewrite conftest.py with tiny model fixtures _(M)_
-- [ ] **2.2** Parametrized data generator tests (4 generators × multiple sizes) _(S)_
-- [ ] **2.3** Parametrized feature engineering tests (4 pipelines, derived value checks) _(S)_
-- [ ] **2.4** API integration tests with TestClient (all endpoints) _(M)_
-- [ ] **2.5** Training pipeline integration test (credit risk + fraud end-to-end) _(M)_
-- [ ] **2.6** Coverage audit + gap filling to reach 80% _(M)_
+- [x] **2.1** Configure pytest-cov + rewrite conftest.py with tiny model fixtures _(M)_
+- [x] **2.2** Parametrized data generator tests (4 generators × multiple sizes) _(S)_
+- [x] **2.3** Parametrized feature engineering tests (4 pipelines, derived value checks) _(S)_
+- [x] **2.4** API integration tests with TestClient (all endpoints) _(M)_
+- [x] **2.5** Training pipeline integration test (credit risk + fraud end-to-end) _(M)_
+- [x] **2.6** Coverage audit + gap filling to reach 80% _(M)_
 
-**Checkpoint 2:** `make test` → ≥80% coverage, `make docker-test` passes
+**Checkpoint 2:** ✅ 208 tests, 88% coverage, 3.33s
 
 ---
 

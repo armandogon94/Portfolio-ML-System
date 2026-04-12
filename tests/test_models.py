@@ -1,6 +1,5 @@
 """Tests for model architectures."""
 
-import numpy as np
 import torch
 
 from src.models.fraud_autoencoder import FraudAutoencoder

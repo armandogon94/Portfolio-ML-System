@@ -1,17 +1,5 @@
-"""Tests for model serving (requires trained checkpoints)."""
+"""Tests for model serving (uses tiny model fixtures from conftest)."""
 
-import pytest
-
-# Import xgboost before torch to avoid libomp conflict
-import xgboost  # noqa: F401
-import lightgbm  # noqa: F401
-
-from src.serving.predictor import ModelPredictor
-
-
-@pytest.fixture(scope="module")
-def predictor():
-    return ModelPredictor()
 
 
 def test_credit_risk_prediction(predictor):
