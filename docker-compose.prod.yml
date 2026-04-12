@@ -1,0 +1,112 @@
+version: '3.9'
+
+services:
+  # MLflow Experiment Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: ml-system-mlflow
+    command: mlflow server --host 0.0.0.0 --port 5000
+    volumes:
+      - mlflow_data:/mlflow
+    ports:
+      - "5070:5000"  # Project 07: MLflow UI
+    networks:
+      - ml-network
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:postgres@postgres:5432/ml_system_db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prediction API Server (FastAPI)
+  ml-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ml-system-api
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:postgres@postgres:5432/ml_system_db
+      - REDIS_URL=redis://redis:6379/7
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ml_system_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "8070:8000"  # Project 07: Prediction API (FastAPI)
+    networks:
+      - ml-network
+      - backend
+    volumes:
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./checkpoints:/app/checkpoints
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ml-api.rule=Host(`api.ml.305-ai.com`)"
+      - "traefik.http.routers.ml-api.entrypoints=websecure"
+      - "traefik.http.routers.ml-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ml-api.loadbalancer.server.port=8000"
+
+  # ML Dashboard UI (Streamlit/Gradio)
+  ml-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: ml-system-ui
+    depends_on:
+      ml-api:
+        condition: service_healthy
+    environment:
+      - STREAMLIT_SERVER_PORT=3000
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - ML_API_URL=http://ml-api:8000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    ports:
+      - "3070:3000"  # Project 07: ML Dashboard UI
+    networks:
+      - ml-network
+      - backend
+    volumes:
+      - ./ui:/app/ui
+      - ./configs:/app/configs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ml-ui.rule=Host(`ml.305-ai.com`)"
+      - "traefik.http.routers.ml-ui.entrypoints=websecure"
+      - "traefik.http.routers.ml-ui.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ml-ui.loadbalancer.server.port=3000"
+
+volumes:
+  mlflow_data:
+    driver: local
+
+networks:
+  ml-network:
+    driver: bridge
+  backend:
+    external: true

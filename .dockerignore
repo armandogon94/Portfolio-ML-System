@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.ruff_cache
+
+# Virtual environments
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Generated data (regenerated inside container if needed)
+data/raw/
+data/processed/
+
+# Experiment tracking
+wandb/
+mlruns/
+
+# Environment secrets
+.env
+
+# Documentation (not needed in container)
+*.md
+!README.md
+docs/
+tasks/
+
+# Claude / agent artifacts
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db

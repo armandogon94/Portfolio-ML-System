@@ -1,5 +1,7 @@
 # Portfolio ML System
 
+> **Port allocation:** See [PORTS.md](PORTS.md) before changing any docker-compose ports. All ports outside the assigned ranges are taken by other projects.
+
 Production ML system with 4 models: Credit Risk (XGBoost), Fraud Detection (PyTorch Autoencoder), Price Prediction (LightGBM), Demand Forecasting (PyTorch LSTM). Unified Gradio web interface.
 
 ## Tech Stack

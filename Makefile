@@ -1,4 +1,5 @@
-.PHONY: setup data train evaluate ui serve test lint clean all
+.PHONY: setup data train evaluate ui serve test lint format clean all
+.PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean
 
 setup:
 	uv sync --extra dev
@@ -37,3 +38,23 @@ clean:
 
 all: data train evaluate
 	@echo "Full pipeline complete. Run 'make ui' to launch the web interface."
+
+# ── Docker targets ──────────────────────────────────────────────────
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+
+docker-test:
+	docker compose run --rm ml-api python -m pytest tests/ -v --tb=short
+
+docker-clean:
+	docker compose down -v --rmi local

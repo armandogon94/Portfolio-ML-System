@@ -1,26 +1,30 @@
-version: '3.9'
+# Self-contained development stack — no external dependencies.
+# Run: docker compose up --build
+# See docker-compose.prod.yml for production config (PostgreSQL, Traefik).
 
 services:
-  # MLflow Experiment Tracking Server
+  # MLflow Experiment Tracking Server (SQLite backend for dev)
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     container_name: ml-system-mlflow
-    command: mlflow server --host 0.0.0.0 --port 5000
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root file:///mlflow/artifacts
     volumes:
       - mlflow_data:/mlflow
     ports:
-      - "5070:5000"  # Project 07: MLflow UI
+      - "${MLFLOW_TRACKING_PORT:-5070}:5000"
     networks:
       - ml-network
-    environment:
-      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:postgres@postgres:5432/ml_system_db
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000"]
-      interval: 30s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/')\""]
+      interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 10s
 
   # Prediction API Server (FastAPI)
@@ -34,37 +38,22 @@ services:
         condition: service_healthy
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:postgres@postgres:5432/ml_system_db
-      - REDIS_URL=redis://redis:6379/7
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=ml_system_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - LOG_FORMAT=json
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTORCH_ENABLE_MPS_FALLBACK=1
     ports:
-      - "8070:8000"  # Project 07: Prediction API (FastAPI)
+      - "${BACKEND_PORT:-8070}:8000"
     networks:
       - ml-network
-      - backend
-    volumes:
-      - ./src:/app/src
-      - ./models:/app/models
-      - ./checkpoints:/app/checkpoints
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ml-api.rule=Host(`api.ml.305-ai.com`)"
-      - "traefik.http.routers.ml-api.entrypoints=websecure"
-      - "traefik.http.routers.ml-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ml-api.loadbalancer.server.port=8000"
+      start_period: 30s
 
-  # ML Dashboard UI (Streamlit/Gradio)
+  # ML Dashboard UI (Gradio)
   ml-ui:
     build:
       context: .
@@ -74,32 +63,20 @@ services:
       ml-api:
         condition: service_healthy
     environment:
-      - STREAMLIT_SERVER_PORT=3000
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
-      - STREAMLIT_SERVER_HEADLESS=true
-      - ML_API_URL=http://ml-api:8000
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+      - PYTORCH_ENABLE_MPS_FALLBACK=1
     ports:
-      - "3070:3000"  # Project 07: ML Dashboard UI
+      - "${FRONTEND_PORT:-3070}:7860"
     networks:
       - ml-network
-      - backend
-    volumes:
-      - ./ui:/app/ui
-      - ./configs:/app/configs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ml-ui.rule=Host(`ml.305-ai.com`)"
-      - "traefik.http.routers.ml-ui.entrypoints=websecure"
-      - "traefik.http.routers.ml-ui.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ml-ui.loadbalancer.server.port=3000"
+      start_period: 30s
 
 volumes:
   mlflow_data:
@@ -108,5 +85,3 @@ volumes:
 networks:
   ml-network:
     driver: bridge
-  backend:
-    external: true
