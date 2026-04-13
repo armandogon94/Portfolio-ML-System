@@ -19,6 +19,7 @@ dependencies = [
 
     # Experiment Tracking
     "wandb>=0.16",
+    "mlflow>=2.10",
 
     # Config
     "pyyaml>=6.0",

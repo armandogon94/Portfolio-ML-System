@@ -18,6 +18,16 @@ class TestModelsEndpoint:
         assert resp.status_code == 200
         assert isinstance(resp.json(), dict)
 
+    def test_models_backward_compat_no_mlflow_fields(self, api_client):
+        """Old checkpoints without MLflow fields should show null, not crash."""
+        resp = api_client.get("/models")
+        assert resp.status_code == 200
+        data = resp.json()
+        for problem, info in data.items():
+            assert info.get("mlflow_run_id") is None or isinstance(
+                info.get("mlflow_run_id"), str
+            )
+
 
 class TestCreditRiskEndpoint:
 

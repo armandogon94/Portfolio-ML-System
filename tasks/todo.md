@@ -29,12 +29,12 @@
 ## Slice 3: MLflow Integration
 **Skills:** `incremental-implementation`, `test-driven-development`, `source-driven-development`
 
-- [ ] **3.1** Add mlflow dep + MLflow init/fallback in BaseTrainer _(M)_
-- [ ] **3.2** MLflow model registry (version on save_checkpoint) _(S)_
-- [ ] **3.3** ModelPredictor MLflow info + /models endpoint update _(S)_
-- [ ] **3.4** Docker-compose MLflow wiring verification _(S)_
+- [x] **3.1** Add mlflow dep + MLflow init/fallback in BaseTrainer _(M)_
+- [x] **3.2** MLflow model registry (version on save_checkpoint) _(S)_
+- [x] **3.3** ModelPredictor MLflow info + /models endpoint update _(S)_
+- [x] **3.4** Docker-compose MLflow wiring verification _(S)_
 
-**Checkpoint 3:** MLflow UI at :5070 shows experiments, `/models` returns version info
+**Checkpoint 3:** ✅ 218 tests, 88% coverage — MLflow init/fallback/registry/metadata all verified
 
 ---
 

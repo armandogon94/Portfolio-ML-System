@@ -1,4 +1,4 @@
-"""Base trainer with W&B integration and checkpointing."""
+"""Base trainer with W&B + MLflow integration and checkpointing."""
 
 import json
 import os
@@ -7,10 +7,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
+import mlflow
 import pandas as pd
 from rich.console import Console
 
-from src.config import load_config, get_project_root
+from src.config import get_project_root, load_config
 
 console = Console()
 
@@ -18,7 +19,7 @@ console = Console()
 class BaseTrainer(ABC):
     """Base class for all model trainers.
 
-    Handles: config loading, W&B initialization, checkpoint saving, results CSV export.
+    Handles: config loading, W&B + MLflow initialization, checkpoint saving, results CSV export.
     Subclasses implement: load_data, preprocess, train, evaluate.
     """
 
@@ -26,6 +27,7 @@ class BaseTrainer(ABC):
         self.config = load_config(config_name)
         self.problem = self.config["problem"]
         self.use_wandb = use_wandb and self._init_wandb()
+        self.use_mlflow = self._init_mlflow()
         self.metrics = {}
         self.model = None
         self.start_time = None
@@ -52,13 +54,49 @@ class BaseTrainer(ABC):
             console.print(f"[yellow]W&B init failed: {e}. Using local logging.[/yellow]")
             return False
 
+    def _init_mlflow(self) -> bool:
+        """Initialize MLflow tracking. Falls back gracefully if server unreachable."""
+        tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "mlruns")
+        try:
+            mlflow.set_tracking_uri(tracking_uri)
+            experiment_name = self.config.get(
+                "training", {},
+            ).get("wandb_project", "portfolio-ml-system")
+            mlflow.set_experiment(experiment_name)
+            run_name = f"{self.problem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            mlflow.start_run(run_name=run_name)
+
+            # Log config as flat params
+            self._log_config_as_params(self.config)
+            console.print("[green]MLflow tracking initialized.[/green]")
+            return True
+        except Exception as e:
+            console.print(f"[yellow]MLflow init failed: {e}. Continuing without MLflow.[/yellow]")
+            return False
+
+    def _log_config_as_params(self, config: dict, prefix: str = "") -> None:
+        """Flatten nested config dict and log as MLflow params."""
+        params = {}
+        for key, value in config.items():
+            full_key = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
+            if isinstance(value, dict):
+                self._log_config_as_params(value, full_key)
+            elif isinstance(value, list):
+                params[full_key] = str(value)
+            else:
+                params[full_key] = str(value)
+        if params:
+            mlflow.log_params(params)
+
     def log_metric(self, key: str, value: float, step: int | None = None) -> None:
-        """Log a metric to W&B and local storage."""
+        """Log a metric to W&B, MLflow, and local storage."""
         self.metrics[key] = value
         if self.use_wandb:
             import wandb
 
             wandb.log({key: value}, step=step)
+        if self.use_mlflow:
+            mlflow.log_metric(key, value, step=step)
 
     def log_metrics(self, metrics: dict, step: int | None = None) -> None:
         """Log multiple metrics."""
@@ -67,6 +105,8 @@ class BaseTrainer(ABC):
             import wandb
 
             wandb.log(metrics, step=step)
+        if self.use_mlflow:
+            mlflow.log_metrics(metrics, step=step)
 
     def save_checkpoint(self, model_artifacts: dict) -> Path:
         """Save model checkpoint and metadata.
@@ -93,6 +133,34 @@ class BaseTrainer(ABC):
             save_fn(filepath)
             console.print(f"  [green]Saved {filepath}[/green]")
 
+        # MLflow: log artifacts and register model
+        mlflow_run_id = None
+        mlflow_model_version = None
+        if self.use_mlflow and mlflow.active_run():
+            try:
+                mlflow_run_id = mlflow.active_run().info.run_id
+                mlflow.log_artifacts(str(checkpoint_dir))
+
+                client = mlflow.tracking.MlflowClient()
+                try:
+                    client.create_registered_model(self.problem)
+                except mlflow.exceptions.MlflowException:
+                    pass  # Already exists
+                mv = client.create_model_version(
+                    name=self.problem,
+                    source=f"runs:/{mlflow_run_id}",
+                    run_id=mlflow_run_id,
+                )
+                mlflow_model_version = mv.version
+                console.print(
+                    f"  [green]Registered model '{self.problem}' "
+                    f"v{mlflow_model_version} in MLflow[/green]"
+                )
+            except Exception as e:
+                console.print(
+                    f"  [yellow]MLflow registry failed: {e}[/yellow]"
+                )
+
         # Save metadata
         elapsed = time.time() - self.start_time if self.start_time else 0
         metadata = {
@@ -103,6 +171,8 @@ class BaseTrainer(ABC):
             "hyperparameters": self.config.get("model", {}).get("params", {}),
             "training_time_seconds": round(elapsed, 1),
             "config_file": f"configs/{self.problem}.yaml",
+            "mlflow_run_id": mlflow_run_id,
+            "mlflow_model_version": mlflow_model_version,
         }
 
         metadata_path = checkpoint_dir / "metadata.json"
@@ -126,11 +196,13 @@ class BaseTrainer(ABC):
         return results_path
 
     def finish(self) -> None:
-        """Finalize W&B run."""
+        """Finalize W&B and MLflow runs."""
         if self.use_wandb:
             import wandb
 
             wandb.finish()
+        if self.use_mlflow and mlflow.active_run():
+            mlflow.end_run()
 
     @abstractmethod
     def load_data(self) -> pd.DataFrame:
