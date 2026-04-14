@@ -5,22 +5,25 @@ plus API /explain/* endpoints.
 """
 
 import numpy as np
-import pandas as pd
-import pytest
 
 from src.features.credit_risk_features import (
     engineer_features as credit_features,
+)
+from src.features.credit_risk_features import (
     get_feature_columns as credit_feature_cols,
 )
 from src.features.fraud_features import (
     engineer_features as fraud_engineer,
+)
+from src.features.fraud_features import (
     get_feature_columns as fraud_feature_cols,
 )
 from src.features.housing_features import (
     engineer_features as housing_features,
+)
+from src.features.housing_features import (
     get_feature_columns as housing_feature_cols,
 )
-
 
 # ── Task 4.1: SHAP Explainer ─────────────────────────────────────────────────
 
@@ -75,7 +78,9 @@ class TestSHAPExplainer:
         for v in result["feature_importances"].values():
             assert isinstance(v, float)
 
-    def test_explain_top_features_sorted_by_abs_importance(self, tiny_credit_risk_model, credit_risk_df):
+    def test_explain_top_features_sorted_by_abs_importance(
+        self, tiny_credit_risk_model, credit_risk_df
+    ):
         """top_features list is sorted descending by |shap_value|."""
         from src.explainability.shap_explainer import SHAPExplainer
 

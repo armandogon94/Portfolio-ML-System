@@ -14,7 +14,8 @@ def split_data(
     """Split dataframe into train/test sets."""
     X = df.drop(columns=[target_col])
     y = df[target_col]
-    return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y if y.nunique() <= 10 else None)
+    stratify = y if y.nunique() <= 10 else None
+    return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=stratify)
 
 
 def encode_categoricals(df: pd.DataFrame, categorical_cols: list[str]) -> tuple[pd.DataFrame, dict]:

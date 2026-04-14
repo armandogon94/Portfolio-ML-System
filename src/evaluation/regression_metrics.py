@@ -16,5 +16,7 @@ def compute_regression_metrics(
         f"{prefix}_rmse": np.sqrt(mse),
         f"{prefix}_mae": mean_absolute_error(y_true, y_pred),
         f"{prefix}_r2": r2_score(y_true, y_pred),
-        f"{prefix}_mape": float(np.mean(np.abs((y_true - y_pred) / np.clip(y_true, 1, None))) * 100),
+        f"{prefix}_mape": float(
+            np.mean(np.abs((y_true - y_pred) / np.clip(y_true, 1, None))) * 100
+        ),
     }

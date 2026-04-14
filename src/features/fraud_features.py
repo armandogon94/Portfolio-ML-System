@@ -1,7 +1,7 @@
 """Feature engineering for fraud detection."""
 
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder
 
 
 def engineer_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
@@ -18,7 +18,9 @@ def engineer_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     artifacts["merchant_encoder"] = le
 
     # Log-transform amount (reduces skew)
-    df["log_amount"] = df["transaction_amount"].clip(lower=0.01).apply(lambda x: __import__("numpy").log1p(x))
+    df["log_amount"] = df["transaction_amount"].clip(lower=0.01).apply(
+        lambda x: __import__("numpy").log1p(x)
+    )
 
     # Time features
     df["is_night"] = ((df["hour_of_day"] >= 22) | (df["hour_of_day"] <= 5)).astype(int)

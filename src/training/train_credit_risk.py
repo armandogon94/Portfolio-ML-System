@@ -1,11 +1,10 @@
 """Credit risk model trainer."""
 
-import numpy as np
 import pandas as pd
 
+from src.evaluation.classification_metrics import compute_classification_metrics
 from src.features.credit_risk_features import engineer_features, get_feature_columns
 from src.models.credit_risk_model import create_model
-from src.evaluation.classification_metrics import compute_classification_metrics
 from src.training.trainer import BaseTrainer
 
 
@@ -44,7 +43,6 @@ class CreditRiskTrainer(BaseTrainer):
         params = self.config["model"]["params"]
         self.model = create_model(params)
 
-        early_stopping = params.get("early_stopping_rounds", 20)
         self.model.fit(
             data["X_train"], data["y_train"],
             eval_set=[(data["X_test"], data["y_test"])],
