@@ -14,10 +14,38 @@ from src.serving.predictor import ModelPredictor
 predictor = ModelPredictor()
 
 
+def _build_importance_chart(explanation: dict, title: str) -> go.Figure:
+    """Build a horizontal bar chart from a feature importance explanation dict."""
+    top_features = explanation["top_features"]
+    features = [e["feature"] for e in top_features]
+    importances = [e["importance"] for e in top_features]
+
+    colors = ["#e74c3c" if v >= 0 else "#3498db" for v in importances]
+
+    fig = go.Figure(go.Bar(
+        x=importances,
+        y=features,
+        orientation="h",
+        marker_color=colors,
+        text=[f"{v:.4f}" for v in importances],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        title=title,
+        xaxis_title="SHAP Value / Importance" if explanation["explanation_type"] == "shap"
+            else "Gradient Importance",
+        yaxis={"autorange": "reversed"},
+        template="plotly_white",
+        height=350,
+        margin={"l": 160, "r": 80, "t": 50, "b": 40},
+    )
+    return fig
+
+
 # ── Tab 1: Credit Risk ──────────────────────────────────────────────────────
 
 def predict_credit_risk(age, income, credit_score, accounts, payment_pct, dti, emp_years, loan_amt):
-    result = predictor.predict_credit_risk({
+    data = {
         "age": age,
         "annual_income": income,
         "credit_score": credit_score,
@@ -26,7 +54,9 @@ def predict_credit_risk(age, income, credit_score, accounts, payment_pct, dti, e
         "debt_to_income_ratio": dti,
         "employment_years": emp_years,
         "loan_amount": loan_amt,
-    })
+    }
+    result = predictor.predict_credit_risk(data)
+    explanation = predictor.explain_credit_risk(data)
 
     risk_pct = f"{result['risk_score']:.1%}"
     confidence_pct = f"{result['confidence']:.1%}"
@@ -38,12 +68,16 @@ def predict_credit_risk(age, income, credit_score, accounts, payment_pct, dti, e
         f"### Recommendation: <span style='color:{color};font-weight:bold'>{rec}</span>\n"
         f"### Confidence: {confidence_pct}"
     )
-    return summary
+    chart = _build_importance_chart(explanation, "Top Feature Contributions (SHAP)")
+    return summary, chart
 
 
 def build_credit_risk_tab():
     with gr.TabItem("Credit Risk Scoring"):
-        gr.Markdown("## Loan Application Risk Assessment\nEnter applicant details to get a credit risk score.")
+        gr.Markdown(
+            "## Loan Application Risk Assessment\n"
+            "Enter applicant details to get a credit risk score."
+        )
         with gr.Row():
             with gr.Column():
                 age = gr.Slider(18, 75, value=35, step=1, label="Age")
@@ -58,7 +92,12 @@ def build_credit_risk_tab():
 
         btn = gr.Button("Score Application", variant="primary")
         output = gr.Markdown()
-        btn.click(predict_credit_risk, [age, income, credit_score, accounts, payment_pct, dti, emp_years, loan_amt], output)
+        chart = gr.Plot(label="Feature Importance")
+        btn.click(
+            predict_credit_risk,
+            [age, income, credit_score, accounts, payment_pct, dti, emp_years, loan_amt],
+            [output, chart],
+        )
 
 
 # ── Tab 2: Fraud Detection ──────────────────────────────────────────────────
@@ -70,7 +109,7 @@ MERCHANT_CATS = [
 ]
 
 def predict_fraud(amount, merchant, hour, day, distance, is_online, card_age, num_tx, ratio):
-    result = predictor.predict_fraud({
+    data = {
         "transaction_amount": amount,
         "merchant_category": merchant,
         "hour_of_day": hour,
@@ -80,10 +119,13 @@ def predict_fraud(amount, merchant, hour, day, distance, is_online, card_age, nu
         "card_age_days": card_age,
         "num_transactions_last_hour": num_tx,
         "amount_vs_avg_ratio": ratio,
-    })
+    }
+    result = predictor.predict_fraud(data)
+    explanation = predictor.explain_fraud(data)
 
     risk = result["risk_level"]
-    color = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red", "CRITICAL": "darkred"}.get(risk, "gray")
+    risk_colors = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red", "CRITICAL": "darkred"}
+    color = risk_colors.get(risk, "gray")
 
     summary = (
         f"### Risk Level: <span style='color:{color};font-weight:bold'>{risk}</span>\n"
@@ -93,16 +135,22 @@ def predict_fraud(amount, merchant, hour, day, distance, is_online, card_age, nu
         f"**Autoencoder Anomaly:** {'Yes' if result['is_anomaly_autoencoder'] else 'No'} | "
         f"**Isolation Forest Anomaly:** {'Yes' if result['is_anomaly_isolation_forest'] else 'No'}"
     )
-    return summary
+    chart = _build_importance_chart(explanation, "Top Feature Contributions (Gradient)")
+    return summary, chart
 
 
 def build_fraud_tab():
     with gr.TabItem("Fraud Detection"):
-        gr.Markdown("## Transaction Fraud Analysis\nEnter transaction details to detect potential fraud.")
+        gr.Markdown(
+            "## Transaction Fraud Analysis\n"
+            "Enter transaction details to detect potential fraud."
+        )
         with gr.Row():
             with gr.Column():
                 amount = gr.Number(value=150, label="Transaction Amount ($)")
-                merchant = gr.Dropdown(MERCHANT_CATS, value="online_retail", label="Merchant Category")
+                merchant = gr.Dropdown(
+                    MERCHANT_CATS, value="online_retail", label="Merchant Category"
+                )
                 hour = gr.Slider(0, 23, value=14, step=1, label="Hour of Day")
                 day = gr.Slider(0, 6, value=2, step=1, label="Day of Week (0=Mon)")
             with gr.Column():
@@ -114,13 +162,18 @@ def build_fraud_tab():
 
         btn = gr.Button("Analyze Transaction", variant="primary")
         output = gr.Markdown()
-        btn.click(predict_fraud, [amount, merchant, hour, day, distance, is_online, card_age, num_tx, ratio], output)
+        chart = gr.Plot(label="Feature Importance")
+        btn.click(
+            predict_fraud,
+            [amount, merchant, hour, day, distance, is_online, card_age, num_tx, ratio],
+            [output, chart],
+        )
 
 
 # ── Tab 3: Price Prediction ─────────────────────────────────────────────────
 
 def predict_price(sqft, beds, baths, year, lot, garage, pool, tier, proximity):
-    result = predictor.predict_price({
+    data = {
         "square_feet": sqft,
         "bedrooms": beds,
         "bathrooms": baths,
@@ -130,19 +183,25 @@ def predict_price(sqft, beds, baths, year, lot, garage, pool, tier, proximity):
         "has_pool": int(pool),
         "neighborhood_tier": tier,
         "proximity_to_city_center": proximity,
-    })
+    }
+    result = predictor.predict_price(data)
+    explanation = predictor.explain_price(data)
 
     summary = (
         f"### Predicted Price: ${result['predicted_price']:,.0f}\n"
         f"### Price Range: ${result['price_range_low']:,.0f} - ${result['price_range_high']:,.0f}\n"
         f"*(90% confidence interval)*"
     )
-    return summary
+    chart = _build_importance_chart(explanation, "Top Feature Contributions (SHAP)")
+    return summary, chart
 
 
 def build_price_tab():
     with gr.TabItem("Price Prediction"):
-        gr.Markdown("## Real Estate Price Estimation\nEnter property details to get a price prediction.")
+        gr.Markdown(
+            "## Real Estate Price Estimation\n"
+            "Enter property details to get a price prediction."
+        )
         with gr.Row():
             with gr.Column():
                 sqft = gr.Slider(400, 8000, value=1800, step=50, label="Square Feet")
@@ -153,12 +212,19 @@ def build_price_tab():
                 lot = gr.Slider(1000, 50000, value=8000, step=500, label="Lot Size (sqft)")
                 garage = gr.Slider(0, 3, value=2, step=1, label="Garage Spaces")
                 pool = gr.Checkbox(value=False, label="Has Pool")
-                tier = gr.Slider(1, 5, value=3, step=1, label="Neighborhood Tier (1=budget, 5=luxury)")
-                proximity = gr.Slider(0.5, 50, value=10, step=0.5, label="Distance to City Center (miles)")
+                tier = gr.Slider(1, 5, value=3, step=1, label="Neighborhood Tier (1=budget)")
+                proximity = gr.Slider(
+                    0.5, 50, value=10, step=0.5, label="Distance to City Center (miles)"
+                )
 
         btn = gr.Button("Estimate Price", variant="primary")
         output = gr.Markdown()
-        btn.click(predict_price, [sqft, beds, baths, year, lot, garage, pool, tier, proximity], output)
+        chart = gr.Plot(label="Feature Importance")
+        btn.click(
+            predict_price,
+            [sqft, beds, baths, year, lot, garage, pool, tier, proximity],
+            [output, chart],
+        )
 
 
 # ── Tab 4: Demand Forecasting ───────────────────────────────────────────────
@@ -190,7 +256,10 @@ def predict_demand(product):
 
 def build_forecast_tab():
     with gr.TabItem("Demand Forecasting"):
-        gr.Markdown("## Product Demand Forecasting\nSelect a product category to see the 7-day demand forecast.")
+        gr.Markdown(
+            "## Product Demand Forecasting\n"
+            "Select a product category to see the 7-day demand forecast."
+        )
         product = gr.Dropdown(PRODUCTS, value="electronics", label="Product Category")
         btn = gr.Button("Generate Forecast", variant="primary")
 
