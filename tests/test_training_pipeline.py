@@ -1,6 +1,7 @@
 """Training pipeline integration tests — end-to-end on tiny data."""
 
 import json
+import logging
 import shutil
 from pathlib import Path
 from unittest.mock import patch
@@ -29,6 +30,29 @@ def _setup_tmp_project(tmp_path: Path) -> Path:
 def _write_csv(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
+
+
+class TestTrainerLogging:
+    """Tests that BaseTrainer emits structured log messages during training."""
+
+    def test_trainer_logs_pipeline_steps(self, tmp_path, caplog):
+        """BaseTrainer.run() logs loading, preprocessing, training, evaluating, saving."""
+        project = _setup_tmp_project(tmp_path)
+        df = generate_credit_risk_data(n_samples=200, seed=42)
+        _write_csv(df, project / "data" / "raw" / "credit_risk.csv")
+
+        with caplog.at_level(logging.INFO, logger="src.training.trainer"), \
+             patch("src.config.PROJECT_ROOT", project):
+            from src.training.train_credit_risk import CreditRiskTrainer
+            trainer = CreditRiskTrainer(use_wandb=False)
+            trainer.config["model"]["params"]["n_estimators"] = 3
+            trainer.run()
+
+        messages = " ".join(r.message.lower() for r in caplog.records)
+        assert "loading" in messages or "load" in messages
+        assert "train" in messages
+        assert "evaluat" in messages
+        assert "saving" in messages or "checkpoint" in messages or "saved" in messages
 
 
 class TestCreditRiskPipeline:

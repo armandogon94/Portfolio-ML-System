@@ -1,17 +1,53 @@
 """FastAPI inference server."""
 
+import logging
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
+from src.logging_config import setup_logging
 from src.serving.predictor import ModelPredictor
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ML Inference Server", version="1.0.0")
 predictor = ModelPredictor()
+
+_CHECKPOINT_ROOT = Path(__file__).resolve().parent.parent.parent / "checkpoints"
+_ALL_MODELS = ["credit_risk", "fraud_detection", "price_prediction", "demand_forecasting"]
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log method, path, status code, and latency for every request (excluding /health)."""
+    if request.url.path == "/health":
+        return await call_next(request)
+
+    start = time.time()
+    response = await call_next(request)
+    latency_ms = round((time.time() - start) * 1000, 1)
+
+    msg = "%s %s %d %.1fms" % (
+        request.method,
+        request.url.path,
+        response.status_code,
+        latency_ms,
+    )
+
+    if response.status_code >= 500:
+        logger.error(msg)
+    elif response.status_code >= 400:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
+
+    return response
 
 
 class LoanApplication(BaseModel):
@@ -116,4 +152,8 @@ async def explain_fraud(tx: Transaction):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    models = {
+        model: {"available": (_CHECKPOINT_ROOT / model / "metadata.json").exists()}
+        for model in _ALL_MODELS
+    }
+    return {"status": "ok", "models": models}

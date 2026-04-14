@@ -1,6 +1,7 @@
 """Base trainer with W&B + MLflow integration and checkpointing."""
 
 import json
+import logging
 import os
 import time
 from abc import ABC, abstractmethod
@@ -12,8 +13,10 @@ import pandas as pd
 from rich.console import Console
 
 from src.config import get_project_root, load_config
+from src.logging_config import setup_logging
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 class BaseTrainer(ABC):
@@ -36,7 +39,7 @@ class BaseTrainer(ABC):
         """Initialize W&B if API key is available."""
         api_key = os.environ.get("WANDB_API_KEY")
         if not api_key or api_key == "your_key_here":
-            console.print("[yellow]W&B API key not set. Using local logging only.[/yellow]")
+            logger.info("W&B API key not set. Using local logging only.")
             return False
 
         try:
@@ -48,10 +51,10 @@ class BaseTrainer(ABC):
                 config=self.config,
                 tags=self.config.get("training", {}).get("wandb_tags", []),
             )
-            console.print("[green]W&B initialized successfully.[/green]")
+            logger.info("W&B initialized successfully.")
             return True
         except Exception as e:
-            console.print(f"[yellow]W&B init failed: {e}. Using local logging.[/yellow]")
+            logger.warning("W&B init failed: %s. Using local logging.", e)
             return False
 
     def _init_mlflow(self) -> bool:
@@ -68,10 +71,10 @@ class BaseTrainer(ABC):
 
             # Log config as flat params
             self._log_config_as_params(self.config)
-            console.print("[green]MLflow tracking initialized.[/green]")
+            logger.info("MLflow tracking initialized.")
             return True
         except Exception as e:
-            console.print(f"[yellow]MLflow init failed: {e}. Continuing without MLflow.[/yellow]")
+            logger.warning("MLflow init failed: %s. Continuing without MLflow.", e)
             return False
 
     def _log_config_as_params(self, config: dict, prefix: str = "") -> None:
@@ -131,7 +134,7 @@ class BaseTrainer(ABC):
         for filename, save_fn in model_artifacts.items():
             filepath = checkpoint_dir / filename
             save_fn(filepath)
-            console.print(f"  [green]Saved {filepath}[/green]")
+            logger.info("Saved artifact: %s", filepath)
 
         # MLflow: log artifacts and register model
         mlflow_run_id = None
@@ -152,14 +155,11 @@ class BaseTrainer(ABC):
                     run_id=mlflow_run_id,
                 )
                 mlflow_model_version = mv.version
-                console.print(
-                    f"  [green]Registered model '{self.problem}' "
-                    f"v{mlflow_model_version} in MLflow[/green]"
+                logger.info(
+                    "Registered model '%s' v%s in MLflow", self.problem, mlflow_model_version
                 )
             except Exception as e:
-                console.print(
-                    f"  [yellow]MLflow registry failed: {e}[/yellow]"
-                )
+                logger.warning("MLflow registry failed: %s", e)
 
         # Save metadata
         elapsed = time.time() - self.start_time if self.start_time else 0
@@ -178,7 +178,7 @@ class BaseTrainer(ABC):
         metadata_path = checkpoint_dir / "metadata.json"
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2, default=str)
-        console.print(f"  [green]Saved {metadata_path}[/green]")
+        logger.info("Saved checkpoint metadata: %s", metadata_path)
 
         return checkpoint_dir
 
@@ -192,7 +192,7 @@ class BaseTrainer(ABC):
 
         results_path = results_dir / f"{self.problem}_metrics.csv"
         df.to_csv(results_path, index=False)
-        console.print(f"  [green]Saved results -> {results_path}[/green]")
+        logger.info("Saved results CSV: %s", results_path)
         return results_path
 
     def finish(self) -> None:
@@ -231,39 +231,44 @@ class BaseTrainer(ABC):
 
     def run(self) -> dict:
         """Execute the full training pipeline."""
-        console.print(f"\n[bold blue]{'='*60}[/bold blue]")
-        console.print(f"[bold blue]Training: {self.problem}[/bold blue]")
-        console.print(f"[bold blue]{'='*60}[/bold blue]")
+        setup_logging()
+        logger.info("=" * 60)
+        logger.info("Training: %s", self.problem)
+        logger.info("=" * 60)
 
         self.start_time = time.time()
 
         # Load data
-        console.print("\n[bold]1. Loading data...[/bold]")
+        logger.info("1. Loading data...")
         df = self.load_data()
-        console.print(f"   Loaded {len(df):,} rows")
+        logger.info("   Loaded %d rows", len(df))
 
         # Preprocess
-        console.print("\n[bold]2. Preprocessing...[/bold]")
+        logger.info("2. Preprocessing...")
         data = self.preprocess(df)
 
         # Train
-        console.print("\n[bold]3. Training model...[/bold]")
+        logger.info("3. Training model...")
         self.train(data)
 
         # Evaluate
-        console.print("\n[bold]4. Evaluating...[/bold]")
+        logger.info("4. Evaluating...")
         metrics = self.evaluate(data)
         self.log_metrics(metrics)
 
         # Save
-        console.print("\n[bold]5. Saving checkpoint and results...[/bold]")
+        logger.info("5. Saving checkpoint and results...")
         self.save_checkpoint(self.get_checkpoint_artifacts())
         self.save_results_csv()
 
         elapsed = time.time() - self.start_time
-        console.print(f"\n[bold green]Completed {self.problem} in {elapsed:.1f}s[/bold green]")
+        logger.info("Completed %s in %.1fs", self.problem, elapsed)
         for k, v in metrics.items():
-            console.print(f"   {k}: {v:.4f}" if isinstance(v, float) else f"   {k}: {v}")
+            logger.info(
+                "   %s: %.4f" if isinstance(v, float) else "   %s: %s",
+                k,
+                v,
+            )
 
         self.finish()
         return metrics
