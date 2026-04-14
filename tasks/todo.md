@@ -41,12 +41,12 @@
 ## Slice 4: Model Explainability
 **Skills:** `incremental-implementation`, `test-driven-development`, `frontend-ui-engineering`
 
-- [ ] **4.1** SHAP explainer module for XGBoost + LightGBM _(M)_
-- [ ] **4.2** Gradient explainer for fraud autoencoder _(S)_
-- [ ] **4.3** API /explain/* endpoints (credit-risk, price, fraud) _(M)_
-- [ ] **4.4** Gradio UI explainability bar charts (3 tabs) _(M)_
+- [x] **4.1** SHAP explainer module for XGBoost + LightGBM _(M)_
+- [x] **4.2** Gradient explainer for fraud autoencoder _(S)_
+- [x] **4.3** API /explain/* endpoints (credit-risk, price, fraud) _(M)_
+- [x] **4.4** Gradio UI explainability bar charts (3 tabs) _(M)_
 
-**Checkpoint 4:** `/explain/credit-risk` returns SHAP values, Gradio shows charts
+**Checkpoint 4:** ✅ 243 tests, 88% coverage — SHAP + gradient explainers, /explain/* API, Gradio charts — commits `5dbfca9`, `26cb631`
 
 ---
 
