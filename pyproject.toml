@@ -21,6 +21,9 @@ dependencies = [
     "wandb>=0.16",
     "mlflow>=2.10",
 
+    # Explainability
+    "shap>=0.44",
+
     # Config
     "pyyaml>=6.0",
 

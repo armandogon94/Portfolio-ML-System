@@ -90,6 +90,30 @@ async def get_models():
     return predictor.get_model_info()
 
 
+@app.post("/explain/credit-risk")
+async def explain_credit_risk(app_data: LoanApplication):
+    try:
+        return predictor.explain_credit_risk(app_data.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/price")
+async def explain_price(prop: Property):
+    try:
+        return predictor.explain_price(prop.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/fraud")
+async def explain_fraud(tx: Transaction):
+    try:
+        return predictor.explain_fraud(tx.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

@@ -2,19 +2,19 @@
 
 import json
 import os
-from pathlib import Path
 
 import joblib
+import lightgbm  # noqa: F401
 import numpy as np
 import pandas as pd
-
-# IMPORTANT: Import xgboost BEFORE torch to avoid libomp segfault on macOS
-import xgboost as xgb  # noqa: F401 - must be imported before torch
-import lightgbm  # noqa: F401
-
 import torch
 
+# IMPORTANT: KMP_DUPLICATE_LIB_OK=TRUE must be set before importing these
+import xgboost as xgb  # noqa: F401 - import early to avoid libomp conflict on macOS
+
 from src.config import get_project_root
+from src.explainability.gradient_explainer import GradientExplainer
+from src.explainability.shap_explainer import SHAPExplainer
 from src.features.credit_risk_features import engineer_features as credit_features
 from src.features.credit_risk_features import get_feature_columns as credit_feature_cols
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
@@ -71,7 +71,9 @@ class ModelPredictor:
             input_dim = len(fraud_feature_cols())
             autoencoder = FraudAutoencoder(input_dim=input_dim, hidden_dims=[64, 32, 16])
             autoencoder.load_state_dict(
-                torch.load(checkpoint_dir / "autoencoder.pt", weights_only=True, map_location=self.device)
+                torch.load(
+                    checkpoint_dir / "autoencoder.pt", weights_only=True, map_location=self.device
+                )
             )
             autoencoder.to(self.device)
             autoencoder.eval()
@@ -79,7 +81,9 @@ class ModelPredictor:
 
             iso = joblib.load(checkpoint_dir / "isolation_forest.pkl")
             self._artifacts[problem]["isolation_forest"] = iso
-            self._artifacts[problem]["threshold"] = metadata["metrics"].get("anomaly_threshold", 0.18)
+            self._artifacts[problem]["threshold"] = metadata["metrics"].get(
+                "anomaly_threshold", 0.18
+            )
 
         elif problem == "price_prediction":
             model = joblib.load(checkpoint_dir / "model.pkl")
@@ -237,3 +241,47 @@ class ModelPredictor:
                 with open(metadata_path) as f:
                     info[problem] = json.load(f)
         return info
+
+    def explain_credit_risk(self, data: dict) -> dict:
+        """Explain a credit risk prediction with SHAP values."""
+        self._ensure_loaded("credit_risk")
+        model = self._models["credit_risk"]
+
+        df = pd.DataFrame([data])
+        df = credit_features(df)
+        features = df[credit_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, credit_feature_cols())
+
+    def explain_price(self, data: dict) -> dict:
+        """Explain a price prediction with SHAP values."""
+        self._ensure_loaded("price_prediction")
+        model = self._models["price_prediction"]
+
+        df = pd.DataFrame([data])
+        df = housing_features(df)
+        features = df[housing_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, housing_feature_cols())
+
+    def explain_fraud(self, data: dict) -> dict:
+        """Explain a fraud prediction with gradient-based feature importance."""
+        self._ensure_loaded("fraud_detection")
+
+        from src.features.fraud_features import engineer_features
+
+        df = pd.DataFrame([data])
+        df, _ = engineer_features(df)
+        feature_cols = fraud_feature_cols()
+        X = df[feature_cols].values.astype(np.float32)
+
+        scaler = self._artifacts["fraud_detection"]["scaler"]
+        X_scaled = scaler.transform(X).astype(np.float32)
+
+        model = self._models["fraud_detection"]
+        X_tensor = torch.FloatTensor(X_scaled)
+
+        explainer = GradientExplainer()
+        return explainer.explain(model, X_tensor, feature_cols)
