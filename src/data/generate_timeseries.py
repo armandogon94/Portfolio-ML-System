@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 
-
 PRODUCT_CATEGORIES = {
     "electronics": {"base_demand": 150, "trend_slope": 0.05, "seasonality_amp": 0.3},
     "clothing": {"base_demand": 200, "trend_slope": 0.02, "seasonality_amp": 0.4},

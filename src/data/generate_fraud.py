@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 
-
 MERCHANT_CATEGORIES = [
     "grocery", "restaurant", "gas_station", "online_retail", "electronics",
     "clothing", "travel", "entertainment", "healthcare", "utilities",

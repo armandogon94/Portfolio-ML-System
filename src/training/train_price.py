@@ -3,9 +3,9 @@
 import joblib
 import pandas as pd
 
+from src.evaluation.regression_metrics import compute_regression_metrics
 from src.features.housing_features import engineer_features, get_feature_columns
 from src.models.price_model import create_model
-from src.evaluation.regression_metrics import compute_regression_metrics
 from src.training.trainer import BaseTrainer
 
 

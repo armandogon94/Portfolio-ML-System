@@ -1,7 +1,9 @@
 """Shared evaluation utilities."""
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 from src.config import get_project_root
 
 

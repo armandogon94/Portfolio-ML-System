@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 
-
 NEIGHBORHOOD_TIERS = {
     1: {"name": "budget", "multiplier": 0.65},
     2: {"name": "affordable", "multiplier": 0.80},

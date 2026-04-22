@@ -7,7 +7,6 @@ import torch
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
 
 from src.device import get_device
 from src.evaluation.classification_metrics import compute_classification_metrics
