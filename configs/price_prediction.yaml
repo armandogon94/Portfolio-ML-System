@@ -1,8 +1,18 @@
 problem: price_prediction
 
 data:
+  # --- Modality selection (Phase A.1) ---
+  # synthetic: use the bundled generator at raw_data_path (default, backward-compatible)
+  # stream:    pull real data from Kaggle via kaggle_slug + stream_file, adapted by `adapter`
+  # mixed:     concat synthetic + streamed real; output gains a 'modality' column feature
+  source: synthetic
+  # --- Synthetic path ---
   raw_data_path: data/raw/housing.csv
-  processed_data_path: data/processed/housing.csv
+  # --- Stream path (Kaggle Zillow real-estate sales dataset) ---
+  kaggle_slug: computingvictor/zillow-market-analysis-and-real-estate-sales-data
+  stream_file: zillow_sales.csv  # placeholder; final filename confirmed at A.1.7 build
+  adapter: housing_adapter        # module under src/data/adapters/
+  # --- Split config (unchanged) ---
   n_samples: 30000
   test_size: 0.2
   random_seed: 42
