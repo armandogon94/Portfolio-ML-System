@@ -439,3 +439,287 @@ When all 5 slices are complete, the system passes these acceptance tests:
 ## Open Questions
 
 None — all design decisions documented in [decision.md](decision.md). Decisions were made independently based on deep analysis of the existing codebase, portfolio goals, and production ML best practices.
+
+---
+---
+
+# Spec: Phase A.1 — Data Streaming Foundation
+
+> **Parent plan:** `~/.claude/plans/lexical-purring-nebula.md` §Phase A.1
+> **Depends on:** Completed production-hardening work (Slices 1–5 above)
+> **Unlocks:** All remaining slices (A.2–A.9, B.1–B.4, C) that introduce 16 new models across 6 industries
+
+## Objective
+
+Enable training on real Kaggle and Hugging Face datasets **without committing them to the repo or bloating `data/raw/`**. This is the foundation slice that every new industry model depends on.
+
+**Secondary objective (new decision):** Introduce a **three-modality training framework** — every applicable model trains three variants (synthetic-only, stream-only, mixed) so we can pick the best-performing variant per problem for demo. This turns every new model into a small data-ablation study and documents the value of real data vs synthetic.
+
+**Target user:** Armando, building industry-specific demos. Also the Docker build — containers must not ship any real Kaggle data; they must stream or fail gracefully.
+
+**Success looks like:**
+- `src/data/stream.py` provides reusable `hf_stream()` and `kaggle_cached()` utilities
+- `price_prediction` can train in any of three modalities via a YAML config flag, with no regression to the existing synthetic pipeline
+- `data/raw/` size stays under 50 MB after running all three modalities for price_prediction
+- The Kaggle cache lives at `~/.cache/kagglehub/` (outside the repo, outside Docker build context)
+- Zero real network calls in the default `make test` run; one opt-in integration test fetches a real (tiny) dataset
+
+---
+
+## Three-Modality Training Framework (New Convention)
+
+Every model that has both a synthetic generator and a real public dataset trains **three variants**, saved as distinct checkpoints:
+
+| Modality | Data source | Checkpoint dir | Use case |
+|---|---|---|---|
+| `synthetic` | Existing synthetic generator (`src/data/generate_housing.py`) | `checkpoints/price_prediction_synthetic/` | Self-contained demo, no network, preserves current behavior |
+| `stream` | Real Kaggle/HF dataset only | `checkpoints/price_prediction_stream/` | Best-case "real data" performance baseline |
+| `mixed` | Synthetic + streamed real, concatenated with modality label as feature | `checkpoints/price_prediction_mixed/` | Demonstrates augmentation value; often best in practice when real data is small |
+
+The YAML field `data.source: synthetic | stream | mixed` selects the variant. When the user runs `uv run python scripts/train.py --model price --modality all`, the script trains all three and writes three rows to `results/price_prediction_metrics.csv` (one per modality). The modality with the best test metric is logged as "recommended for demo" in `checkpoints/<problem>_<modality>/metadata.json`.
+
+**Backward compatibility:** If `data.source` is missing from a YAML config, trainers default to `synthetic`. Existing 4 models keep working without config changes.
+
+---
+
+## Commands
+
+Commands introduced or modified by this slice:
+
+```bash
+# Install new streaming deps (kagglehub, datasets)
+uv sync --extra dev
+
+# Set Kaggle credentials once (write to ~/.kaggle/kaggle.json OR export env vars)
+export KAGGLE_USERNAME=your_username
+export KAGGLE_KEY=your_api_key
+# OR drop kaggle.json into ~/.kaggle/
+
+# Train price_prediction in all three modalities (new)
+uv run python scripts/train.py --model price --modality all
+
+# Train a single modality (new)
+uv run python scripts/train.py --model price --modality stream
+
+# Default test run — mocked, no network (unchanged)
+make test
+
+# Opt-in integration test that hits Kaggle for real (new)
+uv run pytest -m network tests/test_streaming.py
+
+# Verify cache location (new)
+du -sh ~/.cache/kagglehub 2>/dev/null || echo "no cache yet"
+```
+
+---
+
+## Project Structure
+
+New files (✨) and touched files (🔧):
+
+```
+07-Portfolio-ML-System/
+├── .env.example                      🔧 add KAGGLE_USERNAME, KAGGLE_KEY, HF_TOKEN
+├── pyproject.toml                    🔧 add kagglehub, datasets deps
+├── configs/
+│   └── price_prediction.yaml         🔧 add `data.source`, `data.kaggle_slug`, `data.hf_dataset`
+├── src/
+│   └── data/
+│       ├── stream.py                 ✨ hf_stream(), kaggle_cached(), iter_batches()
+│       ├── kaggle_credentials.py     ✨ load_kaggle_creds() — env vars or ~/.kaggle/kaggle.json
+│       └── modality.py               ✨ load_for_modality(problem, modality, synth_fn, stream_slug)
+├── src/training/
+│   └── train_price.py                🔧 dispatch on config["data"]["source"]
+├── scripts/
+│   └── train.py                      🔧 add --modality {synthetic,stream,mixed,all} flag
+└── tests/
+    └── test_streaming.py             ✨ unit tests (mocked) + one @pytest.mark.network test
+```
+
+No deletions. Every touched existing file is backward-compatible.
+
+---
+
+## Code Style
+
+### `stream.py` public surface — example
+
+```python
+"""Streaming data loaders for Kaggle and Hugging Face datasets.
+
+Keeps external datasets out of the repo by caching to ~/.cache/
+(kagglehub) or streaming in-memory (HF datasets).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+
+def kaggle_cached(slug: str, *, filename: str | None = None) -> Path:
+    """Download a Kaggle dataset to ~/.cache/kagglehub/ and return the path.
+
+    Args:
+        slug: Kaggle dataset slug, e.g. "arianazmoudeh/airbnbopendata".
+        filename: Optional specific file inside the dataset. If None, returns the directory.
+
+    Returns:
+        Path to the cached dataset (file or directory).
+
+    Raises:
+        RuntimeError: If Kaggle credentials are missing.
+    """
+    import kagglehub
+    path = Path(kagglehub.dataset_download(slug))
+    return path / filename if filename else path
+
+
+def hf_stream(dataset_id: str, split: str = "train") -> Iterator[dict[str, Any]]:
+    """Stream rows from a Hugging Face dataset without downloading.
+
+    Args:
+        dataset_id: HF dataset identifier, e.g. "lex_glue".
+        split: Dataset split name.
+
+    Yields:
+        Dict per row.
+    """
+    from datasets import load_dataset
+    ds = load_dataset(dataset_id, split=split, streaming=True)
+    yield from ds
+
+
+def iter_batches(
+    source: Iterator[dict[str, Any]] | pd.DataFrame,
+    batch_size: int = 1024,
+) -> Iterator[pd.DataFrame]:
+    """Chunk any row-iterable or DataFrame into DataFrame batches."""
+    ...  # implementation
+```
+
+### `load_for_modality` — example dispatcher
+
+```python
+def load_for_modality(
+    modality: str,
+    *,
+    synthetic_loader: Callable[[], pd.DataFrame],
+    stream_slug: str | None = None,
+    stream_file: str | None = None,
+    stream_adapter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+) -> pd.DataFrame:
+    """Return a DataFrame matching the requested modality.
+
+    Modalities:
+        synthetic: call synthetic_loader()
+        stream: kaggle_cached(stream_slug) -> read_csv -> stream_adapter()
+        mixed: concat(synthetic, stream) with a 'modality' column added
+    """
+    if modality == "synthetic":
+        return synthetic_loader()
+    if modality == "stream":
+        df = pd.read_csv(kaggle_cached(stream_slug, filename=stream_file))
+        return stream_adapter(df) if stream_adapter else df
+    if modality == "mixed":
+        synth = synthetic_loader().assign(modality="synthetic")
+        real = load_for_modality("stream", synthetic_loader=synthetic_loader,
+                                 stream_slug=stream_slug, stream_file=stream_file,
+                                 stream_adapter=stream_adapter).assign(modality="stream")
+        return pd.concat([synth, real], ignore_index=True)
+    raise ValueError(f"Unknown modality: {modality}")
+```
+
+### Style rules
+- Type hints required on every public function
+- `from __future__ import annotations` at the top of every new Python file
+- Module docstring explaining purpose
+- All imports of heavy deps (`kagglehub`, `datasets`) happen **inside** functions — keeps import-time fast and lets mocks patch cleanly
+- No print statements — use `logging.getLogger(__name__)`
+
+---
+
+## Testing Strategy
+
+- Framework: `pytest` (existing)
+- Tests in `tests/test_streaming.py`
+
+**Required tests (all mocked, run in `make test`):**
+
+1. `test_kaggle_cached_returns_path` — monkeypatch `kagglehub.dataset_download` → returns tmp dir → assert the path
+2. `test_kaggle_cached_with_filename` — same as above + filename param → returns `dir/filename`
+3. `test_hf_stream_yields_rows` — monkeypatch `datasets.load_dataset` → returns fake iterable → assert iteration works
+4. `test_iter_batches_chunks_correctly` — input 2500 rows, batch_size=1000 → yields 3 DataFrames (1000, 1000, 500)
+5. `test_load_for_modality_synthetic` — calls synthetic_loader, returns its output
+6. `test_load_for_modality_stream` — mocked kaggle_cached, returns real shape
+7. `test_load_for_modality_mixed` — returns concat with `modality` column
+8. `test_load_for_modality_invalid_raises` — raises ValueError for unknown modality
+9. `test_load_kaggle_creds_from_env` — monkeypatch env vars → loader reads them
+10. `test_load_kaggle_creds_from_file` — monkeypatch HOME to tmp dir with kaggle.json → loader reads it
+11. `test_price_trainer_respects_modality_flag` — integration: run PricePredictionTrainer with each modality using tiny mocked data → all three checkpoints written
+12. `test_missing_data_source_defaults_to_synthetic` — backward compatibility guard
+
+**Integration test (opt-in via `-m network`):**
+
+13. `@pytest.mark.network test_kaggle_cached_real_tiny_dataset` — pulls a tiny Kaggle dataset (e.g., iris-style <1 MB) → verifies the actual Kaggle API works. Skipped in CI unless `KAGGLE_USERNAME`+`KAGGLE_KEY` set.
+
+**Coverage target:** 90%+ for `src/data/stream.py`, `src/data/modality.py`, `src/data/kaggle_credentials.py`.
+
+**pytest config addition** (pyproject.toml):
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "network: tests that hit real external APIs (skipped by default)",
+]
+```
+
+---
+
+## Boundaries
+
+### Always
+- Import `kagglehub` / `datasets` **inside** functions, never at module top-level — keeps mocking clean and import-time fast
+- Cache to `~/.cache/kagglehub/` (outside the repo) — never write datasets into `data/raw/`
+- Use typed function signatures on all public surface
+- Respect existing BaseTrainer contract — streaming is opt-in and backward-compatible
+- Mock all external libs in unit tests; CI never hits real Kaggle
+
+### Ask first
+- Adding new dependencies beyond `kagglehub` and `datasets` (e.g., `huggingface_hub`, `pyarrow`)
+- Changing existing trainer interfaces — only add kwargs, never remove or rename
+- Committing real Kaggle data to the repo (answer is always no; confirm intent if tempted)
+- Changing modality semantics or checkpoint directory naming convention after first commit
+
+### Never
+- Commit `kaggle.json` or any file containing `KAGGLE_KEY`
+- Hardcode Kaggle credentials in code or tests
+- Bypass the cache — re-downloading a 3 M-row dataset on every train run is unacceptable
+- Break the three-modality contract once a model adopts it — `checkpoints/<problem>_<modality>/` must be stable
+- Import `torch` before `xgboost` / `lightgbm` in new files (preserves the existing libomp fix)
+
+---
+
+## Success Criteria (Phase A.1 acceptance)
+
+1. `uv sync` installs `kagglehub` and `datasets` without errors on Apple Silicon
+2. `tests/test_streaming.py` passes with ≥90 % coverage of the three new modules — `make test` stays green, total coverage ≥80 %
+3. `uv run python scripts/train.py --model price --modality synthetic` produces `checkpoints/price_prediction_synthetic/model.pkl` and `metadata.json` — byte-for-byte reproducible given the same seed
+4. `uv run python scripts/train.py --model price --modality stream` downloads Zillow data to `~/.cache/kagglehub/`, produces `checkpoints/price_prediction_stream/`, and `data/raw/` grows by < 1 MB
+5. `uv run python scripts/train.py --model price --modality mixed` produces `checkpoints/price_prediction_mixed/` with the `modality` feature column correctly present
+6. `uv run python scripts/train.py --model price --modality all` runs all three sequentially, writes three rows to `results/price_prediction_metrics.csv`, and logs a "recommended" modality based on test R²
+7. `make lint` → zero warnings
+8. `pytest -m network tests/test_streaming.py` passes when Kaggle creds are set (manually verified once; not run in CI)
+9. All four existing models (credit_risk, fraud_detection, price_prediction synthetic path, demand_forecasting) still train and pass their existing tests — no regressions
+10. `du -sh data/raw/` stays under 50 MB after full run
+
+---
+
+## Open Questions
+
+- **Q1 — Zillow dataset schema vs synthetic housing schema:** Need to write a `stream_adapter` that renames Zillow columns to match our existing `housing.csv` schema (`square_feet`, `bedrooms`, etc.). This is expected A.1 scope; concrete column map will be decided at `/build` time after inspecting the real Kaggle CSV.
+- **Q2 — Checkpoint dir breaking change:** Existing checkpoint lives at `checkpoints/price_prediction/` (no modality suffix). Migration options: (a) keep that path as alias for `_synthetic`, (b) rename during A.1 and update predictor. Deferred to `/plan` step — likely go with (a) for zero-downtime migration.
+- **Q3 — W&B / MLflow run naming:** Do the three modalities become three separate MLflow runs under one experiment, or three child runs under a parent? Deferred to `/plan` step.
+

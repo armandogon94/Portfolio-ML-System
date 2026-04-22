@@ -53,22 +53,83 @@
 ## Slice 5: Structured Logging + Production Polish
 **Skills:** `incremental-implementation`, `test-driven-development`
 
-- [ ] **5.1** Create logging_config.py (JSON/text formatter, env-driven) _(S)_
-- [ ] **5.2** Migrate BaseTrainer from Rich to stdlib logging _(S)_
-- [ ] **5.3** FastAPI request logging middleware _(S)_
-- [ ] **5.4** Enriched /health endpoint (model availability status) _(S)_
+- [x] **5.1** Create logging_config.py (JSON/text formatter, env-driven) _(S)_
+- [x] **5.2** Migrate BaseTrainer from Rich to stdlib logging _(S)_
+- [x] **5.3** FastAPI request logging middleware _(S)_
+- [x] **5.4** Enriched /health endpoint (model availability status) _(S)_
 
-**Checkpoint 5:** `docker compose logs ml-api` → JSON entries, `/health` → model status
+**Checkpoint 5:** ✅ 266 tests, 88% coverage — JSON/text logging, trainer migration, request middleware, enriched /health — commit `5c0b170`
 
 ---
 
-## Final Verification
+## Final Verification (Production Hardening)
 
-- [ ] `docker compose up --build` → 3 healthy services ≤90s
-- [ ] All 4 `/predict/*` endpoints return valid JSON
-- [ ] `/explain/credit-risk` + `/explain/price` return SHAP values
-- [ ] MLflow UI at :5070 shows registered models
-- [ ] Gradio at :3070 shows explainability charts
-- [ ] `make test` → ≥80% coverage, 0 failures
-- [ ] `docker compose logs ml-api` → JSON log entries
-- [ ] `make lint` → 0 warnings
+- [x] `docker compose up --build` → 3 healthy services ≤90s
+- [x] All 4 `/predict/*` endpoints return valid JSON
+- [x] `/explain/credit-risk` + `/explain/price` return SHAP values
+- [x] MLflow UI at :5070 shows registered models
+- [x] Gradio at :3070 shows explainability charts
+- [x] `make test` → ≥80% coverage, 0 failures
+- [x] `docker compose logs ml-api` → JSON log entries
+- [x] `make lint` → 0 warnings
+
+---
+---
+
+# Task List: Phase A.1 — Data Streaming Foundation
+
+> **Spec:** `SPEC.md` §"Phase A.1" · **Plan:** `tasks/plan.md` §"Phase A.1" · **Parent:** `~/.claude/plans/lexical-purring-nebula.md` §A.1
+
+## Sub-Phase A.1.a: Foundation Primitives
+**Skills:** `incremental-implementation`, `test-driven-development`, `source-driven-development`, `security-and-hardening`
+
+- [ ] **A.1.1** Add `kagglehub` + `datasets` deps, register `network` pytest marker, update default `addopts` _(XS)_
+- [ ] **A.1.2** `src/data/kaggle_credentials.py` — env-var + `~/.kaggle/kaggle.json` loader with tests _(S)_
+- [ ] **A.1.3** `src/data/stream.py` — `kaggle_cached()`, `hf_stream()`, `iter_batches()` with 4 mocked tests _(M)_
+
+**Checkpoint A.1.a:** foundation deps + primitives committed
+
+---
+
+## Sub-Phase A.1.b: Modality Orchestration
+**Skills:** `incremental-implementation`, `test-driven-development`, `api-and-interface-design`
+
+- [ ] **A.1.4** `src/data/modality.py` — `load_for_modality()` dispatcher (synthetic/stream/mixed) + 4 tests _(M)_
+- [ ] **A.1.5** `src/data/adapters/housing_adapter.py` — Zillow → canonical schema mapping + 4 tests — **resolves Q1** _(S)_
+
+**Checkpoint A.1.b:** dispatcher + first adapter committed
+
+---
+
+## Sub-Phase A.1.c: Price Prediction Migration
+**Skills:** `incremental-implementation`, `test-driven-development`, `deprecation-and-migration`
+
+- [ ] **A.1.6** Extend `configs/price_prediction.yaml` with `data.source`, `data.kaggle_slug`, `data.stream_file`, `data.adapter`; backfill default in `src/config.py` _(S)_
+- [ ] **A.1.7** Migrate `train_price.py` to `load_for_modality()` + extend `BaseTrainer` with `modality` + nested MLflow runs — **resolves Q3** _(M)_
+- [ ] **A.1.8** Dual-write checkpoint: synthetic modality mirrors `checkpoints/price_prediction/` — **resolves Q2** _(S)_
+- [ ] **A.1.9** CLI `--modality {synthetic,stream,mixed,all}` in `scripts/train.py` + comparison report + "recommended" flag _(S)_
+
+**Checkpoint A.1.c:** all 3 modalities train end-to-end, legacy predictor still works
+
+---
+
+## Sub-Phase A.1.d: End-to-End Verification + Docs
+**Skills:** `test-driven-development`, `documentation-and-adrs`, `source-driven-development`
+
+- [ ] **A.1.10** End-to-end mocked integration test — `--modality all` happy path, zero network calls _(M)_
+- [ ] **A.1.11** `@pytest.mark.network` test against real Kaggle + README + CLAUDE.md updates _(S)_
+
+**Checkpoint A.1:** Phase A.1 complete — commit + optional tag `v1.1.0-phase-a1`
+
+---
+
+## Final Verification (Phase A.1)
+
+- [ ] `make test` green with ≥88% coverage
+- [ ] `make lint` zero warnings
+- [ ] `pytest -m network` passes with real Kaggle creds (manual, once)
+- [ ] `uv run python scripts/train.py --model price --modality all` produces 3 checkpoints + comparison CSV row
+- [ ] `du -sh data/raw/` stays <50 MB
+- [ ] `du -sh ~/.cache/kagglehub/` confirms real data outside repo
+- [ ] All 4 existing models still train (no regression)
+- [ ] Legacy `checkpoints/price_prediction/` still loads in ModelPredictor without code changes

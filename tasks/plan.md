@@ -773,3 +773,463 @@ After all 5 slices:
 | Existing tests break after conftest.py rewrite | False failures block progress | Run existing tests first after rewrite, fix before proceeding |
 | Docker health checks flaky on cold start | CI failures | Set generous `start_period` (30s+), increase retries |
 | xgboost/torch import ordering breaks in Docker | Segfault on macOS libomp | Already handled in conftest.py, verify in Docker too |
+
+---
+---
+
+# Implementation Plan: Phase A.1 — Data Streaming Foundation
+
+> **Spec:** `SPEC.md` §"Phase A.1 — Data Streaming Foundation"
+> **Parent plan:** `~/.claude/plans/lexical-purring-nebula.md` §Phase A.1
+> **Unlocks:** All slices A.2–A.9, B.1–B.4, C
+
+## Overview
+
+Break Phase A.1 into **11 tasks across 4 sub-phases**. Each task uses TDD (RED → GREEN → REFACTOR) and is sized ≤5 files. Foundation primitives first (deps, credentials, stream utils), then orchestration (modality dispatcher, adapter), then integration (trainer + CLI + MLflow), then verification (E2E + network + docs).
+
+## Resolved Open Questions (from SPEC §A.1)
+
+- **Q1 — Zillow → housing schema mapping**: Write `src/data/adapters/housing_adapter.py` that maps Kaggle `computingvictor/zillow-market-analysis-and-real-estate-sales-data` columns to our canonical housing schema (`square_feet, bedrooms, bathrooms, year_built, lot_size_sqft, garage_spaces, has_pool, neighborhood_tier, proximity_to_city_center, price`). Missing features imputed with column median; extra columns dropped. Adapter is declared in YAML via `data.adapter: "housing_adapter"`. **Decision:** adapter module, not inline trainer code, so other industries reuse the pattern.
+- **Q2 — Checkpoint dir backward compatibility**: **Dual-write strategy.** When `--modality synthetic` runs, trainer writes to BOTH `checkpoints/price_prediction/` (legacy path) AND `checkpoints/price_prediction_synthetic/`. Other modalities write only to `checkpoints/price_prediction_<modality>/`. Predictor stays unchanged in A.1; future slice updates it to prefer recommended modality. **Decision:** zero-downtime migration; no predictor changes required in A.1.
+- **Q3 — MLflow run hierarchy**: **Nested runs when `--modality all`, single run otherwise.** Parent run tagged `modality: all`, name `price_prediction_comparison_<timestamp>`. Three child runs nested via `mlflow.start_run(nested=True)` tagged `modality: synthetic|stream|mixed`. Single-modality invocations stay top-level (preserves existing behavior). W&B uses `group="price_prediction_comparison_<ts>"` instead of nesting.
+
+## Dependency Graph
+
+```
+Task A.1.1: Deps + pytest marker
+    │
+    ├──→ Task A.1.2: Credentials loader
+    │        │
+    │        └──→ Task A.1.3: stream.py primitives
+    │                │
+    │                ├──→ Task A.1.4: modality.py dispatcher
+    │                │        │
+    │                │        ├──→ Task A.1.5: housing_adapter (Zillow schema)
+    │                │        │
+    │                │        └──→ Task A.1.6: Config schema extension
+    │                │                 │
+    │                │                 └──→ Task A.1.7: train_price migration + MLflow nesting
+    │                │                          │
+    │                │                          ├──→ Task A.1.8: Checkpoint alias dual-write
+    │                │                          │
+    │                │                          └──→ Task A.1.9: CLI --modality flag
+    │                │                                   │
+    │                │                                   └──→ Task A.1.10: E2E 3-modality integration test
+    │                │                                            │
+    │                │                                            └──→ Task A.1.11: @mark.network test + README
+```
+
+---
+
+## Sub-Phase A.1.a: Foundation Primitives
+
+**Skills:** `incremental-implementation`, `test-driven-development`, `source-driven-development`, `security-and-hardening`
+**Delivers:** Reusable library for fetching real datasets
+
+### Task A.1.1: Add Streaming Dependencies + pytest network Marker
+
+**Description:** Install `kagglehub` (for Kaggle cache-download) and `datasets` (for HF streaming). Register a `network` marker in pytest config so integration tests can be skipped by default.
+
+**Scope:** XS (2 files)
+
+**Steps:**
+- **RED:** N/A (dep config change — verify via `uv sync` succeeds)
+- **GREEN:**
+  - Add to `pyproject.toml` `[project.dependencies]`: `"kagglehub>=0.3"`, `"datasets>=2.18"`
+  - Add to `[tool.pytest.ini_options]`:
+    ```toml
+    markers = [
+        "network: tests that hit real external APIs (skipped by default)",
+    ]
+    ```
+  - Update pytest `addopts` to include `-m "not network"` so default runs skip network tests
+- **REFACTOR:** Verify `uv.lock` updates cleanly, no conflicts with existing deps
+
+**Acceptance criteria:**
+- [ ] `uv sync` succeeds with new deps on Apple Silicon
+- [ ] `import kagglehub; import datasets` works inside the venv
+- [ ] `pytest --collect-only` shows `[skipped]` for any existing `@pytest.mark.network` (none yet, but machinery is ready)
+- [ ] Existing test suite still passes: `make test` stays at ≥88% coverage
+
+**Files:** `pyproject.toml`, `uv.lock`
+**Dependencies:** None
+
+---
+
+### Task A.1.2: Kaggle Credentials Loader
+
+**Description:** Create `src/data/kaggle_credentials.py` that loads Kaggle API credentials from env vars first, falls back to `~/.kaggle/kaggle.json`. Raises a clear error if neither is available. This module is called before any `kagglehub` operation.
+
+**Scope:** S (2 files)
+
+**Steps:**
+- **RED:** Write `tests/test_kaggle_credentials.py`:
+  - `test_load_from_env_vars` — set KAGGLE_USERNAME/KAGGLE_KEY via monkeypatch, assert loader returns dict with those values
+  - `test_load_from_kaggle_json` — monkeypatch `HOME` to tmp_path containing `.kaggle/kaggle.json`, assert loader reads it
+  - `test_env_wins_over_file` — both present → env vars take precedence
+  - `test_raises_when_missing` — neither present → raises `RuntimeError` with helpful message
+- **GREEN:** Implement `load_kaggle_creds() -> dict[str, str]` with helpful error messages pointing to both env var and file setup
+- **REFACTOR:** Add `ensure_kaggle_env()` helper that exports credentials into `os.environ` for kagglehub to pick up
+
+**Acceptance criteria:**
+- [ ] 4 tests pass, 100% coverage on `kaggle_credentials.py`
+- [ ] Clear error message when creds missing: mentions both env var option and `~/.kaggle/kaggle.json` option
+- [ ] Env vars take precedence over file when both exist
+- [ ] No hardcoded paths — uses `Path.home()`
+
+**Files:** `src/data/kaggle_credentials.py` (new), `tests/test_kaggle_credentials.py` (new)
+**Dependencies:** Task A.1.1
+
+---
+
+### Task A.1.3: Stream Primitives (`src/data/stream.py`)
+
+**Description:** Implement the three public utilities defined in SPEC: `kaggle_cached()`, `hf_stream()`, `iter_batches()`. All heavy imports (`kagglehub`, `datasets`) happen inside functions for clean mocking and fast module import.
+
+**Scope:** M (2 files)
+
+**Steps:**
+- **RED:** Write `tests/test_streaming.py` with 4 mocked tests:
+  - `test_kaggle_cached_returns_path` — monkeypatch `kagglehub.dataset_download` → returns tmp dir → assert Path returned
+  - `test_kaggle_cached_with_filename` — same + filename param → returns `dir/filename`
+  - `test_hf_stream_yields_rows` — monkeypatch `datasets.load_dataset` returning a fake iterable → assert iteration works
+  - `test_iter_batches_chunks_correctly` — 2500 rows, batch_size=1000 → yields 3 DataFrames sized (1000, 1000, 500); also test DataFrame input path and iterator input path
+- **GREEN:** Implement `src/data/stream.py` with module docstring, `from __future__ import annotations`, and typed signatures. `kaggle_cached` calls `ensure_kaggle_env()` from A.1.2 before downloading. `hf_stream` accepts optional `token` kwarg from `HF_TOKEN` env var. `iter_batches` handles both DataFrame and Iterator[dict].
+- **REFACTOR:** Add module-level logger `logger = logging.getLogger(__name__)`; log the cache path at INFO level after download. Pylance-clean type hints.
+
+**Acceptance criteria:**
+- [ ] 4 tests pass, ≥90% coverage on `stream.py`
+- [ ] No top-level imports of `kagglehub` or `datasets` (verify with grep)
+- [ ] `kaggle_cached` returns `pathlib.Path`, not `str`
+- [ ] Functions accept and propagate logging calls
+- [ ] `make lint` passes
+
+**Files:** `src/data/stream.py` (new), `tests/test_streaming.py` (new/extend)
+**Dependencies:** Task A.1.2
+
+---
+
+### Checkpoint A.1.a — Foundation Primitives
+- [ ] `make test` green, ≥88% overall coverage
+- [ ] `make lint` zero warnings
+- [ ] Commit: `"Phase A.1.a: streaming foundation — deps, creds loader, stream.py primitives"`
+
+---
+
+## Sub-Phase A.1.b: Modality Orchestration
+
+**Skills:** `incremental-implementation`, `test-driven-development`, `api-and-interface-design`
+**Delivers:** The 3-modality dispatcher + first adapter
+
+### Task A.1.4: Modality Dispatcher (`src/data/modality.py`)
+
+**Description:** Implement `load_for_modality(modality, synthetic_loader, stream_slug, stream_file, stream_adapter)` per SPEC. Handles the three modalities consistently and adds the `modality` feature column for `mixed`.
+
+**Scope:** M (2 files)
+
+**Steps:**
+- **RED:** Add 4 tests to `tests/test_streaming.py`:
+  - `test_load_for_modality_synthetic` — calls synthetic_loader, returns its output, never touches network
+  - `test_load_for_modality_stream` — mocked kaggle_cached + mocked read_csv + mocked adapter → returns adapted DataFrame
+  - `test_load_for_modality_mixed` — returns concat with `modality` column containing both "synthetic" and "stream" values, row count = synthetic + stream
+  - `test_load_for_modality_invalid_raises` — `"invalid"` → raises ValueError listing valid modalities
+- **GREEN:** Implement `load_for_modality()`. Signature exactly per SPEC. Return type: `pd.DataFrame` always. For `mixed`, concat with `ignore_index=True` and add `modality` column before concat so the column is correctly populated per-row.
+- **REFACTOR:** Factor out common "read kaggle CSV + adapt" into private `_load_stream()` helper to avoid duplication between `stream` and `mixed` branches.
+
+**Acceptance criteria:**
+- [ ] 4 new tests pass, ≥95% coverage on `modality.py`
+- [ ] `mixed` output DataFrame has a `modality` column with correct per-row values
+- [ ] Unknown modality raises ValueError with list of valid values
+- [ ] Stream adapter is optional (defaults to identity)
+
+**Files:** `src/data/modality.py` (new), `tests/test_streaming.py` (extend)
+**Dependencies:** Task A.1.3
+
+---
+
+### Task A.1.5: Housing Adapter (Zillow → canonical schema)
+
+**Description:** Create `src/data/adapters/housing_adapter.py` (+ `__init__.py`) that maps Kaggle `computingvictor/zillow-market-analysis-and-real-estate-sales-data` columns to our canonical housing schema. Resolves Q1 from SPEC.
+
+**Scope:** S (3 files)
+
+**Steps:**
+- **RED:** Write `tests/test_housing_adapter.py`:
+  - `test_adapter_renames_zillow_columns` — feed a synthetic Zillow-shaped DataFrame, assert output has canonical column names
+  - `test_adapter_imputes_missing_columns` — if `garage_spaces` is missing from input, output fills with median (or 0 if entirely absent)
+  - `test_adapter_drops_extra_columns` — input has extra fluff columns → output only has canonical columns
+  - `test_adapter_output_schema_matches_synthetic` — output columns are a subset or equal to `generate_housing.py` schema
+- **GREEN:** Implement `housing_adapter(df) -> pd.DataFrame` with a COLUMN_MAP dict. Best-effort mapping:
+  - `square_feet` ← `SquareFootage` or `living_area_sqft` or `sqft_living`
+  - `bedrooms` ← `Bedrooms` or `beds`
+  - `bathrooms` ← `Bathrooms` or `baths`
+  - `year_built` ← `YearBuilt` or `year_built`
+  - `lot_size_sqft` ← `LotSize` or `lot_size_sqft`
+  - `garage_spaces` ← `GarageSpaces` (impute 0 if missing)
+  - `has_pool` ← `HasPool`/`pool` → 0/1 (impute 0)
+  - `neighborhood_tier` ← derive from `ZipCode` price quintile, or default to 3 (middle)
+  - `proximity_to_city_center` ← `DistanceToCBD` (impute median)
+  - `price` ← `SalePrice` or `Price`
+- **REFACTOR:** Move COLUMN_MAP to a module constant so adapter is inspectable; add docstring listing the canonical schema.
+
+**Acceptance criteria:**
+- [ ] 4 tests pass, ≥90% coverage on `housing_adapter.py`
+- [ ] Output DataFrame has exactly the 10 canonical columns (subset of housing.csv schema)
+- [ ] No KeyError for missing optional fields — imputation strategy documented in docstring
+- [ ] `make lint` passes
+
+**Files:** `src/data/adapters/__init__.py` (new), `src/data/adapters/housing_adapter.py` (new), `tests/test_housing_adapter.py` (new)
+**Dependencies:** Task A.1.4
+
+---
+
+### Checkpoint A.1.b — Modality Orchestration
+- [ ] `make test` green, ≥88% overall coverage
+- [ ] `make lint` zero warnings
+- [ ] Commit: `"Phase A.1.b: modality dispatcher + Zillow housing adapter"`
+
+---
+
+## Sub-Phase A.1.c: Price Prediction Migration
+
+**Skills:** `incremental-implementation`, `test-driven-development`, `deprecation-and-migration`
+**Delivers:** price_prediction trains in all three modalities end-to-end
+
+### Task A.1.6: Config Schema Extension
+
+**Description:** Extend `configs/price_prediction.yaml` with `data.source`, `data.kaggle_slug`, `data.stream_file`, `data.adapter` keys. Default `data.source: synthetic` for backward compatibility.
+
+**Scope:** S (2 files)
+
+**Steps:**
+- **RED:** Write `tests/test_config_loader.py` test:
+  - `test_price_config_has_source_field` — `load_config("price_prediction")` returns dict with `data.source == "synthetic"`
+  - `test_price_config_has_kaggle_slug` — value is `"computingvictor/zillow-market-analysis-and-real-estate-sales-data"`
+  - `test_missing_source_defaults_to_synthetic` — craft a temp config without `source` key, confirm loader fills it
+- **GREEN:** Update `configs/price_prediction.yaml`:
+  ```yaml
+  data:
+    source: synthetic  # synthetic | stream | mixed
+    raw_data_path: data/raw/housing.csv
+    kaggle_slug: computingvictor/zillow-market-analysis-and-real-estate-sales-data
+    stream_file: zillow_sales.csv  # actual filename TBD at build time
+    adapter: housing_adapter  # module name in src/data/adapters/
+    n_samples: 30000
+    test_size: 0.2
+    random_seed: 42
+  ```
+  Update `src/config.py` `load_config()` to backfill `source: "synthetic"` if missing.
+- **REFACTOR:** Add a brief comment block in the YAML explaining the 3 modalities.
+
+**Acceptance criteria:**
+- [ ] 3 new tests pass
+- [ ] All 4 existing configs load without error (backward-compat check)
+- [ ] `make test` stays green
+- [ ] `make lint` passes
+
+**Files:** `configs/price_prediction.yaml` (modify), `src/config.py` (modify for backfill), `tests/test_config_loader.py` (add tests)
+**Dependencies:** Task A.1.5
+
+---
+
+### Task A.1.7: Migrate `train_price.py` to Modality Dispatch + MLflow Nesting
+
+**Description:** Refactor `PricePredictionTrainer.load_data()` to dispatch via `load_for_modality()`. Extend `BaseTrainer` to support optional `modality` parameter and nested MLflow runs. Resolves Q3.
+
+**Scope:** M (3 files)
+
+**Steps:**
+- **RED:** Extend `tests/test_training_pipeline.py`:
+  - `test_price_trainer_synthetic_modality` — instantiate with `modality="synthetic"`, mock data tiny, assert checkpoint written to `checkpoints/price_prediction_synthetic/`
+  - `test_price_trainer_stream_modality` — mock kaggle_cached + adapter, assert checkpoint at `checkpoints/price_prediction_stream/`
+  - `test_price_trainer_mixed_modality` — similar, assert `checkpoints/price_prediction_mixed/`
+  - `test_mlflow_nested_run_tags_set` — mock mlflow, assert parent has `modality: all` tag and children have individual tags (only when parent context is active)
+- **GREEN:**
+  - Update `BaseTrainer.__init__` to accept `modality: str | None = None`. When set, `self.checkpoint_dir = checkpoints/<problem>_<modality>`. When None, use legacy `checkpoints/<problem>/` path.
+  - Update `PricePredictionTrainer.load_data()`:
+    ```python
+    from src.data.modality import load_for_modality
+    from src.data.adapters import housing_adapter
+    return load_for_modality(
+        modality=self.config["data"]["source"],
+        synthetic_loader=lambda: pd.read_csv(self.config["data"]["raw_data_path"]),
+        stream_slug=self.config["data"]["kaggle_slug"],
+        stream_file=self.config["data"]["stream_file"],
+        stream_adapter=housing_adapter,
+    )
+    ```
+  - Update `BaseTrainer` MLflow init: accept `parent_run_id: str | None = None`. When passed, call `mlflow.start_run(nested=True)`. Tag each run with `modality`.
+- **REFACTOR:** Extract the checkpoint dir logic into `BaseTrainer.get_checkpoint_dir()` method so other trainers reuse it.
+
+**Acceptance criteria:**
+- [ ] 4 new tests pass with tiny-data fixtures
+- [ ] Existing `test_training_pipeline.py` still passes (synthetic-only default path intact)
+- [ ] `checkpoints/price_prediction_synthetic/model.pkl` + `metadata.json` written when modality="synthetic"
+- [ ] `metadata.json` includes `"modality"` key
+- [ ] MLflow nested runs tag parent and children correctly
+
+**Files:** `src/training/trainer.py` (extend BaseTrainer), `src/training/train_price.py` (migrate load_data), `tests/test_training_pipeline.py` (extend)
+**Dependencies:** Task A.1.6
+
+---
+
+### Task A.1.8: Backward-Compatible Checkpoint Alias (Resolves Q2)
+
+**Description:** When `--modality synthetic` runs, also mirror the checkpoint into `checkpoints/price_prediction/` (legacy path) so the existing `ModelPredictor` keeps working without any changes in this slice. Zero-downtime migration.
+
+**Scope:** S (2 files)
+
+**Steps:**
+- **RED:** Add test `test_synthetic_modality_mirrors_legacy_path`:
+  - Run trainer with `modality="synthetic"`, assert both `checkpoints/price_prediction_synthetic/model.pkl` AND `checkpoints/price_prediction/model.pkl` exist with identical bytes
+  - Run with `modality="stream"`, assert `checkpoints/price_prediction/` is NOT touched (existing file preserved)
+- **GREEN:** In `BaseTrainer.save_checkpoint()`, after saving to `_<modality>/`, if `modality == "synthetic"`, copy (via `shutil.copytree(..., dirs_exist_ok=True)`) into the legacy path.
+- **REFACTOR:** Factor the mirror logic into `_mirror_to_legacy_path()` private method. Add a `deprecation_note` log entry: "Legacy checkpoint path will be removed in Phase A.9; predictor should migrate to _<modality>/ paths."
+
+**Acceptance criteria:**
+- [ ] New test passes
+- [ ] `ModelPredictor` loads `checkpoints/price_prediction/model.pkl` without code changes (verify via existing API test)
+- [ ] Non-synthetic modalities do not overwrite the legacy path
+- [ ] Deprecation log message emitted on mirror
+
+**Files:** `src/training/trainer.py` (extend), `tests/test_training_pipeline.py` (add test)
+**Dependencies:** Task A.1.7
+
+---
+
+### Task A.1.9: CLI `--modality` Flag + Comparison Report
+
+**Description:** Extend `scripts/train.py` with `--modality {synthetic,stream,mixed,all}` flag. When `all`, runs three sequential trainings under one MLflow parent run and prints a comparison table. Writes one row per modality to `results/price_prediction_metrics.csv`.
+
+**Scope:** S (2 files)
+
+**Steps:**
+- **RED:** Write `tests/test_train_cli.py`:
+  - `test_cli_modality_synthetic` — invoke main with `--model price --modality synthetic`, assert single checkpoint + single results row
+  - `test_cli_modality_all` — invoke with `--modality all`, assert 3 checkpoints + 3 results rows, and a "recommended" log line identifies the best-R² variant
+- **GREEN:** Update `scripts/train.py`:
+  - Add `--modality` CLI arg with choices
+  - When `"all"` and model supports modalities (check config has `data.source`), loop through `[synthetic, stream, mixed]`. Create parent MLflow run, pass `parent_run_id` to each trainer. Collect test metrics. After loop, print rich table; identify best R² (or RMSE) modality; write to `metadata.json`'s `recommended: bool` field.
+  - For models without `data.source` in config (the other 3 existing models), gracefully ignore `--modality` and behave as before.
+- **REFACTOR:** Factor the "choose recommended modality" logic into `scripts/_comparison.py` so future multi-modality models reuse it.
+
+**Acceptance criteria:**
+- [ ] 2 new tests pass
+- [ ] `uv run python scripts/train.py --model price --modality all` completes all three in one invocation
+- [ ] `results/price_prediction_metrics.csv` has 3 rows (one per modality)
+- [ ] Best modality flagged in rich console output and written to that checkpoint's metadata.json
+- [ ] `--modality` ignored cleanly for other existing models (no regression)
+
+**Files:** `scripts/train.py` (extend), `tests/test_train_cli.py` (new)
+**Dependencies:** Task A.1.8
+
+---
+
+### Checkpoint A.1.c — Price Prediction Migration
+- [ ] All 3 modalities train end-to-end with mocked data
+- [ ] Legacy checkpoint path still works (no predictor regression)
+- [ ] MLflow parent/child run hierarchy visible in local mlruns/
+- [ ] `make test` green, ≥88% overall coverage
+- [ ] `make lint` zero warnings
+- [ ] Commit: `"Phase A.1.c: price_prediction trains in 3 modalities, MLflow nested runs"`
+
+---
+
+## Sub-Phase A.1.d: End-to-End Verification + Docs
+
+**Skills:** `test-driven-development`, `documentation-and-adrs`, `source-driven-development`
+**Delivers:** Network test, README, and deployment verification
+
+### Task A.1.10: End-to-End Mocked Integration Test
+
+**Description:** A single high-value integration test that runs the full pipeline — `--modality all` on price_prediction — with all external calls (kagglehub, datasets, wandb, mlflow) mocked. Verifies the comparison CSV shape, MLflow nesting, and metadata correctness without touching the network.
+
+**Scope:** M (2 files)
+
+**Steps:**
+- **RED:** Write `tests/test_phase_a1_e2e.py::test_price_modality_all_end_to_end`:
+  - monkeypatch `kagglehub.dataset_download` → tmp dir with a tiny CSV matching Zillow schema
+  - monkeypatch `mlflow.start_run` to a context manager that captures tags and params
+  - invoke `scripts.train.main()` with `args=["--model", "price", "--modality", "all", "--no-wandb"]`
+  - Assert: 3 rows in results CSV, 3 checkpoint dirs, legacy alias updated, best modality logged, `metadata.json` has `modality` + `recommended` keys
+- **GREEN:** Make the test green (most logic already exists from A.1.7–A.1.9; this test reveals gaps)
+- **REFACTOR:** Improve error messages in the pipeline where test failures exposed unclear diagnostics
+
+**Acceptance criteria:**
+- [ ] Test runs in <5 seconds (tiny-data fixtures)
+- [ ] Zero real network calls (verify by disabling network via `pytest-socket` or equivalent if installed; else by monkeypatch assertion)
+- [ ] Covers the main happy path end-to-end
+- [ ] Overall coverage ≥88%
+
+**Files:** `tests/test_phase_a1_e2e.py` (new), minor fixups to A.1.x files as needed
+**Dependencies:** Task A.1.9
+
+---
+
+### Task A.1.11: Network Integration Test + README Update
+
+**Description:** Write one `@pytest.mark.network` test that fetches a tiny real Kaggle dataset to prove the actual integration works. Update `README.md` with a "Streaming Data" section and `CLAUDE.md` with a note about `~/.cache/kagglehub/` cache location.
+
+**Scope:** S (3 files)
+
+**Steps:**
+- **RED:** Write `tests/test_streaming.py::test_kaggle_cached_real_tiny_dataset` marked `@pytest.mark.network`:
+  - Skip if `KAGGLE_USERNAME` or `KAGGLE_KEY` env vars unset
+  - Use `uciml/iris` (tiny, stable) as the target slug — confirm it downloads to `~/.cache/kagglehub/` and returns a valid Path
+  - Assert cached file is ≤200 KB
+- **GREEN:** Run locally with real creds once to confirm it passes. Document the run in a PR note.
+- **REFACTOR:** Update `README.md`:
+  - Add "Streaming Datasets" subsection explaining the three modalities
+  - Document Kaggle credential setup (env vars + `~/.kaggle/kaggle.json` options)
+  - Note that real data lives in `~/.cache/kagglehub/` and is not committed
+  Update `CLAUDE.md` "Conventions" with: "Real datasets stream from Kaggle/HF; cache at `~/.cache/kagglehub/`, never in `data/raw/`."
+
+**Acceptance criteria:**
+- [ ] Network test passes manually with real Kaggle creds, skipped in `make test`
+- [ ] README has a clear "Streaming Datasets" section with three-modality explanation
+- [ ] CLAUDE.md updated with streaming convention note
+- [ ] `.env.example` gains `KAGGLE_USERNAME=`, `KAGGLE_KEY=`, `HF_TOKEN=` entries (may have been done in A.1.1; verify)
+
+**Files:** `tests/test_streaming.py` (extend), `README.md` (modify), `CLAUDE.md` (modify), `.env.example` (modify if needed)
+**Dependencies:** Task A.1.10
+
+---
+
+### Checkpoint A.1 — Phase Complete
+
+- [ ] `make test` green with ≥88% overall coverage
+- [ ] `make lint` zero warnings
+- [ ] `uv run pytest -m network tests/test_streaming.py` passes with creds (manual verify once)
+- [ ] `uv run python scripts/train.py --model price --modality all` produces 3 checkpoints + comparison CSV row on local machine (manual verify with real Zillow data once)
+- [ ] `du -sh data/raw/` stays under 50 MB
+- [ ] `du -sh ~/.cache/kagglehub/` confirms Kaggle data lives outside repo
+- [ ] All 4 existing models still train and predict correctly (no regression)
+- [ ] Legacy `checkpoints/price_prediction/` still loads in predictor without code changes
+- [ ] Commit: `"Phase A.1 complete: streaming foundation + 3-modality price_prediction"`
+- [ ] Tag: `v1.1.0-phase-a1` (optional)
+
+---
+
+## Phase A.1 Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Zillow column names differ from COLUMN_MAP assumptions | Stream modality fails on real data | Task A.1.5 uses best-effort fallback list per column; during manual `/build` of that task, inspect the actual Kaggle CSV and update the map before committing |
+| Kaggle dataset gets taken down or renamed | stream modality breaks globally | `kaggle_slug` is in YAML, not code. Can swap to an alternative dataset without touching trainer code |
+| `mlflow.start_run(nested=True)` semantics differ across versions | Nested runs invisible in MLflow UI | Pin `mlflow>=2.10` (already set); test against the installed version; fallback to non-nested runs with `group` tag if needed |
+| `datasets` library changes streaming API | hf_stream breaks later slices | Pin `datasets>=2.18,<3.0`; wrap in thin adapter so we can swap libraries if needed |
+| Checkpoint dual-write bloats disk over time | 30% more disk on every train | Acceptable for A.1; Phase A.9 retires the legacy path entirely |
+| kagglehub cache location differs per OS | Windows/WSL users may see cache in weird paths | Document expected location in README; test manually on macOS + Linux; Windows deferred |
+
+---
+
+## Phase A.1 Verification (Manual, after all tasks)
+
+1. Fresh clone → `uv sync --extra dev` → no errors
+2. Set Kaggle creds → `uv run python scripts/train.py --model price --modality stream` → downloads Zillow data to `~/.cache/kagglehub/`, produces `checkpoints/price_prediction_stream/`
+3. `uv run python scripts/train.py --model price --modality all` → 3 checkpoints, comparison CSV, best-modality logged
+4. `curl localhost:8070/predict/price` → still works (backward compat via legacy path)
+5. `make test` → 266+ tests pass, ≥88% coverage
+6. `pytest -m network tests/test_streaming.py` → passes with creds
+7. `du -sh data/raw/` → <50 MB
+8. `git status` → `data/raw/` unchanged; only src/, tests/, configs/, docs/ touched
