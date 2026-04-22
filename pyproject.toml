@@ -17,6 +17,10 @@ dependencies = [
     "numpy>=1.26",
     "faker>=22.0",
 
+    # Streaming datasets (Phase A.1 — real Kaggle/HF data without repo bloat)
+    "kagglehub>=0.3",
+    "datasets>=2.18",
+
     # Experiment Tracking
     "wandb>=0.16",
     "mlflow>=2.10",
@@ -71,7 +75,10 @@ select = ["E", "F", "I", "W"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--cov=src --cov-report=term-missing --tb=short -q"
+addopts = "--cov=src --cov-report=term-missing --tb=short -q -m 'not network'"
+markers = [
+    "network: tests that hit real external APIs (Kaggle/HF); skipped by default, run with '-m network'",
+]
 
 [tool.coverage.run]
 source = ["src"]
