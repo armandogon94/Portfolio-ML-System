@@ -83,9 +83,9 @@
 ## Sub-Phase A.1.a: Foundation Primitives
 **Skills:** `incremental-implementation`, `test-driven-development`, `source-driven-development`, `security-and-hardening`
 
-- [ ] **A.1.1** Add `kagglehub` + `datasets` deps, register `network` pytest marker, update default `addopts` _(XS)_
-- [ ] **A.1.2** `src/data/kaggle_credentials.py` — env-var + `~/.kaggle/kaggle.json` loader with tests _(S)_
-- [ ] **A.1.3** `src/data/stream.py` — `kaggle_cached()`, `hf_stream()`, `iter_batches()` with 4 mocked tests _(M)_
+- [x] **A.1.1** Add `kagglehub` + `datasets` deps, register `network` pytest marker, update default `addopts` _(XS)_ — commit `c3cb91c`
+- [x] **A.1.2** `src/data/kaggle_credentials.py` — env-var + `~/.kaggle/kaggle.json` loader with tests _(S)_ — commit `ccccbd8`
+- [x] **A.1.3** `src/data/stream.py` — `kaggle_cached()`, `hf_stream()`, `iter_batches()` with 9 mocked tests _(M)_ — commit `dbde94e`
 
 **Checkpoint A.1.a:** foundation deps + primitives committed
 
@@ -94,17 +94,17 @@
 ## Sub-Phase A.1.b: Modality Orchestration
 **Skills:** `incremental-implementation`, `test-driven-development`, `api-and-interface-design`
 
-- [ ] **A.1.4** `src/data/modality.py` — `load_for_modality()` dispatcher (synthetic/stream/mixed) + 4 tests _(M)_
-- [ ] **A.1.5** `src/data/adapters/housing_adapter.py` — Zillow → canonical schema mapping + 4 tests — **resolves Q1** _(S)_
+- [x] **A.1.4** `src/data/modality.py` — `load_for_modality()` dispatcher (synthetic/stream/mixed) + 7 tests _(M)_ — merge `bda7e9d` ← `7f631af`
+- [x] **A.1.5** `src/data/adapters/housing_adapter.py` — Zillow → canonical schema mapping + 14 tests — **resolves Q1** _(S)_ — merge `50f4bf9` ← `7d28dfc`
 
-**Checkpoint A.1.b:** dispatcher + first adapter committed
+**Checkpoint A.1.b:** ✅ dispatcher + adapter committed — 302 tests, 90% coverage
 
 ---
 
 ## Sub-Phase A.1.c: Price Prediction Migration
 **Skills:** `incremental-implementation`, `test-driven-development`, `deprecation-and-migration`
 
-- [ ] **A.1.6** Extend `configs/price_prediction.yaml` with `data.source`, `data.kaggle_slug`, `data.stream_file`, `data.adapter`; backfill default in `src/config.py` _(S)_
+- [x] **A.1.6** Extend `configs/price_prediction.yaml` with `data.source`, `data.kaggle_slug`, `data.stream_file`, `data.adapter`; backfill default in `src/config.py` _(S)_ — merge `ed64d25` ← `19d5df6`
 - [ ] **A.1.7** Migrate `train_price.py` to `load_for_modality()` + extend `BaseTrainer` with `modality` + nested MLflow runs — **resolves Q3** _(M)_
 - [ ] **A.1.8** Dual-write checkpoint: synthetic modality mirrors `checkpoints/price_prediction/` — **resolves Q2** _(S)_
 - [ ] **A.1.9** CLI `--modality {synthetic,stream,mixed,all}` in `scripts/train.py` + comparison report + "recommended" flag _(S)_
