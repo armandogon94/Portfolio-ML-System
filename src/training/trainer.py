@@ -255,16 +255,45 @@ class BaseTrainer(ABC):
         )
 
     def save_results_csv(self) -> Path:
-        """Save evaluation metrics to CSV."""
+        """Save evaluation metrics to CSV.
+
+        Path selection (Phase A.1.9):
+        - No modality: ``results/<problem>_metrics.csv`` (legacy, unchanged).
+        - With modality: ``results/modalities/<problem>_<modality>.csv``.
+          Keeps modality files out of the ``*_metrics.csv`` glob used by
+          :func:`save_comparison_summary` so that function stays simple.
+        - When modality == 'synthetic', ALSO mirrors to the legacy
+          ``results/<problem>_metrics.csv`` for backward-compat with
+          dashboards/consumers that glob the legacy pattern. Mirror retired
+          in Phase A.9 alongside the checkpoint mirror.
+        """
         results_dir = get_project_root() / "results"
         results_dir.mkdir(parents=True, exist_ok=True)
 
         rows = [{"metric": k, "value": v} for k, v in self.metrics.items()]
         df = pd.DataFrame(rows)
 
-        results_path = results_dir / f"{self.problem}_metrics.csv"
+        if self.modality:
+            modality_dir = results_dir / "modalities"
+            modality_dir.mkdir(parents=True, exist_ok=True)
+            results_path = modality_dir / f"{self.problem}_{self.modality}.csv"
+        else:
+            results_path = results_dir / f"{self.problem}_metrics.csv"
+
         df.to_csv(results_path, index=False)
         logger.info("Saved results CSV: %s", results_path)
+
+        # Mirror synthetic to the legacy path so save_comparison_summary and
+        # any existing consumer keep working unchanged until Phase A.9.
+        if self.modality == "synthetic":
+            legacy_path = results_dir / f"{self.problem}_metrics.csv"
+            df.to_csv(legacy_path, index=False)
+            logger.info(
+                "Mirrored synthetic metrics to legacy %s "
+                "(deprecation: retired in Phase A.9)",
+                legacy_path,
+            )
+
         return results_path
 
     def finish(self) -> None:
