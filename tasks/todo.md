@@ -117,7 +117,7 @@
 **Skills:** `test-driven-development`, `documentation-and-adrs`, `source-driven-development`
 
 - [x] **A.1.10** End-to-end mocked integration test — `--modality all` happy path, zero network calls _(M)_ — commit `5842cf6`
-- [ ] **A.1.11** `@pytest.mark.network` test against real Kaggle + README + CLAUDE.md updates _(S)_
+- [x] **A.1.11** `@pytest.mark.network` test against real Kaggle + README + CLAUDE.md updates _(S)_ — commit `278cf75`
 
 **Checkpoint A.1:** Phase A.1 complete — commit + optional tag `v1.1.0-phase-a1`
 
