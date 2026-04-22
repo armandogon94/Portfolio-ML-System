@@ -25,9 +25,21 @@ make all        # Full pipeline: data + train + evaluate
 Individual scripts:
 ```bash
 uv run python scripts/generate_data.py --problem credit_risk|fraud|housing|timeseries|all
-uv run python scripts/train.py --model credit_risk|fraud|price|forecaster|all [--no-wandb]
+uv run python scripts/train.py --model credit_risk|fraud|price|forecaster|all \
+    [--modality synthetic|stream|mixed|all] [--no-wandb]
 uv run python scripts/evaluate.py --model credit_risk|fraud|price|forecaster|all
 ```
+
+**Streaming datasets (Phase A.1+):** Models whose config declares `data.kaggle_slug`
+can train on real Kaggle data without committing it to the repo. Three modalities:
+- `--modality synthetic` — existing generator path (default, backward-compatible)
+- `--modality stream` — real Kaggle dataset streamed via `kagglehub`, adapted to canonical schema
+- `--modality mixed` — synthetic + real concatenated (with `modality` column as feature)
+- `--modality all` — trains all three under one MLflow parent run, writes a comparison
+  CSV, flags the best-metric variant as "recommended" in its `metadata.json`
+
+Kaggle creds go in `KAGGLE_USERNAME`/`KAGGLE_KEY` env vars or `~/.kaggle/kaggle.json`.
+Real data caches to `~/.cache/kagglehub/` — **never** in `data/raw/`.
 
 ## Architecture
 
@@ -52,7 +64,8 @@ uv run python scripts/evaluate.py --model credit_risk|fraud|price|forecaster|all
 - Every training run saves: checkpoint + metadata.json + results CSV
 - W&B logging is optional (local JSON fallback always writes)
 - PyTorch models use MPS on Apple Silicon (`src/device.py`)
-- Synthetic data makes project self-contained (no external downloads)
+- Synthetic data makes project self-contained; real datasets stream from Kaggle/HF and cache at `~/.cache/kagglehub/` — never in `data/raw/`
+- Network-backed tests live under `@pytest.mark.network` and are skipped by default in `make test`; run them explicitly with `uv run pytest -m network`
 
 ## Deep Learning Models
 

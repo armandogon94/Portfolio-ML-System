@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 # ---------------------------------------------------------------------------
 # kaggle_cached
@@ -186,3 +187,59 @@ class TestIterBatches:
         batches = list(iter_batches(df, batch_size=5))
 
         assert [len(b) for b in batches] == [5, 5]
+
+
+# ---------------------------------------------------------------------------
+# Network integration — opt-in, requires real Kaggle credentials
+# ---------------------------------------------------------------------------
+
+
+class TestKaggleCachedNetwork:
+    """Real Kaggle fetch against a tiny stable dataset.
+
+    Skipped by default (marker ``network`` is excluded via pytest addopts).
+    Run explicitly with::
+
+        KAGGLE_USERNAME=... KAGGLE_KEY=... uv run pytest -m network tests/test_streaming.py
+
+    or export credentials via ``~/.kaggle/kaggle.json``.
+
+    Rationale for this test: every other streaming test mocks ``kagglehub``,
+    so they can't catch an upstream API break. This single network-backed
+    test is the canary — if Kaggle changes its download interface or the
+    dataset slug is renamed, this fails while the mocked suite stays green.
+    """
+
+    @pytest.mark.network
+    def test_kaggle_cached_real_tiny_dataset(self):
+        import os
+        from pathlib import Path as _Path
+
+        has_env = os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY")
+        has_file = (_Path.home() / ".kaggle" / "kaggle.json").is_file()
+        if not (has_env or has_file):
+            pytest.skip(
+                "No Kaggle credentials (KAGGLE_USERNAME+KAGGLE_KEY or "
+                "~/.kaggle/kaggle.json)."
+            )
+
+        from src.data.stream import kaggle_cached
+
+        # uciml/iris: classic iris dataset, tiny (<10 KB), stable for years
+        path = kaggle_cached("uciml/iris")
+
+        # kaggle_cached returns a pathlib.Path to the cached dataset dir
+        assert isinstance(path, _Path)
+        assert path.is_dir()
+
+        # Cache must live OUTSIDE the repo (under ~/.cache/ by kagglehub default)
+        project_root = _Path(__file__).resolve().parent.parent
+        assert not str(path).startswith(str(project_root)), (
+            f"Kaggle data leaked into the repo: {path}"
+        )
+
+        # Iris is tiny — verify the cached tree is modest
+        total_bytes = sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+        assert total_bytes <= 200_000, (
+            f"uciml/iris cached as {total_bytes} bytes — upstream may have grown"
+        )

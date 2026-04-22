@@ -66,6 +66,47 @@ uv run python app/gradio_app.py
 
 ---
 
+## Streaming Datasets (Phase A.1+)
+
+Models whose config declares `data.kaggle_slug` can be trained on **real public datasets** without ever committing them to the repo. Each such model supports three training modalities:
+
+| Modality | Data source | Use case |
+|---|---|---|
+| `synthetic` | Bundled generator | Self-contained demo (no network, default) |
+| `stream` | Real Kaggle dataset, streamed via `kagglehub` | Best-case "real data" performance |
+| `mixed` | Concatenation of both, with a `modality` feature column | Demonstrates augmentation value |
+
+Train all three and let the CLI pick a winner:
+
+```bash
+uv run python scripts/train.py --model price --modality all
+```
+
+This creates one MLflow parent run with three nested children, writes three modality-specific checkpoints under `checkpoints/price_prediction_<modality>/`, and emits `results/modality_comparison_price_prediction.csv` with the ranked comparison. The best-metric variant is flagged `recommended: true` in its `metadata.json` — that's the checkpoint the demo UI should load.
+
+**Kaggle credentials** — one of:
+
+```bash
+# Option 1: environment variables (copy .env.example → .env, fill in)
+export KAGGLE_USERNAME=your_username
+export KAGGLE_KEY=your_api_key
+
+# Option 2: standard Kaggle location
+# Drop kaggle.json at ~/.kaggle/kaggle.json
+```
+
+Get an API key at [kaggle.com/settings/account](https://www.kaggle.com/settings/account) → *Create New Token*.
+
+**Cache location:** Real datasets are cached to `~/.cache/kagglehub/` (outside the repo, outside Docker build context). `data/raw/` stays small even after training on all three modalities.
+
+**Running network tests:** The mocked test suite catches logic bugs; a single `@pytest.mark.network` test in `tests/test_streaming.py` is the canary for real-Kaggle integration. It's skipped by default; run it explicitly once creds are set:
+
+```bash
+uv run pytest -m network tests/test_streaming.py
+```
+
+---
+
 ## Project Structure
 
 ```
