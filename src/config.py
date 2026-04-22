@@ -4,8 +4,26 @@ from pathlib import Path
 
 import yaml
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _backfill_defaults(config: dict) -> dict:
+    """Populate non-destructive defaults on a loaded config.
+
+    Phase A.1 introduces a three-modality data pipeline (synthetic | stream |
+    mixed) driven by ``data.source``. Configs that predate A.1 (credit_risk,
+    fraud_detection, demand_forecasting) never opt into modalities, so we
+    backfill ``data.source = "synthetic"`` when the key is absent. This keeps
+    downstream dispatchers (``train_price.py``, etc.) single-path without
+    forcing every legacy config to be rewritten.
+
+    The backfill is non-destructive: an explicitly set ``source`` (e.g. for
+    ``price_prediction.yaml`` which sets ``stream`` or ``mixed``) is preserved.
+    """
+    data = config.get("data")
+    if isinstance(data, dict) and "source" not in data:
+        data["source"] = "synthetic"
+    return config
 
 
 def load_config(config_name: str) -> dict:
@@ -15,7 +33,8 @@ def load_config(config_name: str) -> dict:
         config_name: Name like 'credit_risk' or path to a YAML file.
 
     Returns:
-        Parsed config dictionary with resolved paths.
+        Parsed config dictionary with resolved paths and default modality
+        source backfilled (see :func:`_backfill_defaults`).
     """
     if config_name.endswith(".yaml") or config_name.endswith(".yml"):
         config_path = Path(config_name)
@@ -34,6 +53,9 @@ def load_config(config_name: str) -> dict:
             config["data"][key] = str(PROJECT_ROOT / config["data"][key])
         if key in config.get("training", {}):
             config["training"][key] = str(PROJECT_ROOT / config["training"][key])
+
+    # Phase A.1: ensure every config advertises a `data.source` modality.
+    _backfill_defaults(config)
 
     return config
 
