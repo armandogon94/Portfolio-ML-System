@@ -261,6 +261,99 @@ class TestPriceModalities:
             metadata = json.load(f)
         assert metadata["modality"] == "mixed"
 
+    def test_synthetic_modality_mirrors_to_legacy_path(self, tmp_path):
+        """A.1.8 — modality='synthetic' dual-writes to legacy checkpoints/<problem>/.
+
+        The ModelPredictor in main still reads from the legacy path; mirroring
+        the synthetic checkpoint there is how we keep serving backward-compatible
+        during the migration.
+        """
+        project = _setup_tmp_project(tmp_path)
+        df = generate_housing_data(n_samples=200, seed=42)
+        _write_csv(df, project / "data" / "raw" / "housing.csv")
+
+        with patch("src.config.PROJECT_ROOT", project):
+            from src.training.train_price import PricePredictionTrainer
+            trainer = PricePredictionTrainer(use_wandb=False, modality="synthetic")
+            trainer.config["model"]["params"]["n_estimators"] = 5
+            trainer.run()
+
+        modality_ckpt = project / "checkpoints" / "price_prediction_synthetic"
+        legacy_ckpt = project / "checkpoints" / "price_prediction"
+
+        # Both paths must contain identical artifacts
+        assert (modality_ckpt / "model.pkl").exists()
+        assert (legacy_ckpt / "model.pkl").exists()
+        assert (legacy_ckpt / "metadata.json").exists()
+
+        # Bytes-identical mirror — the predictor must get the exact same model
+        assert (modality_ckpt / "model.pkl").read_bytes() == (
+            legacy_ckpt / "model.pkl"
+        ).read_bytes()
+
+    def test_stream_modality_does_not_mirror_legacy_path(
+        self, tmp_path, monkeypatch
+    ):
+        """A.1.8 — modality='stream' MUST NOT overwrite the legacy checkpoints dir.
+
+        The legacy path belongs to 'synthetic' demos; stream/mixed variants
+        live only under their _<modality>/ dirs so they can't clobber the
+        default demo predictor.
+        """
+        project = _setup_tmp_project(tmp_path)
+        df = generate_housing_data(n_samples=200, seed=42)
+        _write_csv(df, project / "data" / "raw" / "housing.csv")
+
+        # Seed the legacy path with a "previous synthetic run" sentinel so we
+        # can detect whether stream modality overwrites it.
+        legacy_ckpt = project / "checkpoints" / "price_prediction"
+        legacy_ckpt.mkdir(parents=True, exist_ok=True)
+        sentinel = legacy_ckpt / "model.pkl"
+        sentinel.write_bytes(b"sentinel-legacy-bytes")
+
+        zillow_dir = tmp_path / "zillow_cache"
+        zillow_dir.mkdir()
+        self._tiny_zillow_csv(zillow_dir / "zillow_sales.csv")
+
+        import sys
+        from types import SimpleNamespace
+        monkeypatch.setitem(
+            sys.modules,
+            "kagglehub",
+            SimpleNamespace(dataset_download=lambda slug: str(zillow_dir)),
+        )
+        monkeypatch.setattr(
+            "src.data.kaggle_credentials.ensure_kaggle_env", lambda: None
+        )
+
+        with patch("src.config.PROJECT_ROOT", project):
+            from src.training.train_price import PricePredictionTrainer
+            trainer = PricePredictionTrainer(use_wandb=False, modality="stream")
+            trainer.config["model"]["params"]["n_estimators"] = 5
+            trainer.run()
+
+        stream_ckpt = project / "checkpoints" / "price_prediction_stream"
+        assert (stream_ckpt / "model.pkl").exists()
+        # Legacy path untouched — sentinel preserved
+        assert sentinel.read_bytes() == b"sentinel-legacy-bytes"
+
+    def test_synthetic_mirror_emits_deprecation_log(self, tmp_path, caplog):
+        """A.1.8 — mirroring should log a deprecation note pointing to Phase A.9."""
+        project = _setup_tmp_project(tmp_path)
+        df = generate_housing_data(n_samples=200, seed=42)
+        _write_csv(df, project / "data" / "raw" / "housing.csv")
+
+        with caplog.at_level(logging.INFO, logger="src.training.trainer"), \
+             patch("src.config.PROJECT_ROOT", project):
+            from src.training.train_price import PricePredictionTrainer
+            trainer = PricePredictionTrainer(use_wandb=False, modality="synthetic")
+            trainer.config["model"]["params"]["n_estimators"] = 5
+            trainer.run()
+
+        messages = " ".join(r.message.lower() for r in caplog.records)
+        assert "legacy" in messages or "mirror" in messages
+        assert "a.9" in messages or "deprec" in messages or "phase" in messages
+
     def test_no_modality_uses_legacy_checkpoint_path(self, tmp_path):
         """modality=None (default) preserves legacy checkpoints/price_prediction/ path."""
         project = _setup_tmp_project(tmp_path)

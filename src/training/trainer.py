@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shutil
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -226,7 +227,32 @@ class BaseTrainer(ABC):
             json.dump(metadata, f, indent=2, default=str)
         logger.info("Saved checkpoint metadata: %s", metadata_path)
 
+        # Phase A.1.8 — dual-write: mirror the synthetic modality to the legacy
+        # checkpoints/<problem>/ path so the existing ModelPredictor keeps
+        # working unchanged. Stream / mixed modalities never touch the legacy
+        # dir. Legacy mirror is retired in Phase A.9 when the predictor moves
+        # to _<modality>/ paths directly.
+        if self.modality == "synthetic":
+            self._mirror_to_legacy_path(checkpoint_dir)
+
         return checkpoint_dir
+
+    def _mirror_to_legacy_path(self, modality_dir: Path) -> None:
+        """Copy ``checkpoints/<problem>_synthetic/`` to ``checkpoints/<problem>/``.
+
+        Non-destructive ``copytree(..., dirs_exist_ok=True)`` — fully replaces
+        any previously-mirrored artifacts so bytes stay in sync. Logs a
+        deprecation notice pointing at Phase A.9 (predictor migration).
+        """
+        legacy_dir = get_project_root() / "checkpoints" / self.problem
+        shutil.copytree(modality_dir, legacy_dir, dirs_exist_ok=True)
+        logger.info(
+            "Mirrored synthetic checkpoint %s -> legacy %s "
+            "(deprecation: legacy path will be removed in Phase A.9; "
+            "predictor should migrate to _<modality>/ paths)",
+            modality_dir,
+            legacy_dir,
+        )
 
     def save_results_csv(self) -> Path:
         """Save evaluation metrics to CSV."""
