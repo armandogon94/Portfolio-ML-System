@@ -783,6 +783,21 @@ After all 5 slices:
 > **Parent plan:** `~/.claude/plans/lexical-purring-nebula.md` §Phase A.1
 > **Unlocks:** All slices A.2–A.9, B.1–B.4, C
 
+## Parallelization Strategy (decided 2026-04-22)
+
+Work will be dispatched in a **hybrid serial + parallel** pattern using the `Agent` tool with `isolation: "worktree"`:
+
+| Phase | Mode | Notes |
+|---|---|---|
+| A.1.1 → A.1.3 | Serial | foundation primitives; serial for quality |
+| **A.1.4 / A.1.5 / A.1.6** | **Parallel ×3 worktrees** | independent after A.1.3 merges |
+| A.1.7 → A.1.11, A.2 | Serial | trainer + CLI + Next.js scaffold are cross-cutting |
+| **A.3 → A.8** (industry slices) | **Parallel ×6 worktrees** | biggest parallel win; disjoint files per industry |
+| **B.1 → B.4** | **Parallel ×4 worktrees** | also largely independent |
+| Phase C | Serial | deploy, CI, docs |
+
+**Skill:** `superpowers:dispatching-parallel-agents` invoked at each fan-out point. Merge conflicts on shared files (`src/serving/predictor.py`, `src/serving/api.py`, `README.md`) resolved by the main session after all worktree agents report back.
+
 ## Overview
 
 Break Phase A.1 into **11 tasks across 4 sub-phases**. Each task uses TDD (RED → GREEN → REFACTOR) and is sized ≤5 files. Foundation primitives first (deps, credentials, stream utils), then orchestration (modality dispatcher, adapter), then integration (trainer + CLI + MLflow), then verification (E2E + network + docs).

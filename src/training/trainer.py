@@ -26,9 +26,26 @@ class BaseTrainer(ABC):
     Subclasses implement: load_data, preprocess, train, evaluate.
     """
 
-    def __init__(self, config_name: str, use_wandb: bool = True):
+    def __init__(
+        self,
+        config_name: str,
+        use_wandb: bool = True,
+        modality: str | None = None,
+    ):
+        """Initialize trainer.
+
+        Args:
+            config_name: Problem name matching a YAML in ``configs/``.
+            use_wandb: Enable W&B logging when an API key is available.
+            modality: Optional data modality ("synthetic" | "stream" | "mixed").
+                When set, the checkpoint dir becomes
+                ``checkpoints/<problem>_<modality>/`` and the modality is
+                recorded in metadata + MLflow tags. When None, the legacy
+                ``checkpoints/<problem>/`` path is used (backward compatible).
+        """
         self.config = load_config(config_name)
         self.problem = self.config["problem"]
+        self.modality = modality
         self.use_wandb = use_wandb and self._init_wandb()
         self.use_mlflow = self._init_mlflow()
         self.metrics = {}
@@ -66,12 +83,27 @@ class BaseTrainer(ABC):
                 "training", {},
             ).get("wandb_project", "portfolio-ml-system")
             mlflow.set_experiment(experiment_name)
-            run_name = f"{self.problem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            mlflow.start_run(run_name=run_name)
+
+            suffix = f"_{self.modality}" if self.modality else ""
+            run_name = (
+                f"{self.problem}{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+            # Auto-nest when a parent MLflow run is already active (e.g. under
+            # `--modality all` which creates a comparison parent run in the CLI).
+            is_nested = mlflow.active_run() is not None
+            mlflow.start_run(run_name=run_name, nested=is_nested)
+
+            # Tag the run with modality so MLflow UI can group/filter.
+            if self.modality:
+                mlflow.set_tag("modality", self.modality)
 
             # Log config as flat params
             self._log_config_as_params(self.config)
-            logger.info("MLflow tracking initialized.")
+            logger.info(
+                "MLflow tracking initialized (nested=%s, modality=%s).",
+                is_nested,
+                self.modality,
+            )
             return True
         except Exception as e:
             logger.warning("MLflow init failed: %s. Continuing without MLflow.", e)
@@ -111,6 +143,26 @@ class BaseTrainer(ABC):
         if self.use_mlflow:
             mlflow.log_metrics(metrics, step=step)
 
+    def get_checkpoint_dir(self) -> Path:
+        """Return the checkpoint directory for this trainer.
+
+        When ``self.modality`` is set, path is
+        ``checkpoints/<problem>_<modality>/`` so three-modality runs don't
+        clobber each other. When None, uses the legacy ``training.checkpoint_dir``
+        config value (or ``checkpoints/<problem>/`` default) for backward
+        compatibility with the original 4 models.
+        """
+        if self.modality:
+            return (
+                get_project_root() / "checkpoints" / f"{self.problem}_{self.modality}"
+            )
+        configured = self.config.get("training", {}).get(
+            "checkpoint_dir",
+            str(get_project_root() / "checkpoints" / self.problem),
+        )
+        path = Path(configured)
+        return path if path.is_absolute() else get_project_root() / path
+
     def save_checkpoint(self, model_artifacts: dict) -> Path:
         """Save model checkpoint and metadata.
 
@@ -120,14 +172,7 @@ class BaseTrainer(ABC):
         Returns:
             Checkpoint directory path.
         """
-        checkpoint_dir = Path(
-            self.config.get("training", {}).get(
-                "checkpoint_dir",
-                str(get_project_root() / "checkpoints" / self.problem),
-            )
-        )
-        if not checkpoint_dir.is_absolute():
-            checkpoint_dir = get_project_root() / checkpoint_dir
+        checkpoint_dir = self.get_checkpoint_dir()
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Save model artifacts
@@ -166,6 +211,7 @@ class BaseTrainer(ABC):
         metadata = {
             "problem": self.problem,
             "model_type": self.config.get("model", {}).get("type", "unknown"),
+            "modality": self.modality,
             "timestamp": datetime.now().isoformat(),
             "metrics": self.metrics,
             "hyperparameters": self.config.get("model", {}).get("params", {}),

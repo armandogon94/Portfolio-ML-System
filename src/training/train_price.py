@@ -1,4 +1,12 @@
-"""Price prediction model trainer."""
+"""Price prediction model trainer.
+
+Phase A.1.7: supports three data modalities (synthetic | stream | mixed)
+via :func:`src.data.modality.load_for_modality`. The modality is passed at
+``__init__`` time — when ``None`` (default) the legacy synthetic-only path
+is used to preserve backward compatibility with older invocations.
+"""
+
+from __future__ import annotations
 
 import joblib
 import pandas as pd
@@ -11,12 +19,43 @@ from src.training.trainer import BaseTrainer
 
 class PricePredictionTrainer(BaseTrainer):
 
-    def __init__(self, use_wandb: bool = True):
-        super().__init__("price_prediction", use_wandb=use_wandb)
+    def __init__(self, use_wandb: bool = True, modality: str | None = None):
+        super().__init__("price_prediction", use_wandb=use_wandb, modality=modality)
 
     def load_data(self) -> pd.DataFrame:
-        path = self.config["data"]["raw_data_path"]
-        return pd.read_csv(path)
+        """Load housing data according to the selected modality.
+
+        - modality=None:         legacy synthetic-only read from raw_data_path
+        - modality='synthetic':  same as None but via the modality dispatcher
+        - modality='stream':     Kaggle Zillow dataset adapted to canonical schema
+        - modality='mixed':      synthetic + stream concatenated with a 'modality'
+                                 feature column indicating the row origin
+        """
+        raw_path = self.config["data"]["raw_data_path"]
+
+        # Legacy path: no modality → just read the synthetic CSV directly.
+        if self.modality is None:
+            return pd.read_csv(raw_path)
+
+        # Dispatcher path: synthetic / stream / mixed.
+        from src.data.adapters import housing_adapter
+        from src.data.modality import load_for_modality
+
+        df = load_for_modality(
+            self.modality,
+            synthetic_loader=lambda: pd.read_csv(raw_path),
+            stream_slug=self.config["data"].get("kaggle_slug"),
+            stream_file=self.config["data"].get("stream_file"),
+            stream_adapter=housing_adapter,
+        )
+
+        # 'mixed' adds a 'modality' column which isn't a housing feature and
+        # isn't in get_feature_columns(); drop it before preprocessing so the
+        # feature pipeline stays consistent across modalities.
+        if "modality" in df.columns:
+            df = df.drop(columns=["modality"])
+
+        return df
 
     def preprocess(self, df: pd.DataFrame) -> dict:
         df = engineer_features(df)
