@@ -187,9 +187,9 @@
 
 ## Sub-Phase A.2.e: Acceptance
 
-- [ ] **A.2.12** Final acceptance pass — verify all 15 SPEC success criteria + commit phase tag _(XS)_
+- [x] **A.2.12** Final acceptance pass — all 15 SPEC success criteria verified _(XS)_ — commit `0037616`
 
-**Checkpoint A.2:** Phase A.2 complete — commit + optional tag `v1.2.0-phase-a2`
+**Checkpoint A.2:** ✅ Phase A.2 complete — 43 frontend tests, 97.43% components coverage, 323 Python tests green, backend untouched, Docker prod + dev wired, end-to-end proxy verified with live FastAPI
 
 ---
 
