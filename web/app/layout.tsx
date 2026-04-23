@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
+import { Providers } from "@/app/providers";
+
 // Local Geist fonts bundled by create-next-app@14. Next 15's
-// next/font/google `Geist` helper doesn't exist yet on 14, so we stick
-// with next/font/local. A.2.3 rewrites this layout with providers; this
-// minimal layout only needs to render without type errors.
+// next/font/google `Geist` helper doesn't exist yet on 14.
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -28,9 +28,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: next-themes toggles the `class` attribute
+    // on <html> before React hydrates; without this the server-rendered
+    // class ("") mismatches the client's ("dark" or "light") and React
+    // emits a warning for every page load.
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
