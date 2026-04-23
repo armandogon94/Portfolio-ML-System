@@ -73,9 +73,7 @@ describe("CreditRiskPage", () => {
     });
 
     // Result card paints with the mocked values
-    await waitFor(() =>
-      expect(screen.getByTestId("recommendation")).toHaveTextContent("REVIEW"),
-    );
+    await waitFor(() => expect(screen.getByTestId("recommendation")).toHaveTextContent("REVIEW"));
     expect(screen.getByTestId("risk-score")).toHaveTextContent("22.00%");
     expect(screen.getByTestId("confidence")).toHaveTextContent("78.00%");
   });
