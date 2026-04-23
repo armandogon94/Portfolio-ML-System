@@ -13,7 +13,7 @@
  */
 import { z } from "zod";
 
-import type { CreditRiskInput } from "@/lib/schemas";
+import type { CreditRiskInput, RentalPriceInput } from "@/lib/schemas";
 
 // ─── Shared infrastructure ─────────────────────────────────────────────────
 
@@ -80,6 +80,19 @@ export const explainCreditRisk = (input: CreditRiskInput) =>
   post("/explain/credit-risk", input, ExplanationSchema);
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
+
+export const RentalPricePredictionSchema = z.object({
+  predicted_rate: z.number(),
+  confidence_interval: z.tuple([z.number(), z.number()]).optional(),
+});
+export type RentalPricePrediction = z.infer<typeof RentalPricePredictionSchema>;
+
+export const predictRentalPrice = (input: RentalPriceInput) =>
+  post("/predict/rental-price", input, RentalPricePredictionSchema);
+
+export const explainRentalPrice = (input: RentalPriceInput) =>
+  post("/explain/rental-price", input, ExplanationSchema);
+
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
