@@ -159,9 +159,9 @@
 
 - [x] **A.2.5** `ModelForm` component + Vitest test _(S)_ — commit `243c500`
 - [x] **A.2.6** `PredictionResult` + `ExplainabilityChart` + Vitest tests _(M)_ — commit `f0dee47`
-- [ ] **A.2.7** Credit-risk page (`app/fintech/credit-risk/page.tsx`) composition _(S)_
+- [x] **A.2.7** Credit-risk page (`app/fintech/credit-risk/page.tsx`) composition _(S)_ — commit landed; 29/29 tests
 
-**Checkpoint A.2.b:** credit-risk form → prediction → SHAP chart works end-to-end
+**Checkpoint A.2.b:** ✅ credit-risk form → prediction → SHAP chart wired end-to-end
 
 ---
 
