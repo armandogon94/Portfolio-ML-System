@@ -157,7 +157,7 @@
 ## Sub-Phase A.2.b: Credit Risk PoC
 **Skills:** `incremental-implementation`, `test-driven-development`, `frontend-ui-engineering`
 
-- [ ] **A.2.5** `ModelForm` component + Vitest test _(S)_
+- [x] **A.2.5** `ModelForm` component + Vitest test _(S)_ — commit `243c500`
 - [ ] **A.2.6** `PredictionResult` + `ExplainabilityChart` + Vitest tests _(M)_
 - [ ] **A.2.7** Credit-risk page (`app/fintech/credit-risk/page.tsx`) composition _(S)_
 
