@@ -22,6 +22,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 
 import { queryClient } from "@/lib/query-client";
+import { Toaster } from "@/components/ui/sonner";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -33,6 +34,10 @@ export function Providers({ children }: { children: ReactNode }) {
         disableTransitionOnChange
       >
         {children}
+        {/* Toast portal — mounted once at the provider tree root so any
+            page can call `toast.error(...)` (sonner) without worrying
+            about local containers. */}
+        <Toaster richColors closeButton position="top-right" />
       </ThemeProvider>
     </QueryClientProvider>
   );

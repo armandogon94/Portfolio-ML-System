@@ -5,9 +5,7 @@ import { render, screen } from "@testing-library/react";
 import { PredictionResult } from "@/components/PredictionResult";
 import type { CreditRiskPrediction } from "@/lib/api";
 
-const basePrediction = (
-  overrides: Partial<CreditRiskPrediction> = {},
-): CreditRiskPrediction => ({
+const basePrediction = (overrides: Partial<CreditRiskPrediction> = {}): CreditRiskPrediction => ({
   risk_score: 0.25,
   recommendation: "REVIEW",
   confidence: 0.75,

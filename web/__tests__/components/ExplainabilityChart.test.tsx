@@ -2,10 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import {
-  ExplainabilityChart,
-  sortByAbsImportance,
-} from "@/components/ExplainabilityChart";
+import { ExplainabilityChart, sortByAbsImportance } from "@/components/ExplainabilityChart";
 
 describe("sortByAbsImportance helper", () => {
   it("sorts descending by absolute importance", () => {
