@@ -145,7 +145,7 @@
 ## Sub-Phase A.2.a: Scaffold
 **Skills:** `incremental-implementation`, `source-driven-development`, `frontend-ui-engineering`, `api-and-interface-design`
 
-- [ ] **A.2.1** Initialize `web/` with Next.js 14 + TypeScript + Tailwind + pnpm (port 3071) _(M)_
+- [x] **A.2.1** Initialize `web/` with Next.js 14 + TypeScript + Tailwind + pnpm (port 3071) _(M)_ — commit `bcff1f1`
 - [ ] **A.2.2** Install shadcn/ui + core primitives (button, card, input, label, form, slider, switch, sonner) _(M)_
 - [ ] **A.2.3** Root layout + Providers (QueryClient + Theme) + Vitest setup _(M)_
 - [ ] **A.2.4** Typed API client (`lib/api.ts`) + Zod schemas (`lib/schemas.ts`) + `next.config.mjs` rewrites proxy _(M)_
