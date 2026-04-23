@@ -73,7 +73,7 @@ export const INDUSTRIES: Industry[] = [
     modelCount: 3,
     models: [
       { slug: "caries", title: "Cavity Detection", description: "EfficientNet-B0 X-ray classifier (MPS).", ready: false },
-      { slug: "no-show", title: "Patient No-Show", description: "XGBoost risk of missed appointment.", ready: false },
+      { slug: "no-show", title: "Patient No-Show", description: "XGBoost risk of missed appointment.", ready: true },
       { slug: "treatment-plan", title: "Treatment Plan", description: "Recommender for next-procedure.", ready: false },
     ],
   },

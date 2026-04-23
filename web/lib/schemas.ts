@@ -37,7 +37,32 @@ export const CREDIT_RISK_DEFAULTS: CreditRiskInput = {
 };
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
-// ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
+
+// ─── Industry: Dental ──────────────────────────────────────────────────────
+// Mirrors DentalAppointment in src/serving/api.py.
+export const DentalNoShowInputSchema = z.object({
+  age: z.number().int().min(18).max(90),
+  prior_no_shows: z.number().int().min(0).max(10),
+  days_until_appointment: z.number().int().min(0).max(60),
+  appointment_hour: z.number().int().min(8).max(18),
+  distance_km: z.number().min(0).max(50),
+  insurance_type: z.number().int().min(1).max(4),
+  procedure_complexity: z.number().int().min(1).max(5),
+  prior_appointments: z.number().int().min(0).max(20),
+});
+export type DentalNoShowInput = z.infer<typeof DentalNoShowInputSchema>;
+
+export const DENTAL_NOSHOW_DEFAULTS: DentalNoShowInput = {
+  age: 35,
+  prior_no_shows: 1,
+  days_until_appointment: 14,
+  appointment_hour: 10,
+  distance_km: 8,
+  insurance_type: 1,
+  procedure_complexity: 2,
+  prior_appointments: 5,
+};
+
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

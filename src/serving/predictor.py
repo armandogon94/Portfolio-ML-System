@@ -17,6 +17,8 @@ from src.explainability.gradient_explainer import GradientExplainer
 from src.explainability.shap_explainer import SHAPExplainer
 from src.features.credit_risk_features import engineer_features as credit_features
 from src.features.credit_risk_features import get_feature_columns as credit_feature_cols
+from src.features.dental_noshow_features import engineer_features as dental_noshow_features
+from src.features.dental_noshow_features import get_feature_columns as dental_noshow_feature_cols
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
 from src.features.housing_features import engineer_features as housing_features
 from src.features.housing_features import get_feature_columns as housing_feature_cols
@@ -60,6 +62,11 @@ class ModelPredictor:
         self._artifacts[problem] = {"metadata": metadata}
 
         if problem == "credit_risk":
+            model = xgb.XGBClassifier()
+            model.load_model(str(checkpoint_dir / "model.json"))
+            self._models[problem] = model
+
+        elif problem == "dental_noshow":
             model = xgb.XGBClassifier()
             model.load_model(str(checkpoint_dir / "model.json"))
             self._models[problem] = model
@@ -285,3 +292,39 @@ class ModelPredictor:
 
         explainer = GradientExplainer()
         return explainer.explain(model, X_tensor, feature_cols)
+
+    def predict_dental_noshow(self, data: dict) -> dict:
+        """Predict the probability that a dental patient misses their appointment."""
+        self._ensure_loaded("dental_noshow")
+        model = self._models["dental_noshow"]
+
+        df = pd.DataFrame([data])
+        df = dental_noshow_features(df)
+        features = df[dental_noshow_feature_cols()]
+
+        prob = float(model.predict_proba(features)[0][1])
+
+        if prob >= 0.40:
+            risk_band = "HIGH_RISK"
+        elif prob <= 0.15:
+            risk_band = "LIKELY_TO_SHOW"
+        else:
+            risk_band = "MODERATE"
+
+        return {
+            "probability_no_show": prob,
+            "risk_band": risk_band,
+            "confidence": float(max(prob, 1 - prob)),
+        }
+
+    def explain_dental_noshow(self, data: dict) -> dict:
+        """Explain a dental no-show prediction with SHAP values."""
+        self._ensure_loaded("dental_noshow")
+        model = self._models["dental_noshow"]
+
+        df = pd.DataFrame([data])
+        df = dental_noshow_features(df)
+        features = df[dental_noshow_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, dental_noshow_feature_cols())

@@ -31,6 +31,7 @@ TRAINERS = {
     "fraud": "src.training.train_fraud:FraudDetectionTrainer",
     "price": "src.training.train_price:PricePredictionTrainer",
     "forecaster": "src.training.train_forecaster:DemandForecastTrainer",
+    "dental_noshow": "src.training.train_dental_noshow:DentalNoShowTrainer",
 }
 
 # CLI model name → problem / config name used by BaseTrainer.
@@ -39,6 +40,7 @@ CONFIG_NAMES = {
     "fraud": "fraud_detection",
     "price": "price_prediction",
     "forecaster": "demand_forecasting",
+    "dental_noshow": "dental_noshow",
 }
 
 MODALITY_CHOICES = ("synthetic", "stream", "mixed", "all")
@@ -51,6 +53,7 @@ RECOMMENDATION_KEY: dict[str, tuple[str, bool]] = {
     "credit_risk": ("test_auc_roc", True),
     "fraud": ("test_autoencoder_auc_roc", True),
     "forecaster": ("test_avg_mae", False),
+    "dental_noshow": ("test_auc_roc", True),
 }
 
 
