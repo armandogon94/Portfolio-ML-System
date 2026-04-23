@@ -13,7 +13,7 @@
  */
 import { z } from "zod";
 
-import type { CreditRiskInput } from "@/lib/schemas";
+import type { CreditRiskInput, DeliveryEtaInput } from "@/lib/schemas";
 
 // ─── Shared infrastructure ─────────────────────────────────────────────────
 
@@ -82,5 +82,17 @@ export const explainCreditRisk = (input: CreditRiskInput) =>
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
-// ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
+// ─── Industry: Logistics ───────────────────────────────────────────────────
+
+export const DeliveryEtaPredictionSchema = z.object({
+  eta_hours: z.number(),
+  confidence_interval: z.tuple([z.number(), z.number()]),
+});
+export type DeliveryEtaPrediction = z.infer<typeof DeliveryEtaPredictionSchema>;
+
+export const predictDeliveryEta = (input: DeliveryEtaInput) =>
+  post("/predict/eta", input, DeliveryEtaPredictionSchema);
+
+export const explainDeliveryEta = (input: DeliveryEtaInput) =>
+  post("/explain/eta", input, ExplanationSchema);
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

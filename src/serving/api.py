@@ -20,7 +20,13 @@ app = FastAPI(title="ML Inference Server", version="1.0.0")
 predictor = ModelPredictor()
 
 _CHECKPOINT_ROOT = Path(__file__).resolve().parent.parent.parent / "checkpoints"
-_ALL_MODELS = ["credit_risk", "fraud_detection", "price_prediction", "demand_forecasting"]
+_ALL_MODELS = [
+    "credit_risk",
+    "fraud_detection",
+    "price_prediction",
+    "demand_forecasting",
+    "delivery_eta",
+]
 
 
 @app.middleware("http")
@@ -89,6 +95,17 @@ class DemandRequest(BaseModel):
     product: str = "electronics"
 
 
+class DeliveryRequest(BaseModel):
+    distance_km: float = 50
+    package_weight_kg: float = 2
+    traffic_congestion: int = 3
+    weather_severity: int = 1
+    time_of_day: int = 10
+    day_of_week: int = 2
+    carrier_priority: int = 2
+    origin_destination_tier: int = 2
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -121,6 +138,14 @@ async def predict_demand(req: DemandRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/predict/eta")
+async def predict_eta(req: DeliveryRequest):
+    try:
+        return predictor.predict_delivery_eta(req.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/models")
 async def get_models():
     return predictor.get_model_info()
@@ -146,6 +171,14 @@ async def explain_price(prop: Property):
 async def explain_fraud(tx: Transaction):
     try:
         return predictor.explain_fraud(tx.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/eta")
+async def explain_eta(req: DeliveryRequest):
+    try:
+        return predictor.explain_delivery_eta(req.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

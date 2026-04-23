@@ -17,6 +17,10 @@ from src.explainability.gradient_explainer import GradientExplainer
 from src.explainability.shap_explainer import SHAPExplainer
 from src.features.credit_risk_features import engineer_features as credit_features
 from src.features.credit_risk_features import get_feature_columns as credit_feature_cols
+from src.features.delivery_eta_features import engineer_features as delivery_eta_features
+from src.features.delivery_eta_features import (
+    get_feature_columns as delivery_eta_feature_cols,
+)
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
 from src.features.housing_features import engineer_features as housing_features
 from src.features.housing_features import get_feature_columns as housing_feature_cols
@@ -87,6 +91,11 @@ class ModelPredictor:
 
         elif problem == "price_prediction":
             model = joblib.load(checkpoint_dir / "model.pkl")
+            self._models[problem] = model
+
+        elif problem == "delivery_eta":
+            model = xgb.XGBRegressor()
+            model.load_model(str(checkpoint_dir / "model.json"))
             self._models[problem] = model
 
         elif problem == "demand_forecasting":
@@ -192,6 +201,23 @@ class ModelPredictor:
             "price_range_high": prediction * 1.10,
         }
 
+    def predict_delivery_eta(self, data: dict) -> dict:
+        """Predict delivery ETA in hours with a ±20% confidence band."""
+        self._ensure_loaded("delivery_eta")
+        model = self._models["delivery_eta"]
+
+        df = pd.DataFrame([data])
+        df = delivery_eta_features(df)
+        features = df[delivery_eta_feature_cols()]
+
+        eta = float(model.predict(features)[0])
+
+        return {
+            "eta_hours": eta,
+            # Heuristic band — Phase A.7 spec: [eta*0.8, eta*1.2].
+            "confidence_interval": [eta * 0.8, eta * 1.2],
+        }
+
     def predict_demand(self, product: str, recent_demand: list[float] | None = None) -> dict:
         """Forecast demand for a product category."""
         self._ensure_loaded("demand_forecasting")
@@ -235,7 +261,13 @@ class ModelPredictor:
     def get_model_info(self) -> dict:
         """Return metadata for all available models."""
         info = {}
-        for problem in ["credit_risk", "fraud_detection", "price_prediction", "demand_forecasting"]:
+        for problem in [
+            "credit_risk",
+            "fraud_detection",
+            "price_prediction",
+            "demand_forecasting",
+            "delivery_eta",
+        ]:
             metadata_path = self.root / "checkpoints" / problem / "metadata.json"
             if metadata_path.exists():
                 with open(metadata_path) as f:
@@ -265,6 +297,18 @@ class ModelPredictor:
 
         explainer = SHAPExplainer()
         return explainer.explain(model, features, housing_feature_cols())
+
+    def explain_delivery_eta(self, data: dict) -> dict:
+        """Explain a delivery-ETA prediction with SHAP values."""
+        self._ensure_loaded("delivery_eta")
+        model = self._models["delivery_eta"]
+
+        df = pd.DataFrame([data])
+        df = delivery_eta_features(df)
+        features = df[delivery_eta_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, delivery_eta_feature_cols())
 
     def explain_fraud(self, data: dict) -> dict:
         """Explain a fraud prediction with gradient-based feature importance."""

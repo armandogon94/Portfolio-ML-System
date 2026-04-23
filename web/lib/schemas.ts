@@ -39,5 +39,28 @@ export const CREDIT_RISK_DEFAULTS: CreditRiskInput = {
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
-// ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
+// ─── Industry: Logistics ───────────────────────────────────────────────────
+// Mirrors DeliveryRequest in src/serving/api.py — keep field names and
+// types in sync or FastAPI will 422.
+export const DeliveryEtaInputSchema = z.object({
+  distance_km: z.number().min(1).max(2000),
+  package_weight_kg: z.number().min(0.1).max(50),
+  traffic_congestion: z.number().int().min(1).max(5),
+  weather_severity: z.number().int().min(0).max(4),
+  time_of_day: z.number().int().min(0).max(23),
+  day_of_week: z.number().int().min(0).max(6),
+  carrier_priority: z.number().int().min(1).max(3),
+  origin_destination_tier: z.number().int().min(1).max(4),
+});
+export type DeliveryEtaInput = z.infer<typeof DeliveryEtaInputSchema>;
+export const DELIVERY_ETA_DEFAULTS: DeliveryEtaInput = {
+  distance_km: 50,
+  package_weight_kg: 2,
+  traffic_congestion: 3,
+  weather_severity: 1,
+  time_of_day: 10,
+  day_of_week: 2,
+  carrier_priority: 2,
+  origin_destination_tier: 2,
+};
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
