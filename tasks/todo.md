@@ -125,11 +125,83 @@
 
 ## Final Verification (Phase A.1)
 
-- [ ] `make test` green with ≥88% coverage
-- [ ] `make lint` zero warnings
-- [ ] `pytest -m network` passes with real Kaggle creds (manual, once)
-- [ ] `uv run python scripts/train.py --model price --modality all` produces 3 checkpoints + comparison CSV row
-- [ ] `du -sh data/raw/` stays <50 MB
-- [ ] `du -sh ~/.cache/kagglehub/` confirms real data outside repo
-- [ ] All 4 existing models still train (no regression)
-- [ ] Legacy `checkpoints/price_prediction/` still loads in ModelPredictor without code changes
+- [x] `make test` green with ≥88% coverage (323 tests, 90%)
+- [x] `make lint` zero warnings
+- [ ] `pytest -m network` passes with real Kaggle creds (manual, once — awaits user)
+- [ ] `uv run python scripts/train.py --model price --modality all` produces 3 checkpoints + comparison CSV row (manual, needs creds)
+- [x] `du -sh data/raw/` stays <50 MB (unchanged)
+- [x] `du -sh ~/.cache/kagglehub/` confirms real data outside repo (design-level verified)
+- [x] All 4 existing models still train (no regression)
+- [x] Legacy `checkpoints/price_prediction/` still loads in ModelPredictor without code changes
+
+---
+---
+
+# Task List: Phase A.2 — Next.js Frontend Scaffolding
+
+> **Spec:** `SPEC.md` §"Phase A.2" · **Plan:** `tasks/plan.md` §"Phase A.2"
+> **Serial-only** (parallel fan-out resumes at A.3)
+
+## Sub-Phase A.2.a: Scaffold
+**Skills:** `incremental-implementation`, `source-driven-development`, `frontend-ui-engineering`, `api-and-interface-design`
+
+- [ ] **A.2.1** Initialize `web/` with Next.js 14 + TypeScript + Tailwind + pnpm (port 3071) _(M)_
+- [ ] **A.2.2** Install shadcn/ui + core primitives (button, card, input, label, form, slider, switch, sonner) _(M)_
+- [ ] **A.2.3** Root layout + Providers (QueryClient + Theme) + Vitest setup _(M)_
+- [ ] **A.2.4** Typed API client (`lib/api.ts`) + Zod schemas (`lib/schemas.ts`) + `next.config.mjs` rewrites proxy _(M)_
+
+**Checkpoint A.2.a:** scaffold ready, `pnpm dev` serves at :3071 with providers wired
+
+---
+
+## Sub-Phase A.2.b: Credit Risk PoC
+**Skills:** `incremental-implementation`, `test-driven-development`, `frontend-ui-engineering`
+
+- [ ] **A.2.5** `ModelForm` component + Vitest test _(S)_
+- [ ] **A.2.6** `PredictionResult` + `ExplainabilityChart` + Vitest tests _(M)_
+- [ ] **A.2.7** Credit-risk page (`app/fintech/credit-risk/page.tsx`) composition _(S)_
+
+**Checkpoint A.2.b:** credit-risk form → prediction → SHAP chart works end-to-end
+
+---
+
+## Sub-Phase A.2.c: Landing + Navigation
+**Skills:** `frontend-ui-engineering`, `incremental-implementation`
+
+- [ ] **A.2.8** `IndustryTile` + landing page with 6 tiles + 6 stub industry pages _(S)_
+- [ ] **A.2.9** `ThemeToggle` (localStorage via next-themes) + `Nav` _(S)_
+
+**Checkpoint A.2.c:** full UI shell — landing, nav, dark mode
+
+---
+
+## Sub-Phase A.2.d: Docker + Makefile
+**Skills:** `source-driven-development`, `incremental-implementation`
+
+- [ ] **A.2.10** `Dockerfile.web` (prod multi-stage, standalone, non-root) + `docker-compose.yml` `ml-web:3071` service _(M)_
+- [ ] **A.2.11** `docker-compose.dev.yml` (HMR variant) + Makefile `web-*` targets + `web/README.md` _(S)_
+
+**Checkpoint A.2.d:** `make docker-up` runs ml-web alongside existing services; dev override supports HMR
+
+---
+
+## Sub-Phase A.2.e: Acceptance
+
+- [ ] **A.2.12** Final acceptance pass — verify all 15 SPEC success criteria + commit phase tag _(XS)_
+
+**Checkpoint A.2:** Phase A.2 complete — commit + optional tag `v1.2.0-phase-a2`
+
+---
+
+## Final Verification (Phase A.2)
+
+- [ ] Fresh clone → `cd web && pnpm install && pnpm dev` → :3071 renders landing with 6 tiles
+- [ ] Credit risk form → submission → prediction + SHAP chart rendered
+- [ ] Dark mode toggle works + persists via localStorage
+- [ ] Responsive: 375px / 768px / 1280px all render correctly
+- [ ] `pnpm typecheck` clean, `pnpm lint` clean, `pnpm test` ≥80% coverage on components
+- [ ] `make docker-up` → 4 services healthy including `ml-web:3071`
+- [ ] `make docker-dev-up` → HMR container running
+- [ ] Backend unchanged: `git diff main src/ scripts/` empty
+- [ ] Python suite still green: `make test` → 323+ tests, ≥90% coverage
+- [ ] Gradio (`ml-ui:3070`) still runs in parallel (retires in A.9)

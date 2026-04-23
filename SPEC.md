@@ -723,3 +723,358 @@ markers = [
 - **Q2 — Checkpoint dir breaking change:** Existing checkpoint lives at `checkpoints/price_prediction/` (no modality suffix). Migration options: (a) keep that path as alias for `_synthetic`, (b) rename during A.1 and update predictor. Deferred to `/plan` step — likely go with (a) for zero-downtime migration.
 - **Q3 — W&B / MLflow run naming:** Do the three modalities become three separate MLflow runs under one experiment, or three child runs under a parent? Deferred to `/plan` step.
 
+---
+---
+
+# Spec: Phase A.2 — Next.js Frontend Scaffolding
+
+> **Parent plan:** `~/.claude/plans/lexical-purring-nebula.md` §Phase A.2
+> **Depends on:** Phase A.1 complete (provides `/predict/*` + `/explain/*` backend endpoints)
+> **Unlocks:** Phases A.3–A.8 (6 industry slices each add pages to this frontend in parallel)
+
+## Objective
+
+Replace the Gradio UI with a production-grade **Next.js 14 + shadcn/ui** web app that looks like a product, not a research prototype. This slice is the scaffold — a landing page with 6 industry tiles, one proof-of-concept model page (credit risk) exercising the full form → prediction → explainability loop, and a new Dockerized `ml-web:3071` service. Subsequent slices fan out industry-specific pages on top of this foundation.
+
+**Target users:**
+1. **Prospective clients** Armando demos to (dental clinic owners, healthcare CIOs, fintech PMs, etc.) — they should see a polished product UI
+2. **Recruiters / hiring managers** browsing the public deploy — it should look like something built in production, not a toy
+3. **Armando himself** during development — fast HMR via local `next dev`, clean component abstractions
+
+**Success looks like:**
+- `pnpm dev` inside `web/` → HMR at `http://localhost:3071` with landing tiles + working credit-risk model page
+- `make docker-up` → prod-built `ml-web` container at `http://localhost:3071` alongside existing `ml-api:8070` + `mlflow:5070`
+- Credit risk page accepts form inputs (income, credit score, etc.), submits to FastAPI, shows risk score + recommendation + SHAP bar chart
+- Dark mode toggle, responsive layout, accessibility-passing shadcn defaults
+- Component tests with Vitest cover the 3 reusable components; lint + typecheck clean
+- No backend changes — existing `/predict/credit-risk` + `/explain/credit-risk` endpoints are consumed as-is
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Framework | **Next.js 14 (App Router)** | Server Components + streaming, modern React patterns |
+| Language | **TypeScript strict mode** | Compile-time safety on API client + forms |
+| Styling | **TailwindCSS v3** | Utility-first, shadcn/ui default baseline |
+| Components | **shadcn/ui** (CLI-installed) | Owned source code under `components/ui/`, not a versioned dep |
+| Data fetching | **TanStack Query v5** (`@tanstack/react-query`) | Caching, loading/error states, retries out of the box |
+| Form validation | **Zod** + `@hookform/resolvers/zod` + **react-hook-form** | Typed forms with minimal boilerplate |
+| Charts | **Recharts** | SHAP bar chart for `/explain/*` responses |
+| Icons | **lucide-react** | shadcn default |
+| Package manager | **pnpm** | Fast, content-addressable lockfile |
+| Tests | **Vitest** + **@testing-library/react** + **jsdom** | Fast component tests; Playwright deferred to Phase C |
+| Lint/format | **ESLint** (next config) + **Prettier** (with Tailwind plugin) | Next.js defaults |
+| Node runtime | **Node 20 LTS** | matches Next 14 requirements |
+
+No tRPC, no server actions for form submit — keep the initial scaffold simple. TanStack Query + typed fetch client is sufficient.
+
+---
+
+## Commands
+
+Local dev (outside Docker — fastest iteration, preferred during development):
+
+```bash
+# One-time setup
+cd web
+pnpm install
+
+# Start dev server at http://localhost:3071 (HMR enabled)
+NEXT_PUBLIC_API_URL=http://localhost:8070 pnpm dev
+
+# Or via root Makefile target:
+make web-dev
+
+# Type check
+pnpm typecheck          # runs `tsc --noEmit`
+
+# Lint
+pnpm lint               # next lint + prettier --check
+pnpm lint:fix           # auto-fix
+
+# Vitest component tests
+pnpm test               # one-shot
+pnpm test:watch         # watch mode
+pnpm test:coverage      # with c8 coverage, target ≥80% on components/
+```
+
+Docker:
+
+```bash
+# Prod build + serve at http://localhost:3071
+make docker-up
+
+# Dev mode with HMR + volume mount (slower iteration, works offline)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up web
+
+# Just the web service (prod)
+docker compose up ml-web --build
+```
+
+Root Makefile additions (new targets):
+
+```make
+web-install:    cd web && pnpm install
+web-dev:        cd web && NEXT_PUBLIC_API_URL=http://localhost:8070 pnpm dev
+web-build:      cd web && pnpm build
+web-test:       cd web && pnpm test
+web-lint:       cd web && pnpm lint
+```
+
+---
+
+## Project Structure
+
+New `web/` directory:
+
+```
+web/
+├── .env.example                       # NEXT_PUBLIC_API_URL placeholder
+├── .eslintrc.json                     # extends next/core-web-vitals + prettier
+├── .prettierrc.json                   # Tailwind-aware prettier config
+├── .gitignore                         # node_modules, .next, coverage
+├── README.md                          # dev + docker quick start
+├── package.json
+├── pnpm-lock.yaml
+├── tsconfig.json                      # strict, paths "@/*": ["./"]
+├── next.config.mjs                    # output: 'standalone' for Docker
+├── tailwind.config.ts                 # shadcn content globs + theme
+├── postcss.config.mjs
+├── components.json                    # shadcn config (generated by CLI)
+├── vitest.config.ts                   # jsdom env + coverage
+├── vitest.setup.ts                    # @testing-library/jest-dom extensions
+├── app/
+│   ├── layout.tsx                     # Root layout: nav, theme provider, QueryClient provider
+│   ├── page.tsx                       # Landing page: 6 industry tiles
+│   ├── globals.css                    # Tailwind directives + shadcn CSS vars
+│   ├── providers.tsx                  # Client: QueryClientProvider, ThemeProvider wrapper
+│   └── fintech/
+│       └── credit-risk/
+│           └── page.tsx               # PoC model page (client component)
+├── components/
+│   ├── ui/                            # shadcn components: button, card, input, label, slider, switch, form, toaster, ...
+│   ├── ModelForm.tsx                  # Reusable form wrapper (takes Zod schema + fields config)
+│   ├── PredictionResult.tsx           # Score/recommendation/confidence card
+│   ├── ExplainabilityChart.tsx        # Recharts bar chart for SHAP values
+│   ├── IndustryTile.tsx               # Landing-page industry card
+│   ├── ThemeToggle.tsx                # Light/dark switch with localStorage persistence
+│   └── Nav.tsx                        # Top navigation
+├── lib/
+│   ├── api.ts                         # Typed FastAPI client: predictCreditRisk, explainCreditRisk, ...
+│   ├── schemas.ts                     # Zod schemas per model input
+│   ├── query-client.ts                # TanStack QueryClient singleton + default options
+│   └── utils.ts                       # shadcn `cn()` helper (generated)
+└── __tests__/
+    └── components/
+        ├── ModelForm.test.tsx
+        ├── PredictionResult.test.tsx
+        └── ExplainabilityChart.test.tsx
+```
+
+New top-level files:
+- `Dockerfile.web` — multi-stage node:20-alpine build using `pnpm` + Next.js standalone output
+- `docker-compose.yml` — add `ml-web` service with port 3071, depends_on `ml-api`
+- `docker-compose.dev.yml` — override layer: mount `web/` as volume, run `pnpm dev` instead of `pnpm start`
+
+---
+
+## Code Style
+
+### Typed API client — `web/lib/api.ts`
+
+```typescript
+import { z } from "zod";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8070";
+
+// Response schemas — decode + validate FastAPI output at the boundary
+export const CreditRiskPredictionSchema = z.object({
+  probability_default: z.number().min(0).max(1),
+  risk_score: z.number(),
+  recommendation: z.enum(["APPROVE", "REVIEW", "DECLINE"]),
+  confidence: z.number().min(0).max(1),
+});
+export type CreditRiskPrediction = z.infer<typeof CreditRiskPredictionSchema>;
+
+export const ExplanationSchema = z.object({
+  feature_importances: z.record(z.string(), z.number()),
+  base_value: z.number(),
+});
+export type Explanation = z.infer<typeof ExplanationSchema>;
+
+export class ApiError extends Error {
+  constructor(public status: number, public body: unknown) {
+    super(`API ${status}`);
+  }
+}
+
+async function post<T>(path: string, body: unknown, schema: z.ZodSchema<T>): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null));
+  return schema.parse(await res.json());
+}
+
+export const predictCreditRisk = (input: CreditRiskInput) =>
+  post("/predict/credit-risk", input, CreditRiskPredictionSchema);
+
+export const explainCreditRisk = (input: CreditRiskInput) =>
+  post("/explain/credit-risk", input, ExplanationSchema);
+```
+
+### Credit-risk page — composition, not duplication
+
+```tsx
+"use client";
+
+import { useMutation } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { ModelForm } from "@/components/ModelForm";
+import { PredictionResult } from "@/components/PredictionResult";
+import { ExplainabilityChart } from "@/components/ExplainabilityChart";
+import { CreditRiskInputSchema, type CreditRiskInput } from "@/lib/schemas";
+import { predictCreditRisk, explainCreditRisk } from "@/lib/api";
+
+export default function CreditRiskPage() {
+  const form = useForm<CreditRiskInput>({ resolver: zodResolver(CreditRiskInputSchema) });
+  const predict = useMutation({ mutationFn: predictCreditRisk });
+  const explain = useMutation({ mutationFn: explainCreditRisk });
+
+  const onSubmit = async (data: CreditRiskInput) => {
+    await Promise.all([predict.mutateAsync(data), explain.mutateAsync(data)]);
+  };
+
+  return (
+    <main className="container grid gap-6 md:grid-cols-2 py-8">
+      <ModelForm form={form} onSubmit={onSubmit} fields={CREDIT_RISK_FIELDS} />
+      <div className="space-y-4">
+        {predict.data && <PredictionResult result={predict.data} />}
+        {explain.data && <ExplainabilityChart importances={explain.data.feature_importances} />}
+      </div>
+    </main>
+  );
+}
+```
+
+### Style rules
+- Client components explicitly marked `"use client"` at the top; everything else is a Server Component by default
+- No `any` without a `// eslint-disable-next-line` + justification comment
+- Zod schemas live in `lib/schemas.ts`; API response schemas live in `lib/api.ts` alongside the call
+- Paths via `@/` alias (tsconfig `paths`)
+- Tailwind classes via `cn()` utility (shadcn default) for conditional merging
+- Error handling: API errors surface as `ApiError` (with status + body); React Query handles retry/backoff
+- Accessibility: shadcn components are a11y-ready by default; don't override ARIA unless there's a reason
+
+---
+
+## Testing Strategy
+
+### Vitest — component tests
+
+Location: `web/__tests__/components/*.test.tsx`
+
+Target: ≥80% line coverage on `web/components/` (the reusable logic — not the page-level compositions).
+
+Required tests in A.2:
+- `ModelForm.test.tsx` — renders given field config, validates via Zod schema, calls `onSubmit` with parsed values, surfaces validation errors inline
+- `PredictionResult.test.tsx` — renders score/recommendation/confidence, applies appropriate color for APPROVE/REVIEW/DECLINE, rounds probability to 2 dp
+- `ExplainabilityChart.test.tsx` — renders a Recharts BarChart with one bar per feature, sorted by absolute importance descending, bars colored by sign
+
+No network in tests — `lib/api.ts` is mocked via `vi.mock("@/lib/api")` at the test level.
+
+### Typecheck gate
+
+`pnpm typecheck` must pass in CI. Strict TS, no implicit `any`.
+
+### Manual smoke check (required before calling A.2 done)
+
+```bash
+# 1) Local dev smoke
+make web-dev                  # HMR server at :3071
+# Visit http://localhost:3071, see 6 industry tiles
+# Click Fintech → Credit Risk
+# Fill the form, submit, see predicted risk score + SHAP bar chart
+# Toggle dark mode, verify theme persists on reload
+
+# 2) Docker smoke
+make docker-up                # 4 services: mlflow, ml-api, ml-web, (ml-ui legacy still running)
+# Browse http://localhost:3071 — same experience
+# Verify ml-web can reach ml-api inside compose network
+```
+
+Playwright E2E is out of scope for A.2 — planned for Phase C.
+
+---
+
+## Boundaries
+
+### Always
+- Consume backend via `@/lib/api.ts` typed functions — never inline `fetch(url)` in a page
+- Validate all external JSON with Zod at the API boundary — no `as` casts on fetch responses
+- Use shadcn/ui components for form, card, button primitives; compose Tailwind utilities on top
+- Run `pnpm typecheck` + `pnpm lint` + `pnpm test` before committing frontend changes
+- Use env var `NEXT_PUBLIC_API_URL` for the FastAPI base URL — never hardcode `localhost:8070`
+- Write component tests for any reusable component in `web/components/` (excluding shadcn primitives)
+
+### Ask first
+- Adding a dep beyond the list in Tech Stack above (e.g., framer-motion, date-fns, new icon library)
+- Changing the Next.js router mode (App → Pages) — App Router is locked in
+- Adding authentication — not in A.2 scope
+- Server Actions for form submission — A.2 uses client mutations
+- Swapping package manager away from pnpm
+- Adding analytics / telemetry
+
+### Never
+- Bypass the typed API client with inline fetch in a component
+- Use `any` without a disable comment justifying it
+- Commit `web/.next/`, `web/node_modules/`, or `web/coverage/` (gitignored)
+- Hardcode backend URLs
+- Import server-only code into client components (and vice versa)
+- Delete or modify `app/gradio_app.py` — Gradio retires in A.9, not A.2 (parallel operation enforced)
+- Add new FastAPI routes — A.2 is frontend-only; backend is read-only
+
+---
+
+## Success Criteria (Phase A.2 acceptance)
+
+1. `cd web && pnpm install` succeeds from a clean clone
+2. `pnpm dev` serves http://localhost:3071 with HMR — landing page renders with 6 industry tiles
+3. Clicking the Fintech tile navigates to `/fintech/credit-risk` with a working form
+4. Submitting the credit risk form triggers `POST /predict/credit-risk` + `POST /explain/credit-risk` (verified via browser DevTools Network)
+5. Response renders: risk score, APPROVE/REVIEW/DECLINE recommendation with color, confidence, Recharts bar chart of top features
+6. Dark mode toggle works and persists across reload via `localStorage`
+7. Responsive: renders correctly at 375px, 768px, 1280px viewports
+8. `pnpm typecheck` passes (strict mode, zero errors)
+9. `pnpm lint` passes (zero warnings)
+10. `pnpm test` passes with ≥80% coverage on `web/components/`
+11. `make docker-up` brings up `ml-web:3071` alongside existing services; container serves the same UI
+12. `docker compose -f docker-compose.yml -f docker-compose.dev.yml up web` serves HMR-enabled dev container
+13. Existing Python test suite still green (no backend changes): `make test` → 323+ pass, 90%+ coverage
+14. No backend code modified — `git diff main src/` shows zero changes
+15. Gradio (`ml-ui`) still runs in parallel — A.2 does not remove it (A.9 does)
+
+---
+
+## Parallelization Strategy (for A.3–A.8 fan-out)
+
+Once A.2 lands, the 6 industry slices (A.3–A.8) can run in parallel worktrees per the strategy locked in `tasks/plan.md`. Each industry slice adds:
+- `web/app/<industry>/<model>/page.tsx` — copy-paste from the credit-risk PoC, swap schema + fields + API call
+- `web/lib/schemas.ts` — add the new input schema
+- `web/lib/api.ts` — add the new typed API function
+- `src/data/`, `src/features/`, `src/training/`, etc. — backend model additions
+
+These paths are disjoint across the 6 industries except for `web/lib/api.ts` and `web/lib/schemas.ts`, which each slice appends to. A.2 must leave those files structured so appends are clean (one function per model, grouped comments by industry).
+
+---
+
+## Open Questions
+
+- **Q-A.2-1 — Landing page copy:** who writes the taglines for each industry tile? For A.2, I'll use placeholder text ("Real-estate price & rental estimators") that Armando can tune later. Marked `TODO(copy)` in the source.
+- **Q-A.2-2 — Vercel deploy:** deferred to Phase C. A.2 only ensures Next.js standalone output works locally + in Docker; Vercel-specific config (`vercel.json`, env var mapping) is Phase C.
+- **Q-A.2-3 — Analytics / error tracking:** no Plausible / PostHog / Sentry in A.2. Revisit at Phase C if public deploy goes live.
