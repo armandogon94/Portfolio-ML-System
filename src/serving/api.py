@@ -89,6 +89,17 @@ class DemandRequest(BaseModel):
     product: str = "electronics"
 
 
+class BankCustomer(BaseModel):
+    tenure_months: int = 48
+    balance: float = 50000
+    num_products: int = 2
+    has_credit_card: int = 1
+    is_active_member: int = 1
+    estimated_salary: float = 75000
+    age: int = 40
+    geography_tier: int = 2
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -146,6 +157,22 @@ async def explain_price(prop: Property):
 async def explain_fraud(tx: Transaction):
     try:
         return predictor.explain_fraud(tx.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/churn")
+async def predict_churn(customer: BankCustomer):
+    try:
+        return predictor.predict_customer_churn(customer.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/churn")
+async def explain_churn(customer: BankCustomer):
+    try:
+        return predictor.explain_customer_churn(customer.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
