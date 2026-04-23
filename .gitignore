@@ -49,5 +49,11 @@ mlartifacts/
 # Cache
 .ruff_cache/
 
-# Claude Code - user specific
+# pytest coverage DBs — regenerated on every run, never commit
+.coverage
+.coverage.*
+.coverage[ _]*
+
+# Claude Code - user/session specific (keep .claude/rules + .claude/settings.json tracked)
 .claude/projects/
+.claude/worktrees/

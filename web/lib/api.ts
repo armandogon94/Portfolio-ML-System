@@ -38,11 +38,7 @@ export class ApiError extends Error {
   }
 }
 
-async function post<T>(
-  path: string,
-  body: unknown,
-  responseSchema: z.ZodSchema<T>,
-): Promise<T> {
+async function post<T>(path: string, body: unknown, responseSchema: z.ZodSchema<T>): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,11 +83,7 @@ export const predictCreditRisk = (input: CreditRiskInput) =>
 export const explainCreditRisk = (input: CreditRiskInput) =>
   post("/explain/credit-risk", input, ExplanationSchema);
 
-export const RetentionActionSchema = z.enum([
-  "URGENT_OUTREACH",
-  "PROACTIVE_CHECKIN",
-  "NO_ACTION",
-]);
+export const RetentionActionSchema = z.enum(["URGENT_OUTREACH", "PROACTIVE_CHECKIN", "NO_ACTION"]);
 export type RetentionAction = z.infer<typeof RetentionActionSchema>;
 
 export const CustomerChurnPredictionSchema = z.object({
@@ -169,11 +161,7 @@ export const explainDeliveryEta = (input: DeliveryEtaInput) =>
 
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
 
-export const H1BRecommendationSchema = z.enum([
-  "APPROVE_LIKELY",
-  "REVIEW",
-  "DECLINE_LIKELY",
-]);
+export const H1BRecommendationSchema = z.enum(["APPROVE_LIKELY", "REVIEW", "DECLINE_LIKELY"]);
 export type H1BRecommendation = z.infer<typeof H1BRecommendationSchema>;
 
 export const H1BApprovalPredictionSchema = z.object({

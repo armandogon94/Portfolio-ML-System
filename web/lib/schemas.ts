@@ -49,8 +49,14 @@ export const CustomerChurnInputSchema = z.object({
 });
 export type CustomerChurnInput = z.infer<typeof CustomerChurnInputSchema>;
 export const CUSTOMER_CHURN_DEFAULTS: CustomerChurnInput = {
-  tenure_months: 48, balance: 50000, num_products: 2, has_credit_card: 1,
-  is_active_member: 1, estimated_salary: 75000, age: 40, geography_tier: 2,
+  tenure_months: 48,
+  balance: 50000,
+  num_products: 2,
+  has_credit_card: 1,
+  is_active_member: 1,
+  estimated_salary: 75000,
+  age: 40,
+  geography_tier: 2,
 };
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
@@ -117,8 +123,14 @@ export const HeartDiseaseInputSchema = z.object({
 });
 export type HeartDiseaseInput = z.infer<typeof HeartDiseaseInputSchema>;
 export const HEART_DISEASE_DEFAULTS: HeartDiseaseInput = {
-  age: 55, sex: 1, chest_pain_type: 3, resting_bp: 130, cholesterol: 240,
-  max_heart_rate: 150, exercise_angina: 0, oldpeak: 1.0,
+  age: 55,
+  sex: 1,
+  chest_pain_type: 3,
+  resting_bp: 130,
+  cholesterol: 240,
+  max_heart_rate: 150,
+  exercise_angina: 0,
+  oldpeak: 1.0,
 };
 
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
