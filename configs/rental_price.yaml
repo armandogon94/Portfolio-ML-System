@@ -1,0 +1,43 @@
+problem: rental_price
+
+data:
+  raw_data_path: data/raw/rental_price.csv
+  processed_data_path: data/processed/rental_price.csv
+  n_samples: 5000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - bedrooms
+    - bathrooms
+    - square_feet
+    - property_type
+    - location_tier
+    - distance_to_downtown_km
+    - amenity_score
+    - peer_nightly_rate
+  target: nightly_rate
+
+model:
+  type: lightgbm
+  params:
+    objective: regression
+    metric: rmse
+    num_leaves: 31
+    learning_rate: 0.1
+    n_estimators: 200
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    verbose: -1
+
+training:
+  checkpoint_dir: checkpoints/rental_price
+  results_dir: results
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - rental_price
+    - lightgbm
+    - regression
+    - real_estate

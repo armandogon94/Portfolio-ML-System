@@ -37,6 +37,30 @@ export const CREDIT_RISK_DEFAULTS: CreditRiskInput = {
 };
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
+// Mirrors RentalListing in src/serving/api.py.
+export const RentalPriceInputSchema = z.object({
+  bedrooms: z.number().int().min(0).max(6),
+  bathrooms: z.number().int().min(1).max(4),
+  square_feet: z.number().int().min(300).max(5000),
+  property_type: z.number().int().min(1).max(4),
+  location_tier: z.number().int().min(1).max(5),
+  distance_to_downtown_km: z.number().min(0).max(50),
+  amenity_score: z.number().int().min(0).max(10),
+  peer_nightly_rate: z.number().nonnegative(),
+});
+export type RentalPriceInput = z.infer<typeof RentalPriceInputSchema>;
+
+export const RENTAL_PRICE_DEFAULTS: RentalPriceInput = {
+  bedrooms: 2,
+  bathrooms: 1,
+  square_feet: 900,
+  property_type: 2,
+  location_tier: 3,
+  distance_to_downtown_km: 5,
+  amenity_score: 6,
+  peer_nightly_rate: 150,
+};
+
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────

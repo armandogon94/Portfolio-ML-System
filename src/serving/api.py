@@ -89,6 +89,19 @@ class DemandRequest(BaseModel):
     product: str = "electronics"
 
 
+class RentalListing(BaseModel):
+    """Rental listing inputs for the nightly-rate regressor (A.3)."""
+
+    bedrooms: int = 2
+    bathrooms: int = 1
+    square_feet: int = 900
+    property_type: int = 2  # 1=studio, 2=apartment, 3=house, 4=condo
+    location_tier: int = 3  # 1-5 (5 most desirable)
+    distance_to_downtown_km: float = 5.0
+    amenity_score: int = 6
+    peer_nightly_rate: float = 150.0
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -146,6 +159,22 @@ async def explain_price(prop: Property):
 async def explain_fraud(tx: Transaction):
     try:
         return predictor.explain_fraud(tx.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/rental-price")
+async def predict_rental_price(listing: RentalListing):
+    try:
+        return predictor.predict_rental_price(listing.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/rental-price")
+async def explain_rental_price(listing: RentalListing):
+    try:
+        return predictor.explain_rental_price(listing.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

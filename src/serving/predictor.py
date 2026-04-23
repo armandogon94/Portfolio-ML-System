@@ -20,6 +20,8 @@ from src.features.credit_risk_features import get_feature_columns as credit_feat
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
 from src.features.housing_features import engineer_features as housing_features
 from src.features.housing_features import get_feature_columns as housing_feature_cols
+from src.features.rental_price_features import engineer_features as rental_features
+from src.features.rental_price_features import get_feature_columns as rental_feature_cols
 from src.models.fraud_autoencoder import FraudAutoencoder
 from src.models.lstm_forecaster import LSTMForecaster
 
@@ -86,6 +88,10 @@ class ModelPredictor:
             )
 
         elif problem == "price_prediction":
+            model = joblib.load(checkpoint_dir / "model.pkl")
+            self._models[problem] = model
+
+        elif problem == "rental_price":
             model = joblib.load(checkpoint_dir / "model.pkl")
             self._models[problem] = model
 
@@ -265,6 +271,43 @@ class ModelPredictor:
 
         explainer = SHAPExplainer()
         return explainer.explain(model, features, housing_feature_cols())
+
+    def predict_rental_price(self, data: dict) -> dict:
+        """Predict nightly rental rate (A.3 — Real Estate).
+
+        Returns the predicted rate plus a simple ±10% confidence interval.
+        The band is a demo-grade heuristic (same shape as ``predict_price``)
+        — a future slice can replace it with LightGBM quantile regressors
+        (``objective=quantile`` at alpha=0.1 / 0.9) when we want a model-
+        derived interval.
+        """
+        self._ensure_loaded("rental_price")
+        model = self._models["rental_price"]
+
+        df = pd.DataFrame([data])
+        df = rental_features(df)
+        features = df[rental_feature_cols()]
+
+        prediction = float(model.predict(features)[0])
+
+        low = round(prediction * 0.90, 2)
+        high = round(prediction * 1.10, 2)
+        return {
+            "predicted_rate": round(prediction, 2),
+            "confidence_interval": [low, high],
+        }
+
+    def explain_rental_price(self, data: dict) -> dict:
+        """Explain a rental-price prediction with SHAP values."""
+        self._ensure_loaded("rental_price")
+        model = self._models["rental_price"]
+
+        df = pd.DataFrame([data])
+        df = rental_features(df)
+        features = df[rental_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, rental_feature_cols())
 
     def explain_fraud(self, data: dict) -> dict:
         """Explain a fraud prediction with gradient-based feature importance."""

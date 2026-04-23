@@ -60,7 +60,7 @@ export const INDUSTRIES: Industry[] = [
     modelCount: 3,
     models: [
       { slug: "price", title: "Price Prediction", description: "Synthetic home-price regressor (LightGBM).", ready: false },
-      { slug: "rental-price", title: "Rental Price", description: "Airbnb-trained nightly rate estimator.", ready: false },
+      { slug: "rental-price", title: "Rental Price", description: "Airbnb-trained nightly rate estimator.", ready: true },
       { slug: "days-on-market", title: "Days on Market", description: "How long a listing will take to sell.", ready: false },
     ],
   },
