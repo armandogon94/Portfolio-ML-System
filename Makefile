@@ -1,5 +1,6 @@
 .PHONY: setup data train evaluate ui serve test lint format clean all
-.PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean
+.PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean docker-dev-up docker-dev-down
+.PHONY: web-install web-dev web-build web-test web-lint web-typecheck
 
 setup:
 	uv sync --extra dev
@@ -58,3 +59,34 @@ docker-test:
 
 docker-clean:
 	docker compose down -v --rmi local
+
+# Dev override — ml-web runs `pnpm dev` with volume-mounted source
+# so file edits hot-reload in the container. Other services
+# (mlflow, ml-api, ml-ui) stay production-style.
+docker-dev-up:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+docker-dev-down:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+
+# ── Next.js frontend targets (web/) ─────────────────────────────────
+# Prefer these for day-to-day dev — native pnpm is faster than Docker.
+# INTERNAL_API_URL is the server-side rewrite target (see web/next.config.mjs).
+
+web-install:
+	cd web && pnpm install
+
+web-dev:
+	cd web && INTERNAL_API_URL=http://localhost:8070 pnpm dev
+
+web-build:
+	cd web && pnpm build
+
+web-test:
+	cd web && pnpm test
+
+web-lint:
+	cd web && pnpm lint && pnpm typecheck
+
+web-typecheck:
+	cd web && pnpm typecheck
