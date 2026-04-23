@@ -102,6 +102,19 @@ class RentalListing(BaseModel):
     peer_nightly_rate: float = 150.0
 
 
+class DentalAppointment(BaseModel):
+    """Dental appointment inputs for the patient no-show classifier (A.4)."""
+
+    age: int = 35
+    prior_no_shows: int = 1
+    days_until_appointment: int = 14
+    appointment_hour: int = 10
+    distance_km: float = 8.0
+    insurance_type: int = 1
+    procedure_complexity: int = 2
+    prior_appointments: int = 5
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -175,6 +188,22 @@ async def predict_rental_price(listing: RentalListing):
 async def explain_rental_price(listing: RentalListing):
     try:
         return predictor.explain_rental_price(listing.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/no-show")
+async def predict_no_show(appointment: DentalAppointment):
+    try:
+        return predictor.predict_dental_noshow(appointment.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/no-show")
+async def explain_no_show(appointment: DentalAppointment):
+    try:
+        return predictor.explain_dental_noshow(appointment.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

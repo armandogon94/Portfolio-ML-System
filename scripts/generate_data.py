@@ -11,6 +11,7 @@ from rich.console import Console
 
 from src.config import get_project_root
 from src.data.generate_credit_risk import generate_credit_risk_data
+from src.data.generate_dental_noshow import generate_dental_noshow_data
 from src.data.generate_fraud import generate_fraud_data
 from src.data.generate_housing import generate_housing_data
 from src.data.generate_rental_price import generate_rental_price_data
@@ -43,6 +44,11 @@ GENERATORS = {
     "rental_price": {
         "fn": generate_rental_price_data,
         "output": "rental_price.csv",
+        "kwargs": {"n_samples": 5000},
+    },
+    "dental_noshow": {
+        "fn": generate_dental_noshow_data,
+        "output": "dental_noshow.csv",
         "kwargs": {"n_samples": 5000},
     },
 }

@@ -13,7 +13,11 @@
  */
 import { z } from "zod";
 
-import type { CreditRiskInput, RentalPriceInput } from "@/lib/schemas";
+import type {
+  CreditRiskInput,
+  DentalNoShowInput,
+  RentalPriceInput,
+} from "@/lib/schemas";
 
 // ─── Shared infrastructure ─────────────────────────────────────────────────
 
@@ -94,6 +98,23 @@ export const explainRentalPrice = (input: RentalPriceInput) =>
   post("/explain/rental-price", input, ExplanationSchema);
 
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
+
+export const RiskBandSchema = z.enum(["HIGH_RISK", "MODERATE", "LIKELY_TO_SHOW"]);
+export type RiskBand = z.infer<typeof RiskBandSchema>;
+
+export const DentalNoShowPredictionSchema = z.object({
+  probability_no_show: z.number().min(0).max(1),
+  risk_band: RiskBandSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type DentalNoShowPrediction = z.infer<typeof DentalNoShowPredictionSchema>;
+
+export const predictDentalNoShow = (input: DentalNoShowInput) =>
+  post("/predict/no-show", input, DentalNoShowPredictionSchema);
+
+export const explainDentalNoShow = (input: DentalNoShowInput) =>
+  post("/explain/no-show", input, ExplanationSchema);
+
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
