@@ -168,7 +168,7 @@
 ## Sub-Phase A.2.c: Landing + Navigation
 **Skills:** `frontend-ui-engineering`, `incremental-implementation`
 
-- [ ] **A.2.8** `IndustryTile` + landing page with 6 tiles + 6 stub industry pages _(S)_
+- [x] **A.2.8** `IndustryTile` + landing page with 6 tiles + 6 stub industry pages + shared `IndustryIndex` _(S)_ — 34 tests
 - [ ] **A.2.9** `ThemeToggle` (localStorage via next-themes) + `Nav` _(S)_
 
 **Checkpoint A.2.c:** full UI shell — landing, nav, dark mode
