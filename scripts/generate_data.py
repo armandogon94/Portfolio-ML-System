@@ -13,6 +13,7 @@ from src.config import get_project_root
 from src.data.generate_credit_risk import generate_credit_risk_data
 from src.data.generate_dental_noshow import generate_dental_noshow_data
 from src.data.generate_fraud import generate_fraud_data
+from src.data.generate_heart_disease import generate_heart_disease_data
 from src.data.generate_housing import generate_housing_data
 from src.data.generate_rental_price import generate_rental_price_data
 from src.data.generate_timeseries import generate_timeseries_data
@@ -50,6 +51,11 @@ GENERATORS = {
         "fn": generate_dental_noshow_data,
         "output": "dental_noshow.csv",
         "kwargs": {"n_samples": 5000},
+    },
+    "heart_disease": {
+        "fn": generate_heart_disease_data,
+        "output": "heart_disease.csv",
+        "kwargs": {"n_samples": 20000},
     },
 }
 

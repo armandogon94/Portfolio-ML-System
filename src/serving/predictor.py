@@ -20,6 +20,8 @@ from src.features.credit_risk_features import get_feature_columns as credit_feat
 from src.features.dental_noshow_features import engineer_features as dental_noshow_features
 from src.features.dental_noshow_features import get_feature_columns as dental_noshow_feature_cols
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
+from src.features.heart_disease_features import engineer_features as heart_features
+from src.features.heart_disease_features import get_feature_columns as heart_feature_cols
 from src.features.housing_features import engineer_features as housing_features
 from src.features.housing_features import get_feature_columns as housing_feature_cols
 from src.features.rental_price_features import engineer_features as rental_features
@@ -99,6 +101,11 @@ class ModelPredictor:
             self._models[problem] = model
 
         elif problem == "rental_price":
+            model = joblib.load(checkpoint_dir / "model.pkl")
+            self._models[problem] = model
+
+        elif problem == "heart_disease":
+            # LightGBM classifier serialised via joblib — same shape as price.
             model = joblib.load(checkpoint_dir / "model.pkl")
             self._models[problem] = model
 
@@ -371,3 +378,45 @@ class ModelPredictor:
 
         explainer = SHAPExplainer()
         return explainer.explain(model, features, dental_noshow_feature_cols())
+
+    def predict_heart_disease(self, data: dict) -> dict:
+        """Score cardiac patient vitals for heart disease probability.
+
+        Output shape:
+            - probability_disease: float in [0, 1]
+            - risk_band: "HIGH" if prob >= 0.5, "ELEVATED" if >= 0.25, else "LOW"
+            - confidence: float in [0, 1] (distance from decision boundary)
+        """
+        self._ensure_loaded("heart_disease")
+        model = self._models["heart_disease"]
+
+        df = pd.DataFrame([data])
+        df = heart_features(df)
+        features = df[heart_feature_cols()]
+
+        prob = float(model.predict_proba(features)[0][1])
+
+        if prob >= 0.5:
+            risk_band = "HIGH"
+        elif prob >= 0.25:
+            risk_band = "ELEVATED"
+        else:
+            risk_band = "LOW"
+
+        return {
+            "probability_disease": prob,
+            "risk_band": risk_band,
+            "confidence": float(max(prob, 1 - prob)),
+        }
+
+    def explain_heart_disease(self, data: dict) -> dict:
+        """Explain a heart-disease prediction with SHAP values (LightGBM)."""
+        self._ensure_loaded("heart_disease")
+        model = self._models["heart_disease"]
+
+        df = pd.DataFrame([data])
+        df = heart_features(df)
+        features = df[heart_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, heart_feature_cols())

@@ -1,0 +1,42 @@
+problem: heart_disease
+
+data:
+  raw_data_path: data/raw/heart_disease.csv
+  processed_data_path: data/processed/heart_disease.csv
+  n_samples: 20000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - age
+    - sex
+    - chest_pain_type
+    - resting_bp
+    - cholesterol
+    - max_heart_rate
+    - exercise_angina
+    - oldpeak
+  target: disease
+
+model:
+  type: lightgbm
+  params:
+    objective: binary
+    metric: auc
+    num_leaves: 31
+    learning_rate: 0.1
+    n_estimators: 200
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    verbose: -1
+
+training:
+  checkpoint_dir: checkpoints/heart_disease
+  results_dir: results
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - heart_disease
+    - lightgbm
+    - classification

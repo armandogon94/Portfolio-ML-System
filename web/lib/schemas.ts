@@ -87,5 +87,22 @@ export const DENTAL_NOSHOW_DEFAULTS: DentalNoShowInput = {
 };
 
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
+// Mirrors PatientVitals in src/serving/api.py.
+export const HeartDiseaseInputSchema = z.object({
+  age: z.number().int().min(25).max(85),
+  sex: z.number().int().min(0).max(1),
+  chest_pain_type: z.number().int().min(1).max(4),
+  resting_bp: z.number().int().min(80).max(200),
+  cholesterol: z.number().int().min(100).max(400),
+  max_heart_rate: z.number().int().min(60).max(220),
+  exercise_angina: z.number().int().min(0).max(1),
+  oldpeak: z.number().min(0).max(6),
+});
+export type HeartDiseaseInput = z.infer<typeof HeartDiseaseInputSchema>;
+export const HEART_DISEASE_DEFAULTS: HeartDiseaseInput = {
+  age: 55, sex: 1, chest_pain_type: 3, resting_bp: 130, cholesterol: 240,
+  max_heart_rate: 150, exercise_angina: 0, oldpeak: 1.0,
+};
+
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

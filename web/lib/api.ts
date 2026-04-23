@@ -16,6 +16,7 @@ import { z } from "zod";
 import type {
   CreditRiskInput,
   DentalNoShowInput,
+  HeartDiseaseInput,
   RentalPriceInput,
 } from "@/lib/schemas";
 
@@ -116,5 +117,18 @@ export const explainDentalNoShow = (input: DentalNoShowInput) =>
   post("/explain/no-show", input, ExplanationSchema);
 
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
+
+export const HeartRiskBandSchema = z.enum(["HIGH", "ELEVATED", "LOW"]);
+export const HeartDiseasePredictionSchema = z.object({
+  probability_disease: z.number().min(0).max(1),
+  risk_band: HeartRiskBandSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type HeartDiseasePrediction = z.infer<typeof HeartDiseasePredictionSchema>;
+export const predictHeartDisease = (input: HeartDiseaseInput) =>
+  post("/predict/heart-disease", input, HeartDiseasePredictionSchema);
+export const explainHeartDisease = (input: HeartDiseaseInput) =>
+  post("/explain/heart-disease", input, ExplanationSchema);
+
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

@@ -115,6 +115,19 @@ class DentalAppointment(BaseModel):
     prior_appointments: int = 5
 
 
+class PatientVitals(BaseModel):
+    """Cleveland-style vitals for the heart-disease classifier (A.5)."""
+
+    age: int = 55
+    sex: int = 1
+    chest_pain_type: int = 3
+    resting_bp: int = 130
+    cholesterol: int = 240
+    max_heart_rate: int = 150
+    exercise_angina: int = 0
+    oldpeak: float = 1.0
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -204,6 +217,22 @@ async def predict_no_show(appointment: DentalAppointment):
 async def explain_no_show(appointment: DentalAppointment):
     try:
         return predictor.explain_dental_noshow(appointment.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/heart-disease")
+async def predict_heart_disease(vitals: PatientVitals):
+    try:
+        return predictor.predict_heart_disease(vitals.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/heart-disease")
+async def explain_heart_disease(vitals: PatientVitals):
+    try:
+        return predictor.explain_heart_disease(vitals.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
