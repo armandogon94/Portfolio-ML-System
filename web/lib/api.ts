@@ -13,7 +13,7 @@
  */
 import { z } from "zod";
 
-import type { CreditRiskInput } from "@/lib/schemas";
+import type { CreditRiskInput, H1BApprovalInput } from "@/lib/schemas";
 
 // ─── Shared infrastructure ─────────────────────────────────────────────────
 
@@ -83,4 +83,24 @@ export const explainCreditRisk = (input: CreditRiskInput) =>
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
-// ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
+// ─── Industry: Legal/Immigration ───────────────────────────────────────────
+
+export const H1BRecommendationSchema = z.enum([
+  "APPROVE_LIKELY",
+  "REVIEW",
+  "DECLINE_LIKELY",
+]);
+export type H1BRecommendation = z.infer<typeof H1BRecommendationSchema>;
+
+export const H1BApprovalPredictionSchema = z.object({
+  probability_approval: z.number().min(0).max(1),
+  recommendation: H1BRecommendationSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type H1BApprovalPrediction = z.infer<typeof H1BApprovalPredictionSchema>;
+
+export const predictH1bApproval = (input: H1BApprovalInput) =>
+  post("/predict/h1b-approval", input, H1BApprovalPredictionSchema);
+
+export const explainH1bApproval = (input: H1BApprovalInput) =>
+  post("/explain/h1b-approval", input, ExplanationSchema);

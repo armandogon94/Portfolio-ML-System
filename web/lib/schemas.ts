@@ -40,4 +40,26 @@ export const CREDIT_RISK_DEFAULTS: CreditRiskInput = {
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
-// ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
+// ─── Industry: Legal/Immigration ───────────────────────────────────────────
+// Mirrors H1BApplication in src/serving/api.py.
+export const H1BApprovalInputSchema = z.object({
+  prevailing_wage: z.number().min(40000).max(300000),
+  soc_code_level: z.number().int().min(1).max(4),
+  employer_size_tier: z.number().int().min(1).max(5),
+  job_level: z.number().int().min(1).max(4),
+  education_level: z.number().int().min(1).max(5),
+  experience_years: z.number().int().min(0).max(30),
+  country_of_citizenship_tier: z.number().int().min(1).max(5),
+  employer_prior_approval_rate: z.number().min(0).max(1),
+});
+export type H1BApprovalInput = z.infer<typeof H1BApprovalInputSchema>;
+export const H1B_APPROVAL_DEFAULTS: H1BApprovalInput = {
+  prevailing_wage: 120000,
+  soc_code_level: 3,
+  employer_size_tier: 3,
+  job_level: 2,
+  education_level: 2,
+  experience_years: 5,
+  country_of_citizenship_tier: 2,
+  employer_prior_approval_rate: 0.75,
+};

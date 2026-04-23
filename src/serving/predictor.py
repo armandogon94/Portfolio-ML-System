@@ -18,6 +18,8 @@ from src.explainability.shap_explainer import SHAPExplainer
 from src.features.credit_risk_features import engineer_features as credit_features
 from src.features.credit_risk_features import get_feature_columns as credit_feature_cols
 from src.features.fraud_features import get_feature_columns as fraud_feature_cols
+from src.features.h1b_approval_features import engineer_features as h1b_features
+from src.features.h1b_approval_features import get_feature_columns as h1b_feature_cols
 from src.features.housing_features import engineer_features as housing_features
 from src.features.housing_features import get_feature_columns as housing_feature_cols
 from src.models.fraud_autoencoder import FraudAutoencoder
@@ -101,6 +103,11 @@ class ModelPredictor:
             )
             model.to(self.device)
             model.eval()
+            self._models[problem] = model
+
+        elif problem == "h1b_approval":
+            model = xgb.XGBClassifier()
+            model.load_model(str(checkpoint_dir / "model.json"))
             self._models[problem] = model
 
     def predict_credit_risk(self, data: dict) -> dict:
@@ -285,3 +292,45 @@ class ModelPredictor:
 
         explainer = GradientExplainer()
         return explainer.explain(model, X_tensor, feature_cols)
+
+    def predict_h1b_approval(self, data: dict) -> dict:
+        """Score an H-1B petition. Returns approval probability + recommendation.
+
+        Tier thresholds (matches the Phase A.8 spec):
+        - ``probability_approval >= 0.7`` → APPROVE_LIKELY
+        - ``0.4 <= probability_approval < 0.7`` → REVIEW
+        - ``probability_approval < 0.4`` → DECLINE_LIKELY
+        """
+        self._ensure_loaded("h1b_approval")
+        model = self._models["h1b_approval"]
+
+        df = pd.DataFrame([data])
+        df = h1b_features(df)
+        features = df[h1b_feature_cols()]
+
+        prob = float(model.predict_proba(features)[0][1])
+
+        if prob >= 0.7:
+            recommendation = "APPROVE_LIKELY"
+        elif prob >= 0.4:
+            recommendation = "REVIEW"
+        else:
+            recommendation = "DECLINE_LIKELY"
+
+        return {
+            "probability_approval": prob,
+            "recommendation": recommendation,
+            "confidence": float(max(prob, 1 - prob)),
+        }
+
+    def explain_h1b_approval(self, data: dict) -> dict:
+        """Explain an H-1B prediction with SHAP values (XGBoost TreeExplainer)."""
+        self._ensure_loaded("h1b_approval")
+        model = self._models["h1b_approval"]
+
+        df = pd.DataFrame([data])
+        df = h1b_features(df)
+        features = df[h1b_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, h1b_feature_cols())

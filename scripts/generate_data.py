@@ -12,6 +12,7 @@ from rich.console import Console
 from src.config import get_project_root
 from src.data.generate_credit_risk import generate_credit_risk_data
 from src.data.generate_fraud import generate_fraud_data
+from src.data.generate_h1b_approval import generate_h1b_approval_data
 from src.data.generate_housing import generate_housing_data
 from src.data.generate_timeseries import generate_timeseries_data
 
@@ -38,6 +39,11 @@ GENERATORS = {
         "fn": generate_timeseries_data,
         "output": "daily_demand.csv",
         "kwargs": {"n_years": 3},
+    },
+    "h1b_approval": {
+        "fn": generate_h1b_approval_data,
+        "output": "h1b_approval.csv",
+        "kwargs": {"n_samples": 50000},
     },
 }
 

@@ -126,7 +126,7 @@ export const INDUSTRIES: Industry[] = [
     icon: Gavel,
     modelCount: 3,
     models: [
-      { slug: "h1b-approval", title: "H-1B Approval", description: "XGBoost on LCA disclosure data.", ready: false },
+      { slug: "h1b-approval", title: "H-1B Approval", description: "XGBoost on LCA disclosure data.", ready: true },
       { slug: "case-duration", title: "Case Duration", description: "LightGBM regressor on USCIS data.", ready: false },
       { slug: "doc-classification", title: "Legal Doc Classifier", description: "DistilBERT fine-tune (MPS).", ready: false },
     ],
