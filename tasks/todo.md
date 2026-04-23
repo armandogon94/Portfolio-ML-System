@@ -148,9 +148,9 @@
 - [x] **A.2.1** Initialize `web/` with Next.js 14 + TypeScript + Tailwind + pnpm (port 3071) _(M)_ — commit `bcff1f1`
 - [x] **A.2.2** Install shadcn/ui + core primitives (button, card, input, label, form, slider, switch, sonner) _(M)_ — commit `3e96622`
 - [x] **A.2.3** Root layout + Providers (QueryClient + Theme) + Vitest setup _(M)_ — commit `8b05f05`
-- [ ] **A.2.4** Typed API client (`lib/api.ts`) + Zod schemas (`lib/schemas.ts`) + `next.config.mjs` rewrites proxy _(M)_
+- [x] **A.2.4** Typed API client (`lib/api.ts`) + Zod schemas (`lib/schemas.ts`) + `next.config.mjs` rewrites proxy _(M)_
 
-**Checkpoint A.2.a:** scaffold ready, `pnpm dev` serves at :3071 with providers wired
+**Checkpoint A.2.a:** ✅ scaffold ready — proxy verified end-to-end, 9 tests passing
 
 ---
 
