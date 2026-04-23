@@ -160,6 +160,19 @@ class BankCustomer(BaseModel):
     geography_tier: int = 2
 
 
+class H1BApplication(BaseModel):
+    """H-1B visa petition inputs for the approval classifier (A.8)."""
+
+    prevailing_wage: float = 120000
+    soc_code_level: int = 3
+    employer_size_tier: int = 3
+    job_level: int = 2
+    education_level: int = 2
+    experience_years: int = 5
+    country_of_citizenship_tier: int = 2
+    employer_prior_approval_rate: float = 0.75
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -237,6 +250,14 @@ async def predict_rental_price(listing: RentalListing):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/predict/h1b-approval")
+async def predict_h1b_approval(app_data: H1BApplication):
+    try:
+        return predictor.predict_h1b_approval(app_data.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/explain/rental-price")
 async def explain_rental_price(listing: RentalListing):
     try:
@@ -297,6 +318,14 @@ async def predict_churn(customer: BankCustomer):
 async def explain_churn(customer: BankCustomer):
     try:
         return predictor.explain_customer_churn(customer.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/h1b-approval")
+async def explain_h1b_approval(app_data: H1BApplication):
+    try:
+        return predictor.explain_h1b_approval(app_data.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

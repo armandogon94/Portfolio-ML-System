@@ -18,6 +18,7 @@ import type {
   CustomerChurnInput,
   DeliveryEtaInput,
   DentalNoShowInput,
+  H1BApprovalInput,
   HeartDiseaseInput,
   RentalPriceInput,
 } from "@/lib/schemas";
@@ -167,3 +168,23 @@ export const explainDeliveryEta = (input: DeliveryEtaInput) =>
   post("/explain/eta", input, ExplanationSchema);
 
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
+
+export const H1BRecommendationSchema = z.enum([
+  "APPROVE_LIKELY",
+  "REVIEW",
+  "DECLINE_LIKELY",
+]);
+export type H1BRecommendation = z.infer<typeof H1BRecommendationSchema>;
+
+export const H1BApprovalPredictionSchema = z.object({
+  probability_approval: z.number().min(0).max(1),
+  recommendation: H1BRecommendationSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type H1BApprovalPrediction = z.infer<typeof H1BApprovalPredictionSchema>;
+
+export const predictH1bApproval = (input: H1BApprovalInput) =>
+  post("/predict/h1b-approval", input, H1BApprovalPredictionSchema);
+
+export const explainH1bApproval = (input: H1BApprovalInput) =>
+  post("/explain/h1b-approval", input, ExplanationSchema);

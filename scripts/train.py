@@ -36,6 +36,7 @@ TRAINERS = {
     "heart_disease": "src.training.train_heart_disease:HeartDiseaseTrainer",
     "delivery_eta": "src.training.train_delivery_eta:DeliveryEtaTrainer",
     "customer_churn": "src.training.train_customer_churn:CustomerChurnTrainer",
+    "h1b_approval": "src.training.train_h1b_approval:H1BApprovalTrainer",
 }
 
 # CLI model name → problem / config name used by BaseTrainer.
@@ -49,6 +50,7 @@ CONFIG_NAMES = {
     "heart_disease": "heart_disease",
     "delivery_eta": "delivery_eta",
     "customer_churn": "customer_churn",
+    "h1b_approval": "h1b_approval",
 }
 
 MODALITY_CHOICES = ("synthetic", "stream", "mixed", "all")
@@ -67,6 +69,7 @@ RECOMMENDATION_KEY: dict[str, tuple[str, bool]] = {
     # Lower RMSE is better for the delivery-ETA regressor.
     "delivery_eta": ("test_rmse", False),
     "customer_churn": ("test_auc_roc", True),
+    "h1b_approval": ("test_auc_roc", True),
 }
 
 

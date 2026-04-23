@@ -15,6 +15,7 @@ from src.data.generate_customer_churn import generate_customer_churn_data
 from src.data.generate_delivery_eta import generate_delivery_eta_data
 from src.data.generate_dental_noshow import generate_dental_noshow_data
 from src.data.generate_fraud import generate_fraud_data
+from src.data.generate_h1b_approval import generate_h1b_approval_data
 from src.data.generate_heart_disease import generate_heart_disease_data
 from src.data.generate_housing import generate_housing_data
 from src.data.generate_rental_price import generate_rental_price_data
@@ -68,6 +69,11 @@ GENERATORS = {
         "fn": generate_customer_churn_data,
         "output": "customer_churn.csv",
         "kwargs": {"n_samples": 20000},
+    },
+    "h1b_approval": {
+        "fn": generate_h1b_approval_data,
+        "output": "h1b_approval.csv",
+        "kwargs": {"n_samples": 50000},
     },
 }
 
