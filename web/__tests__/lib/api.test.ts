@@ -1,11 +1,7 @@
 /** A.2.4 — typed API client tests. External fetch is mocked. */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import {
-  ApiError,
-  predictCreditRisk,
-  explainCreditRisk,
-} from "@/lib/api";
+import { ApiError, predictCreditRisk, explainCreditRisk } from "@/lib/api";
 
 describe("ApiError", () => {
   it("preserves status and body", () => {
