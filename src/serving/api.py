@@ -89,6 +89,17 @@ class DemandRequest(BaseModel):
     product: str = "electronics"
 
 
+class PatientVitals(BaseModel):
+    age: int = 55
+    sex: int = 1
+    chest_pain_type: int = 3
+    resting_bp: int = 130
+    cholesterol: int = 240
+    max_heart_rate: int = 150
+    exercise_angina: int = 0
+    oldpeak: float = 1.0
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -146,6 +157,22 @@ async def explain_price(prop: Property):
 async def explain_fraud(tx: Transaction):
     try:
         return predictor.explain_fraud(tx.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/heart-disease")
+async def predict_heart_disease(vitals: PatientVitals):
+    try:
+        return predictor.predict_heart_disease(vitals.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/heart-disease")
+async def explain_heart_disease(vitals: PatientVitals):
+    try:
+        return predictor.explain_heart_disease(vitals.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

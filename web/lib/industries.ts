@@ -86,7 +86,7 @@ export const INDUSTRIES: Industry[] = [
     modelCount: 4,
     models: [
       { slug: "readmission", title: "30-Day Readmission", description: "UCI Diabetes 130 risk model.", ready: false },
-      { slug: "heart-disease", title: "Heart Disease Risk", description: "Cleveland dataset LightGBM.", ready: false },
+      { slug: "heart-disease", title: "Heart Disease Risk", description: "Cleveland dataset LightGBM.", ready: true },
       { slug: "diabetes-onset", title: "Diabetes Onset", description: "PIMA-style XGBoost classifier.", ready: false },
       { slug: "length-of-stay", title: "Length of Stay", description: "LSTM over synthetic vitals windows.", ready: false },
     ],

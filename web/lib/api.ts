@@ -13,7 +13,7 @@
  */
 import { z } from "zod";
 
-import type { CreditRiskInput } from "@/lib/schemas";
+import type { CreditRiskInput, HeartDiseaseInput } from "@/lib/schemas";
 
 // ─── Shared infrastructure ─────────────────────────────────────────────────
 
@@ -81,6 +81,17 @@ export const explainCreditRisk = (input: CreditRiskInput) =>
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
-// ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
+// ─── Industry: Healthcare ───
+export const HeartRiskBandSchema = z.enum(["HIGH", "ELEVATED", "LOW"]);
+export const HeartDiseasePredictionSchema = z.object({
+  probability_disease: z.number().min(0).max(1),
+  risk_band: HeartRiskBandSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type HeartDiseasePrediction = z.infer<typeof HeartDiseasePredictionSchema>;
+export const predictHeartDisease = (input: HeartDiseaseInput) =>
+  post("/predict/heart-disease", input, HeartDiseasePredictionSchema);
+export const explainHeartDisease = (input: HeartDiseaseInput) =>
+  post("/explain/heart-disease", input, ExplanationSchema);
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
