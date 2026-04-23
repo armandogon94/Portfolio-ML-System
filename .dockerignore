@@ -39,6 +39,13 @@ tasks/
 # Claude / agent artifacts
 .claude/
 
+# Next.js / web frontend build artifacts (A.2.10)
+web/node_modules/
+web/.next/
+web/out/
+web/coverage/
+web/.turbo/
+
 # OS files
 .DS_Store
 Thumbs.db
