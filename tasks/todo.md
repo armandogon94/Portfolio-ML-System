@@ -179,9 +179,9 @@
 **Skills:** `source-driven-development`, `incremental-implementation`
 
 - [x] **A.2.10** `Dockerfile.web` (prod multi-stage, standalone, non-root) + `docker-compose.yml` `ml-web:3071` service _(M)_ — 226 MB image, HTTP 200 verified
-- [ ] **A.2.11** `docker-compose.dev.yml` (HMR variant) + Makefile `web-*` targets + `web/README.md` _(S)_
+- [x] **A.2.11** `docker-compose.dev.yml` (HMR variant) + Makefile `web-*` targets + `web/README.md` _(S)_ — 8 new targets, compose validated
 
-**Checkpoint A.2.d:** `make docker-up` runs ml-web alongside existing services; dev override supports HMR
+**Checkpoint A.2.d:** ✅ prod + dev docker workflows both wired; Makefile + docs cover all three run modes
 
 ---
 
