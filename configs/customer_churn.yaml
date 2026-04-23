@@ -1,0 +1,43 @@
+problem: customer_churn
+
+data:
+  raw_data_path: data/raw/customer_churn.csv
+  processed_data_path: data/processed/customer_churn.csv
+  n_samples: 20000
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  numerical:
+    - tenure_months
+    - balance
+    - num_products
+    - has_credit_card
+    - is_active_member
+    - estimated_salary
+    - age
+    - geography_tier
+  target: churned
+
+model:
+  type: xgboost
+  params:
+    max_depth: 5
+    learning_rate: 0.1
+    n_estimators: 200
+    objective: "binary:logistic"
+    eval_metric: auc
+    early_stopping_rounds: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    scale_pos_weight: 4.0  # ~1/0.20 for ~20% churn rate
+
+training:
+  checkpoint_dir: checkpoints/customer_churn
+  results_dir: results
+  wandb_project: portfolio-ml-system
+  wandb_tags:
+    - customer_churn
+    - fintech
+    - xgboost
+    - classification

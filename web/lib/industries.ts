@@ -102,7 +102,7 @@ export const INDUSTRIES: Industry[] = [
       { slug: "credit-risk", title: "Credit Risk Scoring", description: "XGBoost loan-default classifier.", ready: true },
       { slug: "fraud", title: "Fraud Detection", description: "PyTorch autoencoder + isolation forest.", ready: false },
       { slug: "loan-approval", title: "Loan Approval", description: "LightGBM eligibility classifier.", ready: false },
-      { slug: "churn", title: "Customer Churn", description: "Bank churn XGBoost classifier.", ready: false },
+      { slug: "churn", title: "Customer Churn", description: "Bank churn XGBoost classifier.", ready: true },
     ],
   },
   {

@@ -17,6 +17,8 @@ from src.explainability.gradient_explainer import GradientExplainer
 from src.explainability.shap_explainer import SHAPExplainer
 from src.features.credit_risk_features import engineer_features as credit_features
 from src.features.credit_risk_features import get_feature_columns as credit_feature_cols
+from src.features.customer_churn_features import engineer_features as churn_features
+from src.features.customer_churn_features import get_feature_columns as churn_feature_cols
 from src.features.delivery_eta_features import engineer_features as delivery_eta_features
 from src.features.delivery_eta_features import (
     get_feature_columns as delivery_eta_feature_cols,
@@ -75,6 +77,11 @@ class ModelPredictor:
             self._models[problem] = model
 
         elif problem == "dental_noshow":
+            model = xgb.XGBClassifier()
+            model.load_model(str(checkpoint_dir / "model.json"))
+            self._models[problem] = model
+
+        elif problem == "customer_churn":
             model = xgb.XGBClassifier()
             model.load_model(str(checkpoint_dir / "model.json"))
             self._models[problem] = model
@@ -464,3 +471,47 @@ class ModelPredictor:
 
         explainer = SHAPExplainer()
         return explainer.explain(model, features, heart_feature_cols())
+
+    def predict_customer_churn(self, data: dict) -> dict:
+        """Score a bank customer for churn risk.
+
+        Thresholds mirror the credit-risk tiering convention but invert the
+        semantic: high probability means "act now, the customer is leaving".
+        The ≥0.6 and ≥0.3 cutoffs were chosen to keep URGENT_OUTREACH at
+        roughly the top decile while surfacing a middle band for PROACTIVE
+        check-ins, which matches how retention ops queues are typically
+        structured.
+        """
+        self._ensure_loaded("customer_churn")
+        model = self._models["customer_churn"]
+
+        df = pd.DataFrame([data])
+        df = churn_features(df)
+        features = df[churn_feature_cols()]
+
+        prob = float(model.predict_proba(features)[0][1])
+
+        if prob >= 0.6:
+            recommendation = "URGENT_OUTREACH"
+        elif prob >= 0.3:
+            recommendation = "PROACTIVE_CHECKIN"
+        else:
+            recommendation = "NO_ACTION"
+
+        return {
+            "probability_churn": prob,
+            "retention_recommendation": recommendation,
+            "confidence": float(max(prob, 1 - prob)),
+        }
+
+    def explain_customer_churn(self, data: dict) -> dict:
+        """Explain a churn prediction with SHAP values (TreeExplainer)."""
+        self._ensure_loaded("customer_churn")
+        model = self._models["customer_churn"]
+
+        df = pd.DataFrame([data])
+        df = churn_features(df)
+        features = df[churn_feature_cols()]
+
+        explainer = SHAPExplainer()
+        return explainer.explain(model, features, churn_feature_cols())

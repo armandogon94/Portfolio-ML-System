@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import type {
   CreditRiskInput,
+  CustomerChurnInput,
   DeliveryEtaInput,
   DentalNoShowInput,
   HeartDiseaseInput,
@@ -84,6 +85,26 @@ export const predictCreditRisk = (input: CreditRiskInput) =>
 
 export const explainCreditRisk = (input: CreditRiskInput) =>
   post("/explain/credit-risk", input, ExplanationSchema);
+
+export const RetentionActionSchema = z.enum([
+  "URGENT_OUTREACH",
+  "PROACTIVE_CHECKIN",
+  "NO_ACTION",
+]);
+export type RetentionAction = z.infer<typeof RetentionActionSchema>;
+
+export const CustomerChurnPredictionSchema = z.object({
+  probability_churn: z.number().min(0).max(1),
+  retention_recommendation: RetentionActionSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type CustomerChurnPrediction = z.infer<typeof CustomerChurnPredictionSchema>;
+
+export const predictCustomerChurn = (input: CustomerChurnInput) =>
+  post("/predict/churn", input, CustomerChurnPredictionSchema);
+
+export const explainCustomerChurn = (input: CustomerChurnInput) =>
+  post("/explain/churn", input, ExplanationSchema);
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 

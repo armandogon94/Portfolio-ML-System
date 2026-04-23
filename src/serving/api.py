@@ -147,6 +147,19 @@ class DeliveryRequest(BaseModel):
     origin_destination_tier: int = 2
 
 
+class BankCustomer(BaseModel):
+    """Bank customer features for the churn classifier (A.6)."""
+
+    tenure_months: int = 48
+    balance: float = 50000
+    num_products: int = 2
+    has_credit_card: int = 1
+    is_active_member: int = 1
+    estimated_salary: float = 75000
+    age: int = 40
+    geography_tier: int = 2
+
+
 @app.post("/predict/credit-risk")
 async def predict_credit_risk(app_data: LoanApplication):
     try:
@@ -268,6 +281,22 @@ async def explain_heart_disease(vitals: PatientVitals):
 async def explain_eta(req: DeliveryRequest):
     try:
         return predictor.explain_delivery_eta(req.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/churn")
+async def predict_churn(customer: BankCustomer):
+    try:
+        return predictor.predict_customer_churn(customer.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/explain/churn")
+async def explain_churn(customer: BankCustomer):
+    try:
+        return predictor.explain_customer_churn(customer.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

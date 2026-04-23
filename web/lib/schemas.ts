@@ -36,6 +36,23 @@ export const CREDIT_RISK_DEFAULTS: CreditRiskInput = {
   loan_amount: 25000,
 };
 
+// Mirrors BankCustomer in src/serving/api.py (A.6).
+export const CustomerChurnInputSchema = z.object({
+  tenure_months: z.number().int().min(0).max(120),
+  balance: z.number().nonnegative(),
+  num_products: z.number().int().min(1).max(6),
+  has_credit_card: z.number().int().min(0).max(1),
+  is_active_member: z.number().int().min(0).max(1),
+  estimated_salary: z.number().nonnegative(),
+  age: z.number().int().min(18).max(92),
+  geography_tier: z.number().int().min(1).max(3),
+});
+export type CustomerChurnInput = z.infer<typeof CustomerChurnInputSchema>;
+export const CUSTOMER_CHURN_DEFAULTS: CustomerChurnInput = {
+  tenure_months: 48, balance: 50000, num_products: 2, has_credit_card: 1,
+  is_active_member: 1, estimated_salary: 75000, age: 40, geography_tier: 2,
+};
+
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 // Mirrors RentalListing in src/serving/api.py.
 export const RentalPriceInputSchema = z.object({
