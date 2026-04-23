@@ -178,7 +178,7 @@
 ## Sub-Phase A.2.d: Docker + Makefile
 **Skills:** `source-driven-development`, `incremental-implementation`
 
-- [ ] **A.2.10** `Dockerfile.web` (prod multi-stage, standalone, non-root) + `docker-compose.yml` `ml-web:3071` service _(M)_
+- [x] **A.2.10** `Dockerfile.web` (prod multi-stage, standalone, non-root) + `docker-compose.yml` `ml-web:3071` service _(M)_ — 226 MB image, HTTP 200 verified
 - [ ] **A.2.11** `docker-compose.dev.yml` (HMR variant) + Makefile `web-*` targets + `web/README.md` _(S)_
 
 **Checkpoint A.2.d:** `make docker-up` runs ml-web alongside existing services; dev override supports HMR
