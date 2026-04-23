@@ -105,4 +105,27 @@ export const HEART_DISEASE_DEFAULTS: HeartDiseaseInput = {
 };
 
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
+// Mirrors DeliveryRequest in src/serving/api.py.
+export const DeliveryEtaInputSchema = z.object({
+  distance_km: z.number().min(1).max(2000),
+  package_weight_kg: z.number().min(0.1).max(50),
+  traffic_congestion: z.number().int().min(1).max(5),
+  weather_severity: z.number().int().min(0).max(4),
+  time_of_day: z.number().int().min(0).max(23),
+  day_of_week: z.number().int().min(0).max(6),
+  carrier_priority: z.number().int().min(1).max(3),
+  origin_destination_tier: z.number().int().min(1).max(4),
+});
+export type DeliveryEtaInput = z.infer<typeof DeliveryEtaInputSchema>;
+export const DELIVERY_ETA_DEFAULTS: DeliveryEtaInput = {
+  distance_km: 50,
+  package_weight_kg: 2,
+  traffic_congestion: 3,
+  weather_severity: 1,
+  time_of_day: 10,
+  day_of_week: 2,
+  carrier_priority: 2,
+  origin_destination_tier: 2,
+};
+
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

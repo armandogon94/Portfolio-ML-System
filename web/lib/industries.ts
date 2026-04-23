@@ -114,7 +114,7 @@ export const INDUSTRIES: Industry[] = [
     modelCount: 3,
     models: [
       { slug: "demand", title: "Demand Forecasting", description: "PyTorch LSTM 7-day forecast.", ready: false },
-      { slug: "eta", title: "Delivery ETA", description: "Feed-forward NN on Amazon deliveries.", ready: false },
+      { slug: "eta", title: "Delivery ETA", description: "XGBoost regressor on synthetic delivery data.", ready: true },
       { slug: "damage-risk", title: "Shipment Damage Risk", description: "XGBoost risk classifier.", ready: false },
     ],
   },

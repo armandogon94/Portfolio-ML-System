@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import type {
   CreditRiskInput,
+  DeliveryEtaInput,
   DentalNoShowInput,
   HeartDiseaseInput,
   RentalPriceInput,
@@ -131,4 +132,17 @@ export const explainHeartDisease = (input: HeartDiseaseInput) =>
   post("/explain/heart-disease", input, ExplanationSchema);
 
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
+
+export const DeliveryEtaPredictionSchema = z.object({
+  eta_hours: z.number(),
+  confidence_interval: z.tuple([z.number(), z.number()]),
+});
+export type DeliveryEtaPrediction = z.infer<typeof DeliveryEtaPredictionSchema>;
+
+export const predictDeliveryEta = (input: DeliveryEtaInput) =>
+  post("/predict/eta", input, DeliveryEtaPredictionSchema);
+
+export const explainDeliveryEta = (input: DeliveryEtaInput) =>
+  post("/explain/eta", input, ExplanationSchema);
+
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────

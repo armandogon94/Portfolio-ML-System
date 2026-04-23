@@ -11,6 +11,7 @@ from rich.console import Console
 
 from src.config import get_project_root
 from src.data.generate_credit_risk import generate_credit_risk_data
+from src.data.generate_delivery_eta import generate_delivery_eta_data
 from src.data.generate_dental_noshow import generate_dental_noshow_data
 from src.data.generate_fraud import generate_fraud_data
 from src.data.generate_heart_disease import generate_heart_disease_data
@@ -56,6 +57,11 @@ GENERATORS = {
         "fn": generate_heart_disease_data,
         "output": "heart_disease.csv",
         "kwargs": {"n_samples": 20000},
+    },
+    "delivery_eta": {
+        "fn": generate_delivery_eta_data,
+        "output": "delivery_eta.csv",
+        "kwargs": {"n_samples": 30000},
     },
 }
 
