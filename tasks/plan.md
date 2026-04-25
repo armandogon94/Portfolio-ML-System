@@ -1774,3 +1774,425 @@ When the parallel fan-out begins at A.3, each industry agent should:
 5. Add backend bits per the existing "Files to Touch Per New Model" pattern in this plan
 
 A.2's acceptance gate ensures these appends are always clean — `api.ts` and `schemas.ts` are grouped by industry from day one.
+
+
+---
+
+# Phase A.9 Plan — Retire Gradio + Dashboard Polish
+
+**Reference:** `SPEC.md` §Phase A.9 (appended 2026-04-23).
+**Strategy:** Strangler pattern — build replacements first (legacy page ports + dashboard), verify parity, then delete Gradio. Each task is a vertical slice that leaves the system in a working state.
+
+## Phase A.9 Dependency Graph
+
+```
+A.9.1  Dynamic /models + /health (backend)              [FOUNDATION]
+A.9.2  MLflow REST client + Zod schemas (web/lib)       [FOUNDATION]
+A.9.3  Lint debt cleanup (conftest, evaluate, run_all)  [FOUNDATION — unblocks make lint gate]
+            │
+            ▼
+A.9.4  Port fraud  → /fintech/fraud                      [LEGACY PARITY]
+A.9.5  Port price  → /real-estate/price                  [LEGACY PARITY]
+A.9.6  Port demand → /logistics/demand                   [LEGACY PARITY]
+            │
+            ▼
+A.9.7  MetricSparkline + ModelStatusBadge (TDD)          [DASHBOARD]
+A.9.8  DashboardTable + IndustrySummaryTile (TDD)        [DASHBOARD]
+A.9.9  /api route handlers + /dashboard page             [DASHBOARD]
+            │
+            ▼
+A.9.10 Parity snapshot test: Gradio ↔ Next.js outputs   [RETIREMENT GATE]
+A.9.11 Delete Gradio + write ADR-001                    [RETIREMENT]
+A.9.12 Final acceptance + tag v1.4.0-phase-a-complete   [SHIP]
+```
+
+**Parallelization:** A.9.1 / A.9.2 / A.9.3 touch disjoint trees (backend Python / web TS / three Python files) — safe to run in parallel if desired. A.9.4 / A.9.5 / A.9.6 all append to `web/lib/industries.ts` + `web/lib/schemas.ts` + `web/lib/api.ts` but each goes into its own industry section; serial execution is simpler than worktree coordination for 3 small ports.
+
+## Architecture Decisions
+
+- **Dashboard is a Server Component with ISR** (`revalidate = 30`) — one round-trip to FastAPI + one to MLflow, cached 30s. No client-side data-fetching libs needed; avoids TanStack Query complexity for a read-only surface.
+- **Dynamic model scan** — `get_model_info()` walks `checkpoints/*/metadata.json` instead of maintaining a hardcoded list. This future-proofs against B.1–B.4 model additions.
+- **MLflow via REST API only** — no new Python package, no direct SQLite reads from the web app; keeps ml-web container slim and language-agnostic.
+- **Strangler pattern for Gradio** — ports ship first, parity verified via snapshot test, then Gradio code deleted atomically in one commit. Git tag `v1.3.0-phase-a-fanout` is the rollback point.
+- **ADR-001 supersedes the implicit Slice-1 "use Gradio" decision** — captures why we moved to Next.js, what alternatives were considered (Streamlit, Dash, keep Gradio), and the operational consequences.
+
+---
+
+## Sub-Phase A.9.a: Foundation (Tasks A.9.1–A.9.3)
+
+### Task A.9.1: Dynamic `/models` + `/health` — Scan `checkpoints/` Directory
+
+**Description:** Replace the hardcoded 5-model lists in `src/serving/predictor.py::get_model_info()` and `src/serving/api.py::_ALL_MODELS` with a dynamic scan of `checkpoints/*/metadata.json`. This means adding a new model no longer requires editing two Python files — just drop the checkpoint directory.
+
+**Acceptance criteria:**
+- [ ] `ModelPredictor.get_model_info()` returns one entry per `checkpoints/<problem>/metadata.json` that exists (no hardcoded list).
+- [ ] `GET /health` reports `models: { <problem>: { available: bool } }` for every checkpoint dir under `checkpoints/` (also no hardcoded list).
+- [ ] Backward-compat: response shape is unchanged for existing consumers (old legacy 5 keys still appear when trained).
+- [ ] New tests: `test_get_models_scans_checkpoints_dir`, `test_health_reports_all_existing_checkpoints`, `test_health_reports_nothing_when_checkpoints_empty`.
+
+**Verification:**
+- `make test` → ≥360 passing (357 + ≥3 new)
+- Manual: create a dummy `checkpoints/foo/metadata.json`, call `GET /models` → `foo` appears; delete it → disappears.
+
+**Dependencies:** None
+
+**Files likely touched:**
+- `src/serving/predictor.py` (method body change)
+- `src/serving/api.py` (remove `_ALL_MODELS`, inline dynamic scan in `/health`)
+- `tests/test_serving.py` + `tests/test_logging.py::TestEnrichedHealth` (new tests)
+
+**Scope:** S (3 files)
+
+---
+
+### Task A.9.2: MLflow REST Client + Zod Schemas
+
+**Description:** Add `web/lib/mlflow.ts` — a thin typed client that calls MLflow's REST API (`/api/2.0/mlflow/experiments/search`, `/api/2.0/mlflow/runs/search`) from the Next.js server. Used by the dashboard sparkline feature. Responses are Zod-validated at the boundary.
+
+**Acceptance criteria:**
+- [ ] `getRunHistory(experimentName: string, metricKey: string): Promise<{ runs: Array<{ endTime: number; metric: number }> }>` — returns last 10 runs ordered by end_time desc.
+- [ ] All MLflow responses validated with Zod; invalid shapes throw `MlflowError` with status + body.
+- [ ] `MLFLOW_TRACKING_URI` env var controls the base URL; defaults to `http://mlflow:5000` (compose network) when unset.
+- [ ] New tests: `web/__tests__/lib/mlflow.test.ts` — mocks `fetch`, verifies Zod parse + error handling, verifies the correct REST endpoint is called.
+
+**Verification:**
+- `cd web && pnpm test` → ≥59 passing (57 + 2 new)
+- Manual (post-dashboard): dashboard renders sparklines for credit_risk (which has MLflow history).
+
+**Dependencies:** None
+
+**Files likely touched:**
+- `web/lib/mlflow.ts` (new)
+- `web/__tests__/lib/mlflow.test.ts` (new)
+- `web/.env.local.example` (document `MLFLOW_TRACKING_URI`)
+
+**Scope:** S (3 files)
+
+---
+
+### Task A.9.3: Pre-existing Python Lint Debt Cleanup
+
+**Description:** Resolve the 4 pre-existing ruff warnings carried from earlier slices so `make lint` becomes a 0-warning gate going forward. Isolated from all other A.9 work; can ship standalone.
+
+**Acceptance criteria:**
+- [ ] `conftest.py:3` I001 — imports sorted.
+- [ ] `scripts/evaluate.py:19` F841 — unused `args` removed (or prefixed with `_` if intentional).
+- [ ] `scripts/run_all.py:29-30` E501 — lines broken to ≤100 chars.
+- [ ] `make lint` → 0 errors, 0 warnings.
+- [ ] Existing test suite still green (these are metadata-only fixes, no behavioral change).
+
+**Verification:**
+- `uv run ruff check .` → `All checks passed!`
+- `make test` → 357 passing (unchanged)
+
+**Dependencies:** None
+
+**Files likely touched:**
+- `conftest.py`
+- `scripts/evaluate.py`
+- `scripts/run_all.py`
+
+**Scope:** XS (3 files)
+
+---
+
+### Checkpoint A.9.a — Foundation Ready
+
+- [ ] `/models` + `/health` dynamically scan checkpoints
+- [ ] MLflow REST client unit-tested
+- [ ] `make lint` clean (0 warnings)
+- [ ] Python: 357 → ≥360 tests passing
+- [ ] Web: 57 → ≥59 tests passing
+
+---
+
+## Sub-Phase A.9.b: Legacy Model Ports (Tasks A.9.4–A.9.6)
+
+Each task is the same vertical pattern used in A.3–A.8: new page + fields + test, plus 3 tiny appends to `industries.ts`, `schemas.ts`, `api.ts`. Reuses existing `ModelForm` + `PredictionResult` + `ExplainabilityChart`.
+
+### Task A.9.4: Port Fraud Detection → `/fintech/fraud`
+
+**Description:** Create a Next.js page for the fraud autoencoder + isolation-forest model that reaches parity with the Gradio fraud tab. Inputs: transaction_amount, merchant_category, hour_of_day, day_of_week, distance_from_home, is_online, card_age_days, num_transactions_last_hour, amount_vs_avg_ratio. Calls `POST /predict/fraud` + `POST /explain/fraud`. Result card shows anomaly score + fraud/legit recommendation.
+
+**Acceptance criteria:**
+- [ ] **RED test first:** `web/__tests__/app/fraud.test.tsx` — renders form, submits mock data, asserts result card shows probability + recommendation. Test fails before implementation.
+- [ ] `FraudInputSchema` + `FRAUD_DEFAULTS` appended to `web/lib/schemas.ts` (Fintech section).
+- [ ] `FraudPredictionSchema` + `predictFraud` + `explainFraud` appended to `web/lib/api.ts` (Fintech section).
+- [ ] `industries.ts` — flip `fraud` to `ready: true`, point at `/fintech/fraud`.
+- [ ] `web/app/fintech/fraud/{page.tsx,fields.ts}` — follows the 6 existing industry-page shapes exactly.
+- [ ] Page renders in dev (`pnpm dev`), submission returns a prediction.
+
+**Verification:**
+- `pnpm test` → ≥61 tests passing (+2)
+- `pnpm typecheck` clean, `pnpm lint` clean
+- Manual: browse `/fintech/fraud`, submit defaults, confirm result + SHAP chart render
+
+**Dependencies:** A.9.1 (for dashboard later; not strictly for this port), but none blocking.
+
+**Files likely touched:**
+- `web/app/fintech/fraud/page.tsx` + `fields.ts` (new)
+- `web/__tests__/app/fraud.test.tsx` (new)
+- `web/lib/schemas.ts`, `web/lib/api.ts`, `web/lib/industries.ts` (appends / flip)
+
+**Scope:** S (6 files)
+
+---
+
+### Task A.9.5: Port Price Prediction → `/real-estate/price`
+
+**Description:** Next.js port of the LightGBM price regressor. Inputs: square_feet, bedrooms, bathrooms, year_built, lot_size_sqft, garage_spaces, has_pool, neighborhood_tier, proximity_to_city_center. Calls `POST /predict/price` + `POST /explain/price`. Result card shows predicted price + confidence band.
+
+**Acceptance criteria:**
+- [ ] **RED test first:** `web/__tests__/app/price.test.tsx`.
+- [ ] `PricePredictionInputSchema` + defaults appended to `web/lib/schemas.ts` (Real Estate section).
+- [ ] `PricePredictionSchema` + API fns appended to `web/lib/api.ts`.
+- [ ] `industries.ts` — flip `price` → `ready: true`, point at `/real-estate/price`.
+- [ ] `web/app/real-estate/price/{page.tsx,fields.ts}` — mirrors rental-price page.
+
+**Verification:**
+- `pnpm test` → ≥63 tests passing (+2)
+- Manual submission returns predicted price.
+
+**Dependencies:** None
+
+**Files likely touched:** same 6-file shape as A.9.4.
+
+**Scope:** S (6 files)
+
+---
+
+### Task A.9.6: Port Demand Forecasting → `/logistics/demand`
+
+**Description:** Next.js port of the PyTorch LSTM demand forecaster. Single dropdown input: `product` ∈ {electronics, apparel, groceries, furniture}. Calls `POST /predict/demand` — response is a 7-day forecast array. Result section renders a Recharts `<LineChart>` of the 7-day forecast (plus historical context if the API returns it).
+
+**Acceptance criteria:**
+- [ ] **RED test first:** `web/__tests__/app/demand.test.tsx` — verifies dropdown renders, submit returns forecast array, chart rendered.
+- [ ] `DemandRequestSchema` + defaults in `web/lib/schemas.ts` (Logistics section).
+- [ ] `DemandForecastSchema` (array of 7 numbers + metadata) + API fn in `web/lib/api.ts`.
+- [ ] `industries.ts` — flip `demand` → `ready: true`, point at `/logistics/demand`.
+- [ ] `web/app/logistics/demand/{page.tsx,fields.ts}` — fields.ts has a single `select` field; page renders the LineChart from the response.
+- [ ] No `/explain/demand` call (the LSTM has no SHAP path) — hide ExplainabilityChart for this page.
+
+**Verification:**
+- `pnpm test` → ≥65 tests passing (+2)
+- Manual: select "electronics", submit, see a 7-point forecast curve.
+
+**Dependencies:** None
+
+**Files likely touched:** same 6-file shape as A.9.4.
+
+**Scope:** S (6 files)
+
+**Risk:** ModelForm may not support single-dropdown layouts cleanly — if so, extend ModelForm to render a `select` field type (small addition; documented in A.2 SPEC as "extend renderControl").
+
+---
+
+### Checkpoint A.9.b — Legacy Ports Complete
+
+- [ ] All 4 legacy models now have Next.js pages: credit-risk (existing) + fraud + price + demand.
+- [ ] Python: 357 → ≥360 tests (from A.9.a, unchanged here)
+- [ ] Web: 57 → ≥65 tests (+8 from ports)
+- [ ] All 4 old Gradio tabs have a Next.js equivalent reachable via landing + industry pages.
+
+---
+
+## Sub-Phase A.9.c: Dashboard Build (Tasks A.9.7–A.9.9)
+
+### Task A.9.7: `MetricSparkline` + `ModelStatusBadge` Components (TDD)
+
+**Description:** Two small pure-Client components that the dashboard will use. `MetricSparkline` renders a Recharts `<LineChart>` styled as a 120×30 inline sparkline with no axes. `ModelStatusBadge` is a shadcn `<Badge>` variant showing `Ready` / `Training` / `Not Built`.
+
+**Acceptance criteria:**
+- [ ] **RED tests first** (`web/__tests__/components/MetricSparkline.test.tsx`, `ModelStatusBadge.test.tsx`) — written before components exist.
+- [ ] `MetricSparkline` — props: `data: number[]`, optional `color: string`. Renders `<No history>` text if `data.length === 0`.
+- [ ] `ModelStatusBadge` — prop: `status: "ready" | "training" | "not_built"`. Renders appropriate color + label.
+- [ ] Both are pure Client Components (no data-fetching inside).
+- [ ] ≥5 combined tests (empty, single point, 10 points, each status variant).
+
+**Verification:**
+- `pnpm test` → ≥70 tests (+5)
+- `pnpm typecheck`, `pnpm lint` clean
+
+**Dependencies:** None
+
+**Files likely touched:**
+- `web/components/MetricSparkline.tsx` (new)
+- `web/components/ModelStatusBadge.tsx` (new)
+- 2 test files (new)
+
+**Scope:** S (4 files)
+
+---
+
+### Task A.9.8: `DashboardTable` + `IndustrySummaryTile` Components (TDD)
+
+**Description:** Two larger Client Components that consume pre-fetched data. `DashboardTable` is a sortable, filterable table of all 20 model catalog entries joined with backend metadata. `IndustrySummaryTile` shows one industry's name, icon, ready-count/total, and the average key metric across ready models.
+
+**Acceptance criteria:**
+- [ ] **RED tests first:** renders 20 rows, filters by industry, sorts by metric column, shows empty state when rows empty.
+- [ ] `DashboardTable` accepts a `rows: DashboardRow[]` prop (no fetching inside).
+- [ ] Columns: industry · model · status badge · key metric (with unit) · last-trained ISO date · link (if ready).
+- [ ] Sort by status (Ready first), sort by metric (numeric desc), sort by industry (alpha).
+- [ ] `IndustrySummaryTile` — accepts `industry` + subset of `rows`; renders count + avg metric if ≥1 ready model.
+- [ ] ≥7 combined tests.
+
+**Verification:**
+- `pnpm test` → ≥77 tests (+7)
+
+**Dependencies:** A.9.7 (imports `ModelStatusBadge` + `MetricSparkline`)
+
+**Files likely touched:**
+- `web/components/DashboardTable.tsx` (new)
+- `web/components/IndustrySummaryTile.tsx` (new)
+- 2 test files (new)
+
+**Scope:** M (4 files; DashboardTable holds the sort/filter state)
+
+---
+
+### Task A.9.9: Dashboard Page + Route Handlers + `lib/dashboard.ts`
+
+**Description:** The `/dashboard` Server Component that joins 3 data sources into `DashboardRow[]`, plus the two Next.js Route Handlers (`/api/models`, `/api/mlflow-history`) it calls, plus the `lib/dashboard.ts` helper that orchestrates the fetches and maps them into display shape.
+
+**Acceptance criteria:**
+- [ ] **RED test first:** `web/__tests__/app/dashboard.test.tsx` — mocks the 3 data sources, asserts 20 rows render with correct status counts.
+- [ ] `web/app/api/models/route.ts` — proxies `GET http://ml-api:8000/models`, validates with Zod.
+- [ ] `web/app/api/mlflow-history/route.ts` — calls `lib/mlflow.ts::getRunHistory`, takes `?experiment=<name>&metric=<key>` query params.
+- [ ] `web/lib/dashboard.ts::getDashboardRows()` — reads `INDUSTRIES` from `industries.ts`, joins with `/api/models` response, returns `DashboardRow[]`.
+- [ ] `web/app/dashboard/page.tsx` — Server Component, `revalidate = 30`, renders 6 `IndustrySummaryTile`s + 1 `DashboardTable`.
+- [ ] Header "Dashboard" link added to `web/components/Nav.tsx`.
+- [ ] ≥3 additional tests (route handler Zod parsing, dashboard page smoke, empty API response).
+
+**Verification:**
+- `pnpm test` → ≥80 tests (+3)
+- Manual: `make web-dev`, browse `/dashboard` → 6 tiles + 20-row table. Kill `ml-api`, reload → dashboard shows "Not Built" everywhere but doesn't crash.
+- `pnpm build` — all routes prerender including new `/dashboard`.
+
+**Dependencies:** A.9.1 (dynamic `/models`), A.9.2 (MLflow client), A.9.7 + A.9.8 (components)
+
+**Files likely touched:**
+- `web/app/dashboard/page.tsx` (new)
+- `web/app/api/models/route.ts` (new)
+- `web/app/api/mlflow-history/route.ts` (new)
+- `web/lib/dashboard.ts` (new)
+- `web/components/Nav.tsx` (add link)
+- `web/__tests__/app/dashboard.test.tsx` (new)
+
+**Scope:** M (6 files)
+
+---
+
+### Checkpoint A.9.c — Dashboard Ships
+
+- [ ] `/dashboard` renders 20 models with live status, metrics, sparklines for ready models.
+- [ ] Web: 57 → ≥80 tests (+23)
+- [ ] Python: still ≥360 passing
+- [ ] `pnpm build` succeeds with `/dashboard` listed as static or ISR
+
+---
+
+## Sub-Phase A.9.d: Gradio Retirement (Tasks A.9.10–A.9.12)
+
+### Task A.9.10: Parity Snapshot Test — Gradio ↔ Next.js
+
+**Description:** Before deleting Gradio, run one final parity check: submit default inputs via the FastAPI endpoints directly (both Gradio and Next.js call the same `/predict/*` routes, so parity at the API level proves parity at the UI level since both pages are pure wrappers). Capture JSON snapshots for fraud / price / demand responses and assert they're within numeric tolerance.
+
+**Acceptance criteria:**
+- [ ] New `tests/test_parity_gradio_nextjs.py` — hits `/predict/fraud`, `/predict/price`, `/predict/demand` with the Gradio default payloads, compares against committed snapshot JSON files in `tests/fixtures/gradio_parity/`.
+- [ ] Snapshots captured at `v1.3.0-phase-a-fanout` checkpoint (i.e., before any A.9 changes). Use the current legacy pages' defaults.
+- [ ] Test passes post-retirement — this is the gate that proves removing Gradio doesn't break model behavior.
+- [ ] Marked `@pytest.mark.network` (requires live FastAPI) — excluded from `make test` by default; run explicitly before ship.
+
+**Verification:**
+- `uv run pytest -m network tests/test_parity_gradio_nextjs.py` → all pass
+
+**Dependencies:** A.9.4, A.9.5, A.9.6
+
+**Files likely touched:**
+- `tests/test_parity_gradio_nextjs.py` (new)
+- `tests/fixtures/gradio_parity/{fraud,price,demand}.json` (new snapshots)
+
+**Scope:** S (4 files)
+
+---
+
+### Task A.9.11: Delete Gradio Code + Write ADR-001
+
+**Description:** One atomic commit that retires Gradio completely. Deletes `app/gradio_app.py`, `Dockerfile.ui`, `ml-ui` service from `docker-compose.yml` (+ `.dev.yml`), the `ui:` Makefile target, and FRONTEND_PORT references. Updates README.md, CLAUDE.md, PORTS.md, `.env.example`. Commits `docs/decisions/ADR-001-gradio-to-nextjs.md`.
+
+**Acceptance criteria:**
+- [ ] `git grep -i gradio` returns matches only in ADR-001 + CHANGELOG / historical docs. Zero matches in `src/`, `app/` (which should no longer exist), `Makefile`, `docker-compose*.yml`, `web/`.
+- [ ] `app/gradio_app.py` + `Dockerfile.ui` deleted; `app/` directory removed if empty.
+- [ ] `make ui` target removed. `docker-compose.yml` no longer defines `ml-ui`. `.env.example` no longer defines `FRONTEND_PORT`.
+- [ ] `PORTS.md` marks port 3070 as RELEASED (available for reuse).
+- [ ] `README.md` — Gradio section removed; replaced with "Dashboard: http://localhost:3071/dashboard" + a `docker compose up` block showing 3 services.
+- [ ] `CLAUDE.md` — Gradio references removed.
+- [ ] `docs/decisions/ADR-001-gradio-to-nextjs.md` exists with: Status=Accepted, Date=2026-04-23, Context, Decision, Alternatives (Gradio retained, Streamlit, Dash, custom React), Consequences.
+- [ ] `docker compose up --build` launches exactly 3 services, all healthy ≤120s.
+
+**Verification:**
+- `docker compose up --build -d` → `docker compose ps` shows 3 services all `healthy`
+- `curl -s http://localhost:3071/dashboard` returns 200
+- `make test` still 357+ green (no runtime behavior touched)
+
+**Dependencies:** A.9.10 (parity proven)
+
+**Files likely touched:**
+- **Deleted:** `app/gradio_app.py`, `Dockerfile.ui`
+- **Modified:** `docker-compose.yml`, `docker-compose.dev.yml`, `Makefile`, `README.md`, `CLAUDE.md`, `PORTS.md`, `.env.example`
+- **New:** `docs/decisions/ADR-001-gradio-to-nextjs.md`, `docs/decisions/README.md` (index)
+
+**Scope:** M (9–10 files — coordinated, but each edit is tiny)
+
+---
+
+### Task A.9.12: Final Acceptance + Tag `v1.4.0-phase-a-complete`
+
+**Description:** Run the full SPEC §A.9 success criteria checklist end-to-end. Update `tasks/plan.md` + `tasks/todo.md` to mark A.9 complete. Create the release tag.
+
+**Acceptance criteria:**
+- [ ] All 11 SPEC §A.9 acceptance criteria tick ✅.
+- [ ] `tasks/plan.md` + `tasks/todo.md` updated.
+- [ ] `git tag -a v1.4.0-phase-a-complete` created with an annotated message summarizing Phase A (A.1→A.9).
+
+**Verification:**
+- Full acceptance run (compose up, /dashboard smoke, all 7+3 pages click-through, `make test`, `make lint`, `pnpm test`, `pnpm build`, `pnpm lint`)
+- `git tag -l v1.4.*` shows the new tag
+
+**Dependencies:** All previous A.9 tasks
+
+**Files likely touched:** `tasks/plan.md`, `tasks/todo.md`
+
+**Scope:** XS (2 files + 1 tag)
+
+---
+
+### Checkpoint A.9.d — Phase A Complete
+
+- [ ] Gradio fully removed; 3 services in compose.
+- [ ] Dashboard live at `/dashboard` with all 20 catalog entries.
+- [ ] ADR-001 committed.
+- [ ] Python: 357 → ≥360 tests. Web: 57 → ≥80 tests.
+- [ ] `make lint` 0 warnings, `pnpm lint` 0 warnings.
+- [ ] Tag `v1.4.0-phase-a-complete` pushed.
+
+---
+
+## Phase A.9 Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Gradio users break when tabs disappear mid-session | Low (solo dev demo) | Strangler pattern — Next.js ports live side-by-side with Gradio until A.9.11 delete step. |
+| Demand-forecast Gradio chart used Plotly; Recharts port looks different | Low | Documented as acceptable regression in SPEC §Q-A.9-1. Recharts LineChart is visually comparable. |
+| MLflow REST calls fail when MLflow container is down | Med | Dashboard treats missing history as "No history" empty-state — doesn't crash the page. Zod validation at boundary catches shape drift. |
+| Dynamic checkpoint scan picks up stale / partial training dirs | Low | `metadata.json` existence is the gate — partial training runs don't write metadata. |
+| Parity snapshot drifts when models are retrained | Low | Snapshots captured once at `v1.3.0-phase-a-fanout`; re-capture + commit if models retrained. Documented in test docstring. |
+| Deleting `app/gradio_app.py` in same commit as compose changes produces huge diff | Low | Commit is intentionally atomic (one `chore(retire-gradio)` commit) — reviewers see the full migration in one place. Rollback = revert that single commit. |
+
+---
+
+## Open Questions
+
+- **Q-A.9-P1 — Snapshot staleness:** if models are retrained in Phase B (adding modality comparisons for ported models), the parity snapshots in `tests/fixtures/gradio_parity/` will drift. Resolution: mark the parity test as `@pytest.mark.network` and refresh snapshots on retrain. Not a blocker.
+- **Q-A.9-P2 — ADR numbering:** this is ADR-001 since no ADRs exist yet. If Phase B or C writes more ADRs, they'll be ADR-002+. `docs/decisions/README.md` will be the index.
+

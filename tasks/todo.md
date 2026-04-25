@@ -205,3 +205,54 @@
 - [ ] Backend unchanged: `git diff main src/ scripts/` empty
 - [ ] Python suite still green: `make test` → 323+ tests, ≥90% coverage
 - [ ] Gradio (`ml-ui:3070`) still runs in parallel (retires in A.9)
+
+
+---
+
+## Phase A.9: Retire Gradio + Dashboard Polish
+
+**Skills:** `planning-and-task-breakdown`, `incremental-implementation`, `test-driven-development`, `deprecation-and-migration`, `documentation-and-adrs`
+
+### Sub-Phase A.9.a — Foundation (parallel-safe)
+- [ ] **A.9.1** Dynamic `/models` + `/health` — scan `checkpoints/*/metadata.json` instead of hardcoded lists _(S)_ — +3 tests
+- [ ] **A.9.2** `web/lib/mlflow.ts` typed REST client + Zod schemas _(S)_ — +2 tests
+- [ ] **A.9.3** Pre-existing Python lint debt cleanup (conftest, evaluate, run_all) _(XS)_
+
+**Checkpoint A.9.a:** Python `make lint` clean · dynamic model scan live · MLflow client unit-tested
+
+### Sub-Phase A.9.b — Legacy Model Ports (serial)
+- [ ] **A.9.4** Port `/fintech/fraud` (autoencoder + isolation forest) _(S)_ — +2 tests
+- [ ] **A.9.5** Port `/real-estate/price` (LightGBM regressor) _(S)_ — +2 tests
+- [ ] **A.9.6** Port `/logistics/demand` (LSTM, 7-day forecast chart) _(S)_ — +2 tests
+
+**Checkpoint A.9.b:** All 4 legacy Gradio tabs have Next.js equivalents · landing nav flows work · +6 web tests
+
+### Sub-Phase A.9.c — Dashboard Build
+- [ ] **A.9.7** `MetricSparkline` + `ModelStatusBadge` components (TDD) _(S)_ — +5 tests
+- [ ] **A.9.8** `DashboardTable` + `IndustrySummaryTile` components (TDD) _(M)_ — +7 tests
+- [ ] **A.9.9** `/api/models` + `/api/mlflow-history` route handlers + `/dashboard` Server Component _(M)_ — +3 tests
+
+**Checkpoint A.9.c:** `/dashboard` ships — 20-row table, 6 industry tiles, sparklines for 7 ready models · +15 web tests
+
+### Sub-Phase A.9.d — Gradio Retirement
+- [ ] **A.9.10** Parity snapshot test — Gradio ↔ Next.js output equivalence _(S)_ — +3 tests (network-marked)
+- [ ] **A.9.11** Delete `app/gradio_app.py`, `Dockerfile.ui`, `ml-ui` compose service, `make ui` target + write `ADR-001-gradio-to-nextjs.md` _(M)_
+- [ ] **A.9.12** Final acceptance pass + tag `v1.4.0-phase-a-complete` _(XS)_
+
+**Checkpoint A.9:** Phase A complete — 3 docker services, 10 Next.js demo routes, dashboard live, Gradio gone, ADR committed, tag pushed
+
+---
+
+## Final Verification (Phase A.9)
+
+- [ ] `docker compose up --build` → 3 services (`mlflow`, `ml-api`, `ml-web`) all healthy ≤120s; no `ml-ui` reference
+- [ ] `curl -s http://localhost:3071/dashboard` → 200 + rendered HTML
+- [ ] All 10 ready model pages render + submit + get prediction: credit-risk · fraud · price · demand · rental-price · dental/no-show · heart-disease · eta · churn · h1b-approval
+- [ ] `make test` → ≥360 Python tests (357 + ≥3)
+- [ ] `cd web && pnpm test` → ≥80 tests (57 + ≥23)
+- [ ] `make lint` → 0 errors
+- [ ] `pnpm lint` → 0 warnings
+- [ ] `pnpm build` succeeds; `/dashboard` in the route list
+- [ ] `git grep -i gradio src/ web/ docker-compose*.yml Makefile` → zero matches
+- [ ] `git tag -l v1.4.*` → `v1.4.0-phase-a-complete` exists
+- [ ] ADR-001 at `docs/decisions/ADR-001-gradio-to-nextjs.md` is Accepted + complete

@@ -1078,3 +1078,250 @@ These paths are disjoint across the 6 industries except for `web/lib/api.ts` and
 - **Q-A.2-1 — Landing page copy:** who writes the taglines for each industry tile? For A.2, I'll use placeholder text ("Real-estate price & rental estimators") that Armando can tune later. Marked `TODO(copy)` in the source.
 - **Q-A.2-2 — Vercel deploy:** deferred to Phase C. A.2 only ensures Next.js standalone output works locally + in Docker; Vercel-specific config (`vercel.json`, env var mapping) is Phase C.
 - **Q-A.2-3 — Analytics / error tracking:** no Plausible / PostHog / Sentry in A.2. Revisit at Phase C if public deploy goes live.
+
+---
+
+# Spec Addendum: Phase A.9 — Retire Gradio + Dashboard Polish
+
+## Objective
+
+Complete Phase A by **retiring the Gradio UI** (`app/gradio_app.py` + `ml-ui` docker service) in favor of the Next.js app built in A.2–A.8, and adding a **rich, read-only dashboard** at `/dashboard` that summarizes the status of all 20 planned models.
+
+**Why this slice exists:**
+- Gradio was the demo UI through Slice 1–5. It's a research-prototype look — not the production-grade impression Armando is selling into prospective clients.
+- The Next.js app at :3071 now covers 7 of 20 planned models. Three of the original 4 Gradio tabs (fraud, price, demand) have no Next.js counterpart yet — they must be ported before Gradio can be retired without a user-facing regression.
+- A dashboard makes the project self-describing: one page shows every model, its status, its key metric, its last training run. It's the "walk-in demo" surface for a recruiter skimming the app for 60 seconds.
+
+**Target users:** Technical reviewers (hiring managers, senior engineers), prospective clients in each of the 6 industries, and Armando himself using the dashboard as a health check before demos.
+
+**Success looks like:**
+- `docker compose up --build` launches 3 services (mlflow, ml-api, ml-web) — `ml-ui` is gone.
+- http://localhost:3071/dashboard shows all 20 models across 6 industries with live status badges, key metrics, and MLflow training sparklines for the 7 ready models.
+- Fraud, Price, and Demand-forecasting are now Next.js pages at `/fintech/fraud`, `/real-estate/price`, `/logistics/demand` respectively — functionally equivalent to their Gradio tabs.
+- `app/gradio_app.py` is deleted, `Dockerfile.ui` is deleted, `make ui` target is removed, `ml-ui` service is removed from compose.
+- `docs/decisions/ADR-001-gradio-to-nextjs.md` records the migration rationale with alternatives considered.
+- Pre-existing Python lint debt (conftest.py, evaluate.py, run_all.py) cleared to zero warnings.
+
+## Current State (end of Phase A.8)
+
+- 7 Next.js demo routes shipped: `/fintech/credit-risk`, `/real-estate/rental-price`, `/dental/no-show`, `/healthcare/heart-disease`, `/fintech/churn`, `/logistics/eta`, `/legal/h1b-approval`.
+- 13 catalog entries in `web/lib/industries.ts` with `ready: false` (4 legacy = fraud/price/demand + treatment-plan; 9 Phase B candidates).
+- `GET /models` in `src/serving/api.py` returns metadata for only 5 hardcoded legacy problems — stale; misses all 6 Phase A.3–A.8 additions.
+- `GET /health` listens to `_ALL_MODELS` (5 entries) — also stale.
+- MLflow at `:5070` has run history per model family (multiple modality runs for A.3–A.8 models); REST API available at `/api/2.0/mlflow/runs/search`.
+- 4 pre-existing Python lint warnings: `conftest.py:3` I001, `scripts/evaluate.py:19` F841, `scripts/run_all.py:29-30` E501.
+
+## Tech Stack
+
+No new dependencies. Uses what's already wired:
+- `recharts@3.8.1` — already in `web/package.json` from A.2; used for existing ExplainabilityChart. We add `<LineChart>` with `<Sparkline>` styling for the per-model training-history cards.
+- Existing `ModelForm` + `PredictionResult` + `ExplainabilityChart` components — the 3 ported Gradio tabs reuse them verbatim, same pattern as A.3–A.8.
+- MLflow REST API — native; no new Python package needed.
+
+## Commands
+
+Same as the root spec, with these deltas:
+
+```bash
+# Removed:
+make ui               # was: uv run python app/gradio_app.py
+
+# Unchanged but behavior shifts:
+make docker-up        # now brings up 3 services (not 4)
+make all              # still generates data + trains + evaluates — no UI implication
+```
+
+New dashboard is accessed via the existing Next.js app:
+
+```bash
+make web-dev          # dev mode HMR, dashboard at http://localhost:3071/dashboard
+docker compose up     # prod mode, dashboard at http://localhost:3071/dashboard
+```
+
+## Project Structure
+
+### New files
+
+```
+web/app/
+├── dashboard/
+│   └── page.tsx                    # Server Component — fetches /models + /health
+├── fintech/
+│   ├── fraud/
+│   │   ├── page.tsx                # Ported from Gradio fraud tab
+│   │   └── fields.ts
+│   └── credit-risk/...             # (existing)
+├── real-estate/
+│   ├── price/
+│   │   ├── page.tsx                # Ported from Gradio price tab
+│   │   └── fields.ts
+│   └── rental-price/...            # (existing)
+└── logistics/
+    ├── demand/
+    │   ├── page.tsx                # Ported from Gradio demand-forecasting tab
+    │   └── fields.ts               # Single-field "product" dropdown
+    └── eta/...                     # (existing)
+
+web/components/
+├── MetricSparkline.tsx             # New — small Recharts LineChart for training history
+├── ModelStatusBadge.tsx            # New — ready/training/not-built status pill
+├── DashboardTable.tsx              # New — sortable, filterable model table
+└── IndustrySummaryTile.tsx         # New — per-industry mini-card (count + avg metric)
+
+web/lib/
+├── mlflow.ts                       # New — typed client for MLflow REST API history
+└── dashboard.ts                    # New — joins industries.ts + /models + /health + MLflow
+
+web/app/api/                        # New — Next.js route handlers used by dashboard
+├── models/route.ts                 # Proxy to FastAPI /models (cacheable server fetch)
+└── mlflow-history/route.ts         # Calls MLflow REST API, shapes sparkline data
+
+docs/decisions/
+└── ADR-001-gradio-to-nextjs.md     # New — the migration decision record
+
+web/__tests__/
+├── app/dashboard.test.tsx
+├── app/fraud.test.tsx
+├── app/price.test.tsx
+├── app/demand.test.tsx
+└── components/MetricSparkline.test.tsx
+```
+
+### Modified files
+
+```
+src/serving/api.py                  # /models + /health widened to 10+ problems, dynamic scan of checkpoints/
+src/serving/predictor.py            # get_model_info() scans checkpoints/ dir instead of hardcoded list
+web/lib/industries.ts               # Flip fraud/price/demand ready → true (pointed at new pages)
+web/app/page.tsx                    # Landing page adds /dashboard link in header or hero
+docker-compose.yml                  # Remove ml-ui service block
+docker-compose.dev.yml              # Remove ml-ui overrides if any
+Makefile                            # Remove `ui:` target
+README.md                           # Remove Gradio screenshot / URL; add /dashboard callout
+.env.example                        # Remove FRONTEND_PORT (3070 was Gradio)
+PORTS.md                            # Mark 3070 as released
+conftest.py                         # Fix I001 import-sort warning
+scripts/evaluate.py                 # Remove unused `args` (F841)
+scripts/run_all.py                  # Break long lines (E501)
+tasks/plan.md                       # Mark A.9 tasks done
+CLAUDE.md                           # Remove Gradio references
+```
+
+### Deleted files
+
+```
+app/gradio_app.py                   # The entire Gradio UI
+Dockerfile.ui                       # Gradio container image
+app/                                # Delete if it becomes empty after gradio_app.py is gone
+```
+
+## Code Style
+
+Dashboard page: Server Component that fetches in parallel, streams to Client for interactive sort/filter.
+
+```tsx
+// web/app/dashboard/page.tsx
+import { Suspense } from "react";
+import { DashboardTable } from "@/components/DashboardTable";
+import { IndustrySummaryTile } from "@/components/IndustrySummaryTile";
+import { INDUSTRIES } from "@/lib/industries";
+import { getDashboardRows } from "@/lib/dashboard";
+
+export const revalidate = 30; // ISR — re-fetch every 30s, cheap cache
+
+export default async function DashboardPage() {
+  // Fetch all dashboard data server-side in parallel — no loading flicker.
+  const rows = await getDashboardRows();
+
+  return (
+    <main className="mx-auto max-w-7xl p-6">
+      <h1 className="text-3xl font-bold tracking-tight">Model Dashboard</h1>
+      <p className="mt-2 text-muted-foreground">
+        Live status across {rows.length} models in {INDUSTRIES.length} industries.
+      </p>
+
+      {/* Industry summary tiles — one per industry */}
+      <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {INDUSTRIES.map((ind) => (
+          <IndustrySummaryTile key={ind.id} industry={ind} rows={rows} />
+        ))}
+      </section>
+
+      {/* Model detail table with sparklines */}
+      <section className="mt-10">
+        <Suspense fallback={<TableSkeleton rows={20} />}>
+          <DashboardTable rows={rows} />
+        </Suspense>
+      </section>
+    </main>
+  );
+}
+```
+
+**Conventions reused from A.2–A.8:**
+- Server Components for data fetching; Client Components (`"use client"`) only where React state is needed (sort, filter).
+- Zod schemas at the boundary for any external data (MLflow REST responses).
+- TanStack Query only for client-driven fetches — dashboard is server-rendered, so it uses native `fetch` + ISR.
+- TailwindCSS + shadcn/ui primitives; no custom CSS.
+
+## Testing Strategy
+
+**Python side** (≥5 new tests):
+- `tests/test_serving.py` — extend: `test_get_models_returns_all_checkpoints` (dynamic scan), `test_health_includes_new_industry_models`.
+- `tests/test_logging.py::TestEnrichedHealth` — broaden `test_health_loaded_models_are_available` to assert 10+ models present.
+
+**Web side** (≥10 new tests):
+- `web/__tests__/app/dashboard.test.tsx` — renders all 20 rows; sort by metric works; industry filter filters correctly; empty-state when API is down.
+- `web/__tests__/app/fraud.test.tsx` — form submits, result card renders, parity with Gradio fraud tab.
+- `web/__tests__/app/price.test.tsx` — same pattern for price prediction.
+- `web/__tests__/app/demand.test.tsx` — single dropdown, forecast returned.
+- `web/__tests__/components/MetricSparkline.test.tsx` — renders chart with 10 data points; empty array renders "No history" state.
+- `web/__tests__/lib/mlflow.test.ts` — Zod schema parses MLflow `runs/search` response; invalid payload throws typed error.
+
+**Coverage targets:** ≥90% on new components, ≥80% overall. `make test` and `pnpm test` both green.
+
+**Parity verification test** (manual, one-time):
+- For each of fraud/price/demand: open the Gradio page, submit default inputs, record result. Open the Next.js page, submit same inputs, compare — must match within floating-point tolerance. Document the comparison in `tasks/plan.md` alongside the task.
+
+## Boundaries
+
+**Always do**
+- Keep `docker compose up --build` as the single command that launches the system — 3 services, all healthy within 120s.
+- Preserve all existing FastAPI routes (no URL breakage) — Gradio called `/predict/fraud`, `/predict/price`, `/predict/demand` which the ported pages reuse.
+- When removing code paths, verify downstream tests still pass before deletion (don't leave dead imports or stale docstrings).
+- Record every architectural decision in `docs/decisions/` with sequential numbering.
+
+**Ask first**
+- Any change to the FastAPI request/response schemas for existing endpoints — the Gradio client and Next.js client both call them, contract change = two-step migration.
+- Touching the MLflow schema or storage format.
+- Changing the default port for the Next.js app (3071 is assigned per `PORTS.md`).
+- Adding any new npm or Python dependency.
+
+**Never do**
+- Break an existing API contract (add fields, don't remove or rename).
+- Commit Kaggle keys, W&B keys, or any secret — these stay in `.env` only.
+- Delete checkpoint artifacts or MLflow runs; retiring the UI doesn't touch training data.
+- Leave `app/gradio_app.py` as a "just in case" — delete cleanly; git history is the rollback path. If you feel a need for rollback safety, tag first (`v1.3.0-phase-a-fanout` already exists) and proceed.
+
+## Success Criteria (Phase A.9 acceptance)
+
+1. **Docker:** `docker compose up --build` brings up exactly 3 services (`mlflow`, `ml-api`, `ml-web`) — all healthy ≤120s. No reference to `ml-ui`, `Dockerfile.ui`, or port 3070 remains in compose files.
+2. **Dashboard:** http://localhost:3071/dashboard renders within 500ms LCP on a warm server. Shows:
+   - 6 industry summary tiles (count of ready / total / avg key metric).
+   - Sortable table of 20 models: industry, model name, status (Ready/Not Built/Training), key metric with unit, last-trained ISO date, link to model page (if ready).
+   - Per-model sparkline showing last 10 MLflow run metrics (for models with history).
+3. **Ported pages:** `/fintech/fraud`, `/real-estate/price`, `/logistics/demand` exist, accept the same inputs as their Gradio counterparts, and return equivalent predictions + explanations. All three show in the nav + industry indexes. `industries.ts` has `ready: true` for all three.
+4. **Parity:** Manual submission of default inputs on each ported page returns results within ±0.001 of the Gradio version's output (JSON snapshot comparison documented in `tasks/plan.md`).
+5. **Gradio fully removed:** `app/gradio_app.py` + `Dockerfile.ui` + `make ui` target + `ml-ui` compose service — all gone. `git grep gradio` returns zero matches in code (docs may still reference it in the ADR).
+6. **ADR:** `docs/decisions/ADR-001-gradio-to-nextjs.md` exists, status: Accepted, covers Context / Decision / Alternatives (kept Gradio, Streamlit, Dash) / Consequences.
+7. **Tests:** Python 357 → ≥362 passing (≥5 new). Web 57 → ≥72 passing (≥15 new — 10 planned + ports of 3 model pages each add ≥2). Overall ≥90% web coverage.
+8. **Lint:** `make lint` → 0 warnings (resolves the 4 pre-existing items). `pnpm lint` → 0 warnings.
+9. **API:** `GET /models` returns metadata for every checkpoint present under `checkpoints/` (dynamic scan, not hardcoded). `GET /health` likewise. Both responses validated by updated Zod schemas in `web/lib/`.
+10. **Docs:** README.md no longer references Gradio; has a "Dashboard at /dashboard" callout. CLAUDE.md updated. PORTS.md marks 3070 as released.
+11. **Release tag:** `v1.4.0-phase-a-complete` created at the final merge commit.
+
+## Open Questions
+
+- **Q-A.9-1 — Demand forecast visualization:** Gradio shows a Plotly line chart of the forecast. Next.js port reuses Recharts — acceptable visual regression? Default: yes, Recharts line chart is comparable enough; no need to add Plotly to the web bundle.
+- **Q-A.9-2 — MLflow REST auth:** MLflow runs unauthenticated inside the compose network. If we later add public Vercel deployment (Phase C), the dashboard's MLflow fetch needs to happen server-side only (API route handler), not from the browser. Server Component + Route Handler approach in this spec already handles that.
+- **Q-A.9-3 — Sparkline empty state:** models with zero MLflow runs (because they haven't been trained yet) show "No history" text, no empty chart. Confirmed with user.
