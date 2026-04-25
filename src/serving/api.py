@@ -92,4 +92,13 @@ async def get_models():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    """Liveness + checkpoint self-discovery.
+
+    The ``models`` map is built dynamically from ``checkpoints/<problem>/metadata.json``
+    — adding a new checkpoint directory requires no code change here.
+    """
+    info = predictor.get_model_info()
+    return {
+        "status": "ok",
+        "models": {problem: {"available": True} for problem in info},
+    }
