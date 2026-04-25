@@ -18,6 +18,7 @@ import type {
   CustomerChurnInput,
   DeliveryEtaInput,
   DentalNoShowInput,
+  FraudInput,
   H1BApprovalInput,
   HeartDiseaseInput,
   RentalPriceInput,
@@ -98,6 +99,27 @@ export const predictCustomerChurn = (input: CustomerChurnInput) =>
 
 export const explainCustomerChurn = (input: CustomerChurnInput) =>
   post("/explain/churn", input, ExplanationSchema);
+
+// Fraud-detection (A.9.4 — Gradio fraud-tab port).
+export const FraudRiskLevelSchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+export type FraudRiskLevel = z.infer<typeof FraudRiskLevelSchema>;
+
+export const FraudPredictionSchema = z.object({
+  fraud_probability: z.number().min(0).max(1),
+  risk_level: FraudRiskLevelSchema,
+  reconstruction_error: z.number(),
+  anomaly_threshold: z.number(),
+  is_anomaly_autoencoder: z.boolean(),
+  is_anomaly_isolation_forest: z.boolean(),
+  isolation_forest_score: z.number(),
+});
+export type FraudPrediction = z.infer<typeof FraudPredictionSchema>;
+
+export const predictFraud = (input: FraudInput) =>
+  post("/predict/fraud", input, FraudPredictionSchema);
+
+export const explainFraud = (input: FraudInput) =>
+  post("/explain/fraud", input, ExplanationSchema);
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 

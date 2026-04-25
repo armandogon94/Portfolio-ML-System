@@ -5,10 +5,11 @@
  *
  * Renders each field declared in `fields` using shadcn/ui Form primitives,
  * with inline Zod validation errors and a submit button at the bottom.
- * Supports three field types: number (<Input type="number">), text
- * (<Input type="text">), and slider (shadcn <Slider>). `select` is
- * reserved for future work and throws until implemented, keeping the
- * type surface closed.
+ * Supports four field types: number (<Input type="number">), text
+ * (<Input type="text">), slider (shadcn <Slider>), and select
+ * (native <select> with an options[] list). Select was added in
+ * A.9.4 to back fraud's categorical merchant_category and A.9.6's
+ * single-product demand-forecast dropdown.
  *
  * Composition pattern (from tasks/plan.md §A.2.5 REFACTOR step):
  * ModelForm iterates fields and delegates each to <ModelFormField/>,
@@ -147,9 +148,36 @@ function renderControl<TValues extends FieldValues>(
         />
       );
     case "select":
-      throw new Error(
-        "ModelForm: 'select' field type not implemented yet. " +
-          "Use 'text' with a datalist, or extend renderControl().",
+      // Native <select> styled like the shadcn Input — keeps zero new
+      // dependencies and matches the muted-foreground, ring-on-focus
+      // look of the other controls. Each option's display value is
+      // the raw option string with underscores → spaces and title
+      // case so callers can pass snake_case values without
+      // pre-formatting them.
+      return (
+        <select
+          {...rhf}
+          value={(rhf.value as string | undefined) ?? ""}
+          onChange={(e) =>
+            rhf.onChange(e.target.value as PathValue<TValues, Path<TValues>>)
+          }
+          className={
+            "flex h-9 w-full rounded-md border border-input bg-transparent " +
+            "px-3 py-1 text-sm shadow-sm transition-colors " +
+            "focus-visible:outline-none focus-visible:ring-1 " +
+            "focus-visible:ring-ring disabled:cursor-not-allowed " +
+            "disabled:opacity-50"
+          }
+        >
+          {(field.options ?? []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt
+                .split("_")
+                .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(" ")}
+            </option>
+          ))}
+        </select>
       );
   }
 }

@@ -104,26 +104,34 @@ describe("ModelForm", () => {
     expect(typeof received.age).toBe("number");
   });
 
-  it("throws a clear error when a field config uses the not-yet-implemented 'select' type", () => {
+  it("renders a select control with the provided options (added in A.9.4)", async () => {
     const SelectSchema = z.object({ country: z.string() });
     type SelectInput = z.infer<typeof SelectSchema>;
     const fields: FieldConfig<SelectInput>[] = [
-      { name: "country", label: "Country", type: "select", options: ["US", "CA"] },
+      { name: "country", label: "Country", type: "select", options: ["united_states", "canada"] },
     ];
+    const onSubmit = vi.fn();
 
     function SelectHarness() {
       const form = useForm<SelectInput>({
         resolver: zodResolver(SelectSchema),
-        defaultValues: { country: "US" },
+        defaultValues: { country: "united_states" },
       });
-      return <ModelForm form={form} fields={fields} onSubmit={vi.fn()} />;
+      return <ModelForm form={form} fields={fields} onSubmit={onSubmit} />;
     }
 
-    // React swallows render-time errors into error boundaries; the test-level
-    // assertion is that rendering the 'select' field attempts the throw path
-    // (captured here as a thrown render). The clearer signal is the message.
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => render(<SelectHarness />)).toThrow(/select.*not implemented/i);
-    spy.mockRestore();
+    render(<SelectHarness />);
+    const select = screen.getByLabelText(/country/i) as HTMLSelectElement;
+    // Underscores in option values are humanized for display.
+    expect(select).toBeInTheDocument();
+    expect(select.value).toBe("united_states");
+    expect(screen.getByRole("option", { name: "United States" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Canada" })).toBeInTheDocument();
+
+    // Submitting passes the raw value (snake_case), not the humanized label.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(onSubmit.mock.calls[0][0].country).toBe("united_states");
   });
 });

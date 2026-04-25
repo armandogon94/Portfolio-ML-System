@@ -100,7 +100,7 @@ export const INDUSTRIES: Industry[] = [
     modelCount: 4,
     models: [
       { slug: "credit-risk", title: "Credit Risk Scoring", description: "XGBoost loan-default classifier.", ready: true },
-      { slug: "fraud", title: "Fraud Detection", description: "PyTorch autoencoder + isolation forest.", ready: false },
+      { slug: "fraud", title: "Fraud Detection", description: "PyTorch autoencoder + isolation forest.", ready: true },
       { slug: "loan-approval", title: "Loan Approval", description: "LightGBM eligibility classifier.", ready: false },
       { slug: "churn", title: "Customer Churn", description: "Bank churn XGBoost classifier.", ready: true },
     ],

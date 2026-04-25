@@ -59,6 +59,50 @@ export const CUSTOMER_CHURN_DEFAULTS: CustomerChurnInput = {
   geography_tier: 2,
 };
 
+// Mirrors Transaction in src/serving/api.py (A.9.4 — Gradio fraud-tab port).
+// merchant_category is a string keyed off MERCHANT_CATEGORIES in
+// src/data/generate_fraud.py; the FastAPI Pydantic accepts the raw string.
+export const FRAUD_MERCHANT_CATEGORIES = [
+  "grocery",
+  "restaurant",
+  "gas_station",
+  "online_retail",
+  "electronics",
+  "clothing",
+  "travel",
+  "entertainment",
+  "healthcare",
+  "utilities",
+  "education",
+  "home_improvement",
+  "automotive",
+  "subscription",
+  "atm_withdrawal",
+] as const;
+export const FraudInputSchema = z.object({
+  transaction_amount: z.number().nonnegative(),
+  merchant_category: z.enum(FRAUD_MERCHANT_CATEGORIES),
+  hour_of_day: z.number().int().min(0).max(23),
+  day_of_week: z.number().int().min(0).max(6),
+  distance_from_home: z.number().nonnegative(),
+  is_online: z.number().int().min(0).max(1),
+  card_age_days: z.number().int().min(0),
+  num_transactions_last_hour: z.number().int().min(0),
+  amount_vs_avg_ratio: z.number().nonnegative(),
+});
+export type FraudInput = z.infer<typeof FraudInputSchema>;
+export const FRAUD_DEFAULTS: FraudInput = {
+  transaction_amount: 150,
+  merchant_category: "online_retail",
+  hour_of_day: 14,
+  day_of_week: 2,
+  distance_from_home: 15,
+  is_online: 1,
+  card_age_days: 365,
+  num_transactions_last_hour: 1,
+  amount_vs_avg_ratio: 3,
+};
+
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 // Mirrors RentalListing in src/serving/api.py.
 export const RentalPriceInputSchema = z.object({
