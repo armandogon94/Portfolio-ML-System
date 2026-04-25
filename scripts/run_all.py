@@ -26,8 +26,14 @@ def run_step(description: str, cmd: list[str]) -> None:
 def main():
     console.print("[bold]Full ML Pipeline[/bold]\n")
 
-    run_step("Step 1: Generate Synthetic Data", [sys.executable, str(SCRIPTS_DIR / "generate_data.py"), "--problem", "all"])
-    run_step("Step 2: Train All Models", [sys.executable, str(SCRIPTS_DIR / "train.py"), "--model", "all", "--no-wandb"])
+    run_step(
+        "Step 1: Generate Synthetic Data",
+        [sys.executable, str(SCRIPTS_DIR / "generate_data.py"), "--problem", "all"],
+    )
+    run_step(
+        "Step 2: Train All Models",
+        [sys.executable, str(SCRIPTS_DIR / "train.py"), "--model", "all", "--no-wandb"],
+    )
     run_step("Step 3: Evaluate and Summarize", [sys.executable, str(SCRIPTS_DIR / "evaluate.py")])
 
     console.print("\n[bold green]Full pipeline complete![/bold green]")
