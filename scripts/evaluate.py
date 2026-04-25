@@ -16,7 +16,7 @@ console = Console()
 def main():
     parser = argparse.ArgumentParser(description="Evaluate models and create summary")
     parser.add_argument("--model", default="all", help="Which model to evaluate (default: all)")
-    args = parser.parse_args()
+    parser.parse_args()
 
     summary_path = save_comparison_summary()
     console.print(f"[bold green]Comparison summary saved -> {summary_path}[/bold green]")
