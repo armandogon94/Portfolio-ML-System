@@ -21,6 +21,7 @@ import type {
   FraudInput,
   H1BApprovalInput,
   HeartDiseaseInput,
+  PricePredictionInput,
   RentalPriceInput,
 } from "@/lib/schemas";
 
@@ -134,6 +135,22 @@ export const predictRentalPrice = (input: RentalPriceInput) =>
 
 export const explainRentalPrice = (input: RentalPriceInput) =>
   post("/explain/rental-price", input, ExplanationSchema);
+
+// Price prediction (A.9.5 — Gradio price-tab port). Synthetic-data
+// LightGBM regressor — predicted_price plus a +/-10% range mirroring
+// the predictor's hardcoded confidence band.
+export const PricePredictionSchema = z.object({
+  predicted_price: z.number(),
+  price_range_low: z.number(),
+  price_range_high: z.number(),
+});
+export type PricePrediction = z.infer<typeof PricePredictionSchema>;
+
+export const predictPrice = (input: PricePredictionInput) =>
+  post("/predict/price", input, PricePredictionSchema);
+
+export const explainPrice = (input: PricePredictionInput) =>
+  post("/explain/price", input, ExplanationSchema);
 
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 

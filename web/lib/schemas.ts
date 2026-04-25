@@ -128,6 +128,31 @@ export const RENTAL_PRICE_DEFAULTS: RentalPriceInput = {
   peer_nightly_rate: 150,
 };
 
+// Mirrors Property in src/serving/api.py (A.9.5 — Gradio price-tab port).
+export const PricePredictionInputSchema = z.object({
+  square_feet: z.number().int().min(300).max(10000),
+  bedrooms: z.number().int().min(0).max(8),
+  bathrooms: z.number().int().min(1).max(6),
+  year_built: z.number().int().min(1900).max(2030),
+  lot_size_sqft: z.number().int().min(0).max(50000),
+  garage_spaces: z.number().int().min(0).max(4),
+  has_pool: z.number().int().min(0).max(1),
+  neighborhood_tier: z.number().int().min(1).max(5),
+  proximity_to_city_center: z.number().min(0).max(50),
+});
+export type PricePredictionInput = z.infer<typeof PricePredictionInputSchema>;
+export const PRICE_PREDICTION_DEFAULTS: PricePredictionInput = {
+  square_feet: 1800,
+  bedrooms: 3,
+  bathrooms: 2,
+  year_built: 2000,
+  lot_size_sqft: 8000,
+  garage_spaces: 2,
+  has_pool: 0,
+  neighborhood_tier: 3,
+  proximity_to_city_center: 10,
+};
+
 // ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
 // Mirrors DentalAppointment in src/serving/api.py.
 export const DentalNoShowInputSchema = z.object({
