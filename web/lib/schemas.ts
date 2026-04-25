@@ -203,6 +203,24 @@ export const HEART_DISEASE_DEFAULTS: HeartDiseaseInput = {
 };
 
 // ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
+// Mirrors DemandRequest in src/serving/api.py (A.9.6 — Gradio demand-tab port).
+// The 5 categories come from PRODUCT_CATEGORIES in
+// src/data/generate_timeseries.py — the LSTM scalers are keyed by them.
+export const DEMAND_PRODUCT_CATEGORIES = [
+  "electronics",
+  "clothing",
+  "groceries",
+  "furniture",
+  "sports",
+] as const;
+export const DemandRequestSchema = z.object({
+  product: z.enum(DEMAND_PRODUCT_CATEGORIES),
+});
+export type DemandRequest = z.infer<typeof DemandRequestSchema>;
+export const DEMAND_REQUEST_DEFAULTS: DemandRequest = {
+  product: "electronics",
+};
+
 // Mirrors DeliveryRequest in src/serving/api.py.
 export const DeliveryEtaInputSchema = z.object({
   distance_km: z.number().min(1).max(2000),

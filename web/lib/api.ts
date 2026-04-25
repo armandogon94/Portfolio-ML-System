@@ -17,6 +17,7 @@ import type {
   CreditRiskInput,
   CustomerChurnInput,
   DeliveryEtaInput,
+  DemandRequest,
   DentalNoShowInput,
   FraudInput,
   H1BApprovalInput,
@@ -197,6 +198,20 @@ export const predictDeliveryEta = (input: DeliveryEtaInput) =>
 
 export const explainDeliveryEta = (input: DeliveryEtaInput) =>
   post("/explain/eta", input, ExplanationSchema);
+
+// Demand forecast (A.9.6 — Gradio demand-tab port). PyTorch LSTM,
+// 7-day forecast per product category. No /explain endpoint — the
+// gradient explainer isn't wired for the LSTM yet.
+export const DemandForecastSchema = z.object({
+  product: z.string(),
+  forecast_days: z.number().int(),
+  predictions: z.array(z.number()),
+  avg_predicted_demand: z.number(),
+});
+export type DemandForecast = z.infer<typeof DemandForecastSchema>;
+
+export const predictDemand = (input: DemandRequest) =>
+  post("/predict/demand", input, DemandForecastSchema);
 
 // ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
 

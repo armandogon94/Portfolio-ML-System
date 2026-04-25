@@ -113,7 +113,7 @@ export const INDUSTRIES: Industry[] = [
     icon: Truck,
     modelCount: 3,
     models: [
-      { slug: "demand", title: "Demand Forecasting", description: "PyTorch LSTM 7-day forecast.", ready: false },
+      { slug: "demand", title: "Demand Forecasting", description: "PyTorch LSTM 7-day forecast.", ready: true },
       { slug: "eta", title: "Delivery ETA", description: "XGBoost regressor on synthetic delivery data.", ready: true },
       { slug: "damage-risk", title: "Shipment Damage Risk", description: "XGBoost risk classifier.", ready: false },
     ],
