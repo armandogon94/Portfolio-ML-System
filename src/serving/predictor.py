@@ -293,19 +293,26 @@ class ModelPredictor:
         }
 
     def get_model_info(self) -> dict:
-        """Return metadata for all available models."""
-        info = {}
-        for problem in [
-            "credit_risk",
-            "fraud_detection",
-            "price_prediction",
-            "demand_forecasting",
-            "delivery_eta",
-        ]:
-            metadata_path = self.root / "checkpoints" / problem / "metadata.json"
-            if metadata_path.exists():
+        """Return metadata for every checkpoint under ``checkpoints/``.
+
+        Dynamically scans ``self.root / "checkpoints" / <problem> / metadata.json``
+        — adding a new model checkpoint dir requires no code change here.
+        Returns ``{}`` when the checkpoints directory is missing or empty.
+        Malformed ``metadata.json`` files are skipped silently rather than
+        crashing the endpoint.
+        """
+        info: dict = {}
+        checkpoints_root = self.root / "checkpoints"
+        if not checkpoints_root.is_dir():
+            return info
+        for metadata_path in sorted(checkpoints_root.glob("*/metadata.json")):
+            problem = metadata_path.parent.name
+            try:
                 with open(metadata_path) as f:
                     info[problem] = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                # Skip partial/corrupt checkpoints rather than crash the endpoint.
+                continue
         return info
 
     def explain_credit_risk(self, data: dict) -> dict:

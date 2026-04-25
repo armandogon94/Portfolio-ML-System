@@ -257,8 +257,15 @@ def tiny_lstm_artifacts(timeseries_df):
 @pytest.fixture(scope="session")
 def checkpoint_dir(tmp_path_factory, tiny_credit_risk_model, tiny_fraud_artifacts,
                    tiny_price_model, tiny_lstm_artifacts):
-    """Temporary checkpoint directory with all 4 models saved."""
-    base = tmp_path_factory.mktemp("checkpoints")
+    """Temporary checkpoint directory with all 4 models saved.
+
+    Created literally as ``<tmp>/checkpoints`` so the dynamic checkpoint scan
+    in ``ModelPredictor.get_model_info`` (which globs ``self.root/checkpoints/*``)
+    resolves correctly when ``predictor.root = checkpoint_dir.parent``.
+    """
+    parent = tmp_path_factory.mktemp("predictor_root")
+    base = parent / "checkpoints"
+    base.mkdir()
 
     # Credit risk
     cr_dir = base / "credit_risk"

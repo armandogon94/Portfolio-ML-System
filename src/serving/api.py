@@ -19,15 +19,6 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="ML Inference Server", version="1.0.0")
 predictor = ModelPredictor()
 
-_CHECKPOINT_ROOT = Path(__file__).resolve().parent.parent.parent / "checkpoints"
-_ALL_MODELS = [
-    "credit_risk",
-    "fraud_detection",
-    "price_prediction",
-    "demand_forecasting",
-    "delivery_eta",
-]
-
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -332,8 +323,13 @@ async def explain_h1b_approval(app_data: H1BApplication):
 
 @app.get("/health")
 async def health():
-    models = {
-        model: {"available": (_CHECKPOINT_ROOT / model / "metadata.json").exists()}
-        for model in _ALL_MODELS
+    """Liveness + checkpoint self-discovery.
+
+    The ``models`` map is built dynamically from ``checkpoints/<problem>/metadata.json``
+    — adding a new checkpoint directory requires no code change here.
+    """
+    info = predictor.get_model_info()
+    return {
+        "status": "ok",
+        "models": {problem: {"available": True} for problem in info},
     }
-    return {"status": "ok", "models": models}
