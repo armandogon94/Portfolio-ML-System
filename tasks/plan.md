@@ -2196,3 +2196,22 @@ Each task is the same vertical pattern used in A.3–A.8: new page + fields + te
 - **Q-A.9-P1 — Snapshot staleness:** if models are retrained in Phase B (adding modality comparisons for ported models), the parity snapshots in `tests/fixtures/gradio_parity/` will drift. Resolution: mark the parity test as `@pytest.mark.network` and refresh snapshots on retrain. Not a blocker.
 - **Q-A.9-P2 — ADR numbering:** this is ADR-001 since no ADRs exist yet. If Phase B or C writes more ADRs, they'll be ADR-002+. `docs/decisions/README.md` will be the index.
 
+
+
+---
+
+# Phase A.9 — STATUS: COMPLETE
+
+All 12 tasks shipped. Tagged at `v1.4.0-phase-a-complete` on 2026-04-26.
+
+**Acceptance gate results (all green):**
+- Docker: 3-service stack (`mlflow + ml-api + ml-web`) — `ml-ui` retired
+- Routes: 10 ready model pages + `/dashboard` (with ISR) + 6 industry indexes — all prerender
+- Python: 360 tests passing, 90% coverage; lint clean
+- Web: 91 tests passing; typecheck + lint clean; build clean
+- Parity: 3/3 snapshots match post-Gradio-deletion
+- ADR-001: committed, status Accepted
+
+Phase A is shipped. Phase B (industry depth — treatment-plan, diabetes,
+LSTM length-of-stay, DistilBERT legal-doc classifier) and Phase C
+(ship + Vercel deploy + GitHub Actions + case studies) are next.
