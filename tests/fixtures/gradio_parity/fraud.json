@@ -1,0 +1,9 @@
+{
+  "anomaly_threshold": 0.18291547894477844,
+  "fraud_probability": 0.053497919254869214,
+  "is_anomaly_autoencoder": false,
+  "is_anomaly_isolation_forest": false,
+  "isolation_forest_score": 0.5288733508038488,
+  "reconstruction_error": 0.02935679256916046,
+  "risk_level": "LOW"
+}
