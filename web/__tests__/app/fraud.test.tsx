@@ -61,8 +61,8 @@ describe("FraudPage", () => {
     vi.mocked(explainFraud).mockResolvedValueOnce({
       feature_importances: {
         amount_vs_avg_ratio: 0.55,
-        distance_from_home: 0.30,
-        hour_of_day: 0.10,
+        distance_from_home: 0.3,
+        hour_of_day: 0.1,
       },
       top_features: [],
       explanation_type: "gradient",

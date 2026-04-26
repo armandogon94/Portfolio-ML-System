@@ -6,9 +6,13 @@
 
 | Service | Host Port | Container Port | File |
 |---------|-----------|---------------|------|
-| ML Dashboard (React) | **3070** | 3000 | docker-compose.yml / dev.yml |
+| Next.js demo UI (`ml-web`) | **3071** | 3071 | docker-compose.yml / dev.yml |
 | Prediction API (FastAPI) | **8070** | 8000 | docker-compose.yml / dev.yml |
 | MLflow UI | **5070** | 5000 | docker-compose.yml / dev.yml |
+
+> Port `3070` was the legacy Gradio UI (`ml-ui`), retired in Phase A.9
+> (see `docs/decisions/ADR-001-gradio-to-nextjs.md`). It is now **released**
+> and available for reuse within the `3070 – 3079` range.
 
 ## Allowed Range for New Services
 
@@ -21,7 +25,7 @@ If you need to add a new service to this project, pick from these ranges **only*
 | PostgreSQL | Not assigned. If needed, request an assignment in `../PORT-MAP.md`. |
 | Redis | Not assigned. If needed, request an assignment in `../PORT-MAP.md`. |
 
-Available slots: `3071-3079`, `8071-8079`.
+Available slots: `3070`, `3072-3079`, `8071-8079`.
 
 ## Do Not Use
 

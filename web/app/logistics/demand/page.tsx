@@ -31,23 +31,9 @@ import {
 } from "recharts";
 
 import { ModelForm } from "@/components/ModelForm";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  predictDemand,
-  ApiError,
-  type DemandForecast,
-} from "@/lib/api";
-import {
-  DemandRequestSchema,
-  DEMAND_REQUEST_DEFAULTS,
-  type DemandRequest,
-} from "@/lib/schemas";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { predictDemand, ApiError, type DemandForecast } from "@/lib/api";
+import { DemandRequestSchema, DEMAND_REQUEST_DEFAULTS, type DemandRequest } from "@/lib/schemas";
 import { DEMAND_REQUEST_FIELDS } from "./fields";
 
 function apiErrorMessage(err: unknown): string {
@@ -75,7 +61,9 @@ function ForecastChart({ result }: { result: DemandForecast }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{result.product.charAt(0).toUpperCase() + result.product.slice(1)} forecast</CardTitle>
+        <CardTitle>
+          {result.product.charAt(0).toUpperCase() + result.product.slice(1)} forecast
+        </CardTitle>
         <CardDescription>
           Avg predicted demand over {result.forecast_days} days:{" "}
           <span data-testid="avg-demand" className="font-mono font-semibold">
@@ -142,8 +130,8 @@ export default function DemandPage() {
             Demand Forecasting
           </h1>
           <p className="text-sm text-muted-foreground">
-            Pick a product category to see the LSTM&apos;s 7-day demand forecast,
-            seeded from the last 30 days of historical sales.
+            Pick a product category to see the LSTM&apos;s 7-day demand forecast, seeded from the
+            last 30 days of historical sales.
           </p>
         </header>
         <Card>

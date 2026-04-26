@@ -1,4 +1,4 @@
-.PHONY: setup data train evaluate ui serve test lint format clean all
+.PHONY: setup data train evaluate serve test lint format clean all
 .PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean docker-dev-up docker-dev-down
 .PHONY: web-install web-dev web-build web-test web-lint web-typecheck
 
@@ -14,9 +14,6 @@ train:
 evaluate:
 	uv run python scripts/evaluate.py --model all
 
-ui:
-	uv run python app/gradio_app.py
-
 serve:
 	uv run python scripts/serve.py
 
@@ -24,11 +21,11 @@ test:
 	uv run pytest tests/ -v --tb=short
 
 lint:
-	uv run ruff check src/ scripts/ app/ tests/
-	uv run ruff format --check src/ scripts/ app/ tests/
+	uv run ruff check src/ scripts/ tests/
+	uv run ruff format --check src/ scripts/ tests/
 
 format:
-	uv run ruff format src/ scripts/ app/ tests/
+	uv run ruff format src/ scripts/ tests/
 
 clean:
 	rm -rf data/raw/*.csv data/processed/*.csv
@@ -38,7 +35,7 @@ clean:
 	rm -rf __pycache__ .pytest_cache
 
 all: data train evaluate
-	@echo "Full pipeline complete. Run 'make ui' to launch the web interface."
+	@echo "Full pipeline complete. Run 'make web-dev' (or 'make docker-up') to launch the Next.js demo UI at http://localhost:3071"
 
 # ── Docker targets ──────────────────────────────────────────────────
 
@@ -62,7 +59,7 @@ docker-clean:
 
 # Dev override — ml-web runs `pnpm dev` with volume-mounted source
 # so file edits hot-reload in the container. Other services
-# (mlflow, ml-api, ml-ui) stay production-style.
+# (mlflow, ml-api) stay production-style.
 docker-dev-up:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 

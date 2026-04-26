@@ -120,8 +120,7 @@ export type FraudPrediction = z.infer<typeof FraudPredictionSchema>;
 export const predictFraud = (input: FraudInput) =>
   post("/predict/fraud", input, FraudPredictionSchema);
 
-export const explainFraud = (input: FraudInput) =>
-  post("/explain/fraud", input, ExplanationSchema);
+export const explainFraud = (input: FraudInput) => post("/explain/fraud", input, ExplanationSchema);
 
 // ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
 

@@ -63,12 +63,7 @@ function sortRows(rows: DashboardRow[], key: SortKey, dir: SortDir): DashboardRo
         // so asc puts ready first.
         return sign * (statusRank(a.status) - statusRank(b.status));
       case "metric":
-        return compareNullable(
-          a.keyMetric?.value,
-          b.keyMetric?.value,
-          (x, y) => x - y,
-          sign,
-        );
+        return compareNullable(a.keyMetric?.value, b.keyMetric?.value, (x, y) => x - y, sign);
       case "lastTrained":
         return compareNullable(
           a.lastTrained,
@@ -137,10 +132,7 @@ export function DashboardTable({ rows }: { rows: DashboardRow[] }) {
   const [sortDir, setSortDir] = React.useState<SortDir>("asc");
 
   const filtered = React.useMemo(
-    () =>
-      industryFilter === "all"
-        ? rows
-        : rows.filter((r) => r.industrySlug === industryFilter),
+    () => (industryFilter === "all" ? rows : rows.filter((r) => r.industrySlug === industryFilter)),
     [rows, industryFilter],
   );
   const sorted = React.useMemo(

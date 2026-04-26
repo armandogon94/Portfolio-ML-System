@@ -31,12 +31,12 @@ dependencies = [
     # Config
     "pyyaml>=6.0",
 
-    # Visualization
+    # Visualization (matplotlib still used by evaluator + notebooks; plotly
+    # was the Gradio chart backend — kept around because some training
+    # scripts still produce Plotly HTML artifacts that the dashboard might
+    # consume in a future slice).
     "matplotlib>=3.8",
     "plotly>=5.18",
-
-    # Web UI
-    "gradio>=4.15",
 
     # API
     "fastapi>=0.109",

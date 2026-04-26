@@ -33,9 +33,14 @@ const FIXTURE: DashboardRow[] = [
     modelDescription: "Autoencoder + isolation forest.",
     status: "ready",
     href: "/fintech/fraud",
-    keyMetric: { name: "test_autoencoder_auc_roc", label: "AUC-ROC", value: 0.91, higherIsBetter: true },
+    keyMetric: {
+      name: "test_autoencoder_auc_roc",
+      label: "AUC-ROC",
+      value: 0.91,
+      higherIsBetter: true,
+    },
     lastTrained: "2026-04-23T05:00:00",
-    history: [0.88, 0.90, 0.91],
+    history: [0.88, 0.9, 0.91],
   },
   {
     industrySlug: "real-estate",

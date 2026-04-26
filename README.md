@@ -24,13 +24,20 @@ Production ML system demonstrating end-to-end machine learning engineering: synt
 ## Architecture
 
 ```
-Data Generation     Feature Engineering     Training + Tracking     Serving
- (Faker + NumPy)     (scikit-learn)          (W&B / local)         (Gradio)
+Data Generation     Feature Engineering     Training + Tracking     Serving                  Demo UI
+ (Faker + NumPy)     (scikit-learn)          (W&B + MLflow)         (FastAPI)               (Next.js 14)
 
-  credit_risk.csv ──> feature pipeline ──> XGBoost ──> checkpoint ──┐
-  fraud.csv ────────> feature pipeline ──> Autoencoder (MPS) ──────>├──> Gradio UI
-  housing.csv ──────> feature pipeline ──> LightGBM ──────────────>│    (5 tabs)
-  demand.csv ───────> sliding windows ──> LSTM (MPS) ─────────────>┘
+  credit_risk ──┐                                                                  ┌──> /fintech/credit-risk
+  fraud ────────│                                                                  │    /fintech/fraud
+  price ────────├──> feature pipelines ──> XGBoost / LightGBM ──> checkpoints ──> ML├──> /fintech/churn
+  rental_price ─│                          / Autoencoder (MPS) /                  api │    /real-estate/price
+  no-show ──────│                          / LSTM (MPS)         /                 :8070    /real-estate/rental-price
+  ...           │                                                                  │    /dental/no-show
+                                                                                   │    /healthcare/heart-disease
+                                                                                   │    /logistics/eta
+                                                                                   │    /logistics/demand
+                                                                                   │    /legal/h1b-approval
+                                                                                   └──> /dashboard  (live status of all 20)
 ```
 
 ---
@@ -49,10 +56,13 @@ cd portfolio-ml-system
 uv sync
 
 # Run the full pipeline
-make all    # Generate data -> Train models -> Evaluate
+make all          # Generate data -> Train models -> Evaluate
 
-# Launch the web interface
-make ui     # Opens at http://localhost:7860
+# Launch the Next.js demo UI (native, fastest)
+make web-dev      # Opens at http://localhost:3071
+
+# Or run the full Docker stack — 3 services (mlflow, ml-api, ml-web)
+make docker-up    # /dashboard at http://localhost:3071/dashboard
 ```
 
 Or step-by-step:
@@ -61,7 +71,8 @@ Or step-by-step:
 uv run python scripts/generate_data.py --problem all
 uv run python scripts/train.py --model all --no-wandb
 uv run python scripts/evaluate.py
-uv run python app/gradio_app.py
+uv run python scripts/serve.py           # FastAPI inference server (port 8070)
+cd web && pnpm install && pnpm dev       # Next.js demo UI (port 3071)
 ```
 
 ---
@@ -126,7 +137,8 @@ portfolio-ml-system/
 │   ├── evaluation/             # Metric computation
 │   └── serving/                # Predictor + FastAPI server
 ├── scripts/                    # CLI entry points
-├── app/gradio_app.py           # Unified web interface
+├── web/                        # Next.js 14 demo UI (per-industry pages + /dashboard)
+├── docs/decisions/             # ADRs (e.g., ADR-001 = Gradio → Next.js migration)
 ├── checkpoints/                # Saved model weights + metadata
 ├── results/                    # Evaluation CSVs
 └── tests/                      # pytest test suite
@@ -188,17 +200,24 @@ Without an API key, all metrics are still saved locally to `checkpoints/*/metada
 
 ## Web Interface
 
-The Gradio app provides 5 tabs:
+The Next.js demo UI (`web/`) hosts one page per ready model plus a live dashboard:
 
-1. **Credit Risk** -- Score loan applications (risk score, APPROVE/REVIEW/DECLINE)
-2. **Fraud Detection** -- Analyze transactions (autoencoder + isolation forest)
-3. **Price Prediction** -- Estimate property values with confidence ranges
-4. **Demand Forecasting** -- 7-day forecast with interactive chart
-5. **Dashboard** -- Summary of all model metrics and system info
+- **Landing** (`/`) — 6 industry tiles linking into their model lists
+- **/dashboard** — sortable table of all 20 cataloged models with status badges, key metrics, and MLflow training-history sparklines for the ready ones; auto-refreshes every 30 s via Next.js ISR
+- **Per-industry model pages** — one page per ready model, each with a Zod-validated input form on the left and the model's prediction + SHAP/gradient explanation on the right:
+  - `/fintech/credit-risk` · `/fintech/fraud` · `/fintech/churn`
+  - `/real-estate/price` · `/real-estate/rental-price`
+  - `/dental/no-show`
+  - `/healthcare/heart-disease`
+  - `/logistics/eta` · `/logistics/demand`
+  - `/legal/h1b-approval`
 
 ```bash
-make ui  # Launches at http://localhost:7860
+make web-dev      # Native pnpm dev — fastest iteration, hot reload
+make docker-up    # Full Docker stack (3 services), demo at http://localhost:3071
 ```
+
+The original Gradio prototype was retired in Phase A.9 — see `docs/decisions/ADR-001-gradio-to-nextjs.md` for the rationale.
 
 ---
 
@@ -247,11 +266,11 @@ All datasets are **synthetic**, generated via Python scripts with realistic stat
 ## Tech Stack
 
 - **ML**: PyTorch, XGBoost, LightGBM, scikit-learn
-- **Tracking**: Weights & Biases (free tier)
-- **Web UI**: Gradio
+- **Tracking**: Weights & Biases (free tier) + MLflow (always-on local)
+- **Web UI**: Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui + Recharts
 - **API**: FastAPI + Uvicorn
-- **Data**: Faker, NumPy, Pandas
-- **Environment**: uv (10-100x faster than pip)
+- **Data**: Faker, NumPy, Pandas; real Kaggle datasets streamed via `kagglehub`
+- **Environment**: uv (10-100x faster than pip), pnpm for the web app
 - **Hardware**: Apple Silicon MPS acceleration
 
 ---

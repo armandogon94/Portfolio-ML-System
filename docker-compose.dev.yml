@@ -5,8 +5,8 @@
 #
 # Currently only overrides ml-web (replaces `node server.js` with
 # `pnpm dev` so saved file changes hot-reload). The rest of the stack
-# (mlflow, ml-api, ml-ui) stays production-style since those don't
-# change as often during frontend iteration.
+# (mlflow, ml-api) stays production-style since those don't change
+# as often during frontend iteration.
 #
 # Primary dev flow is native `make web-dev` (fastest, no container
 # filesystem overhead). This override is the offline fallback — use

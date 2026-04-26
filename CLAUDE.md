@@ -2,24 +2,25 @@
 
 > **Port allocation:** See [PORTS.md](PORTS.md) before changing any docker-compose ports. All ports outside the assigned ranges are taken by other projects.
 
-Production ML system with 4 models: Credit Risk (XGBoost), Fraud Detection (PyTorch Autoencoder), Price Prediction (LightGBM), Demand Forecasting (PyTorch LSTM). Unified Gradio web interface.
+Production ML system with 10 models across 6 industries (Real Estate, Dental, Healthcare, Fintech, Logistics, Legal/Immigration). Backed by FastAPI + a Next.js 14 demo UI with shadcn/ui. Live model dashboard at `/dashboard` summarizes status + key metrics for the full 20-model catalog.
 
 ## Tech Stack
 
-Python 3.11+, uv, PyTorch (MPS backend), XGBoost, LightGBM, scikit-learn, W&B, Gradio, FastAPI
+Python 3.11+, uv, PyTorch (MPS backend), XGBoost, LightGBM, scikit-learn, W&B, MLflow, FastAPI, Next.js 14 (App Router), TypeScript, TailwindCSS, shadcn/ui, Recharts, Zod, TanStack Query
 
 ## Commands
 
 ```bash
-make setup      # Install dependencies (uv sync --extra dev)
-make data       # Generate all 4 synthetic datasets
-make train      # Train all 4 models
-make evaluate   # Evaluate all models, save CSV results
-make ui         # Launch Gradio web interface
-make serve      # Launch FastAPI inference server
-make test       # Run pytest
-make lint       # Run ruff linter
-make all        # Full pipeline: data + train + evaluate
+make setup       # Install Python dependencies (uv sync --extra dev)
+make data        # Generate all synthetic datasets
+make train       # Train all models
+make evaluate    # Evaluate all models, save CSV results
+make serve       # Launch FastAPI inference server (port 8070)
+make test        # Run pytest (excludes network + parity by default)
+make lint        # Run ruff linter
+make all         # Full pipeline: data + train + evaluate
+make web-dev     # Launch Next.js demo UI at http://localhost:3071
+make docker-up   # Bring up the 3-service stack (mlflow, ml-api, ml-web)
 ```
 
 Individual scripts:
@@ -53,9 +54,10 @@ Real data caches to `~/.cache/kagglehub/` — **never** in `data/raw/`.
 - `src/evaluation/` - Metric computation, CSV export
 - `src/serving/` - ModelPredictor (checkpoint loading + inference), FastAPI server
 - `scripts/` - CLI entry points for generate, train, evaluate, serve
-- `app/gradio_app.py` - Unified Gradio UI with 5 tabs
+- `web/` - Next.js 14 demo UI (per-industry pages + /dashboard)
 - `checkpoints/` - Model weights + metadata.json (gitignored)
 - `results/` - CSV evaluation results (committed)
+- `docs/decisions/` - ADRs (e.g., ADR-001 records the Gradio → Next.js migration)
 
 ## Conventions
 

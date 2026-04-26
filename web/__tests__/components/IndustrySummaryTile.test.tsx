@@ -8,7 +8,11 @@ import type { DashboardRow } from "@/lib/dashboard";
 
 const FINTECH = getIndustry("fintech")!;
 
-function row(modelSlug: string, status: DashboardRow["status"], metric: number | null): DashboardRow {
+function row(
+  modelSlug: string,
+  status: DashboardRow["status"],
+  metric: number | null,
+): DashboardRow {
   return {
     industrySlug: "fintech",
     industryTitle: "Fintech",
@@ -49,20 +53,14 @@ describe("IndustrySummaryTile", () => {
   });
 
   it("shows the average key-metric across ready rows when ≥1 ready", () => {
-    const rows = [
-      row("credit-risk", "ready", 0.80),
-      row("fraud", "ready", 0.90),
-    ];
+    const rows = [row("credit-risk", "ready", 0.8), row("fraud", "ready", 0.9)];
     render(<IndustrySummaryTile industry={FINTECH} rows={rows} />);
     // (0.80 + 0.90) / 2 = 0.85 → "85.0%"
     expect(screen.getByTestId("avg-metric")).toHaveTextContent(/85\.0%|0\.850|0\.85/);
   });
 
   it("renders a 'No ready models' note when zero rows are ready", () => {
-    const rows = [
-      row("credit-risk", "not_built", null),
-      row("fraud", "not_built", null),
-    ];
+    const rows = [row("credit-risk", "not_built", null), row("fraud", "not_built", null)];
     render(<IndustrySummaryTile industry={FINTECH} rows={rows} />);
     expect(screen.getByText(/no ready models/i)).toBeInTheDocument();
   });

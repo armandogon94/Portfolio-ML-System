@@ -54,7 +54,7 @@ describe("PricePage", () => {
     vi.mocked(explainPrice).mockResolvedValueOnce({
       feature_importances: {
         square_feet: 0.45,
-        neighborhood_tier: 0.30,
+        neighborhood_tier: 0.3,
         year_built: 0.15,
       },
       top_features: [],

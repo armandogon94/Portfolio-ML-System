@@ -37,10 +37,10 @@ Builds every service from scratch, matches the production image exactly, slower 
 
 ```bash
 # From repo root:
-make docker-up     # brings up mlflow, ml-api, ml-web, ml-ui
+make docker-up     # brings up the 3-service stack: mlflow, ml-api, ml-web
 ```
 
-Visit http://localhost:3071 (Next.js) or http://localhost:3070 (Gradio, retiring in A.9).
+Visit http://localhost:3071 (industry pages + `/dashboard`).
 
 ### 3. Dockerized dev (offline HMR fallback)
 
