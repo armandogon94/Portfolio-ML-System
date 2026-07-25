@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant W as Next.js /fintech/fraud
+    participant A as FastAPI /predict/fraud
+    participant G as serving/registry.py
+    participant F as features/fraud_features.py
+    participant M as LightGBM checkpoint
+    participant S as explainability/shap_explainer.py
+    U->>W: submit transaction form (Zod-validated)
+    W->>A: POST /predict/fraud {json}
+    A->>G: load("fraud")
+    G-->>A: model + feature_columns + category_dtypes + metadata
+    Note over A,G: 503 with the exact train command<br/>when no checkpoint exists
+    A->>F: engineer_features(payload, fit=False)
+    Note over F: the SAME function training called,<br/>with the frequency maps fitted on train
+    F-->>A: feature frame
+    A->>M: predict_proba(X)
+    M-->>A: fraud probability
+    A->>S: explain(model, X)
+    S-->>A: per-feature SHAP contributions
+    A-->>W: {probability, risk_band, action, model_version}
+    W-->>U: score + provenance + SHAP bar chart

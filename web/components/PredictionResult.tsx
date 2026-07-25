@@ -1,69 +1,117 @@
 /**
- * PredictionResult — right-column result card for any classification model.
+ * PredictionResult — the shared right-column result card for all three models.
  *
- * Currently typed for credit-risk (APPROVE / REVIEW / DECLINE); future
- * industry models can either reuse this shape or render their own card.
- * Color coding is semantic — green for approve/good, amber for review,
- * red for decline/high-risk — so the user doesn't need to read numbers
- * to get a sense of the outcome.
+ * One component, three problems. Each page supplies a decision label, a
+ * probability and its rows; the semantics of the decision differ but the visual
+ * language does not, so a reviewer scanning the three pages sees one product.
+ *
+ * Two things this card always shows, and the reason it exists as a shared
+ * component rather than three bespoke ones:
+ *
+ * `model_version` — the git SHA of the commit that trained the checkpoint. A
+ *   score with no provenance is unreviewable, and this repository exists because
+ *   an unreviewable score was published.
+ * `caveat` — free text the API attaches to a score (small n, illustrative
+ *   thresholds). It is rendered, not swallowed.
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { CreditRiskPrediction, Recommendation } from "@/lib/api";
 
-/** Tailwind classes per recommendation tier. Exported for reuse / testing. */
-export const RECOMMENDATION_CLASSES: Record<Recommendation, string> = {
-  APPROVE:
+/** Semantic tone. Green = benign, amber = look at it, red = act. */
+export type Tone = "good" | "warn" | "bad";
+
+export const TONE_CLASSES: Record<Tone, string> = {
+  good:
     "bg-green-100 text-green-800 border-green-300 " +
     "dark:bg-green-900/30 dark:text-green-300 dark:border-green-700",
-  REVIEW:
+  warn:
     "bg-amber-100 text-amber-800 border-amber-300 " +
     "dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700",
-  DECLINE:
+  bad:
     "bg-red-100 text-red-800 border-red-300 " +
     "dark:bg-red-900/30 dark:text-red-300 dark:border-red-700",
 };
 
-function formatPercent(value: number): string {
-  // Two-decimal percentage — e.g., 0.12345 -> "12.35%". We keep the
-  // decimals even when they'd round to .00 so the output width is
-  // stable column-to-column.
+export function formatPercent(value: number): string {
+  // Decimals are kept even when they round to .00 so the column width is
+  // stable between renders and does not jitter as the user resubmits.
   return `${(value * 100).toFixed(2)}%`;
 }
 
-export function PredictionResult({ result }: { result: CreditRiskPrediction }) {
+export type PredictionResultProps = {
+  /** e.g. "Decision", "Recommended action". */
+  decisionLabel: string;
+  /** e.g. "APPROVE", "MANUAL_REVIEW". */
+  decision: string;
+  decisionTone: Tone;
+  /** e.g. "Default probability". */
+  probabilityLabel: string;
+  probability: number;
+  /** Short git SHA of the commit that trained the checkpoint. */
+  modelVersion: string;
+  /** Dataset slug the checkpoint was trained on. */
+  trainedOn: string;
+  /** Any caveat the API attached to this score. Rendered verbatim. */
+  caveat?: string;
+};
+
+export function PredictionResult({
+  decisionLabel,
+  decision,
+  decisionTone,
+  probabilityLabel,
+  probability,
+  modelVersion,
+  trainedOn,
+  caveat,
+}: PredictionResultProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Prediction</CardTitle>
-        <CardDescription>Model output and recommendation</CardDescription>
+        <CardDescription>Model output, decision, and provenance</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Recommendation</span>
+          <span className="text-sm text-muted-foreground">{decisionLabel}</span>
           <span
-            data-testid="recommendation"
+            data-testid="decision"
             className={cn(
               "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold",
-              RECOMMENDATION_CLASSES[result.recommendation],
+              TONE_CLASSES[decisionTone],
             )}
           >
-            {result.recommendation}
+            {decision}
           </span>
         </div>
+
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Risk score</span>
-          <span data-testid="risk-score" className="font-mono text-sm tabular-nums">
-            {formatPercent(result.risk_score)}
+          <span className="text-sm text-muted-foreground">{probabilityLabel}</span>
+          <span data-testid="probability" className="font-mono text-sm tabular-nums">
+            {formatPercent(probability)}
           </span>
         </div>
+
+        <div className="flex items-center justify-between border-t pt-3">
+          <span className="text-xs text-muted-foreground">Model version</span>
+          <span data-testid="model-version" className="font-mono text-xs text-muted-foreground">
+            {modelVersion}
+          </span>
+        </div>
+
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Confidence</span>
-          <span data-testid="confidence" className="font-mono text-sm tabular-nums">
-            {formatPercent(result.confidence)}
+          <span className="text-xs text-muted-foreground">Trained on</span>
+          <span data-testid="trained-on" className="font-mono text-xs text-muted-foreground">
+            {trainedOn}
           </span>
         </div>
+
+        {caveat && (
+          <p data-testid="caveat" className="border-t pt-3 text-xs text-muted-foreground">
+            {caveat}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

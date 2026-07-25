@@ -1,280 +1,444 @@
-# Portfolio ML System
+# Fintech ML System — Fraud, Credit Risk, and Attrition on Real Public Data
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-ee4c2c.svg)](https://pytorch.org/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.0+-blue.svg)](https://xgboost.readthedocs.io/)
-[![LightGBM](https://img.shields.io/badge/LightGBM-4.0+-green.svg)](https://lightgbm.readthedocs.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml/badge.svg)](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](#testing)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Production ML system demonstrating end-to-end machine learning engineering: synthetic data generation, feature engineering, model training with experiment tracking, model checkpointing, and a unified web prediction interface. Built to run on **Apple Silicon** with PyTorch MPS acceleration.
+Three real-money fintech problems — payment fraud, consumer credit risk, and card
+attrition — each trained on a public dataset a stranger can download, tracked in
+MLflow, served behind a FastAPI inference API with SHAP explanations. It was
+rebuilt from a version whose headline metric was real, reproducible, and
+completely meaningless.
+
+**Can a fraud model hold up when the labels aren't ones I wrote myself?**
+
+- **Focus** — payment fraud · consumer credit risk · card attrition
+- **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151, CC0) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23)
+- **Stack** — Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
+- **Output** — a results table where every cell traces to a CSV written by a training run
+
+📄 **[Read the full methodology & analysis →](reports/RESULTS.md)**
 
 ---
 
-## Models
+## A correction, and why it's here
 
-| Problem | Algorithm | Type | Device | Key Metric | Score |
-|---------|-----------|------|--------|------------|-------|
-| Credit Risk Scoring | XGBoost Classifier | Classification | CPU | AUC-ROC | 0.888 |
-| Fraud Detection | PyTorch Autoencoder + Isolation Forest | Anomaly Detection | **MPS** | AUC-ROC | 0.964 |
-| Real Estate Pricing | LightGBM Regressor | Regression | CPU | R2 | 0.942 |
-| Demand Forecasting | PyTorch LSTM | Time Series | **MPS** | Avg MAE | 22.2 |
+An earlier version of this README reported **AUC-ROC 0.964** for fraud detection.
+That number was real — it reproduced exactly from
+`results/fraud_detection_metrics.csv` and from
+`checkpoints/fraud_detection/metadata.json`, and every artefact agreed with it.
+
+It was also meaningless. The dataset came from `src/data/generate_fraud.py`,
+which drew fraudulent and normal transactions from **two different
+distributions** and passed `is_fraud` into the generator as an **input** rather
+than deriving it from the features:
+
+```python
+# src/data/generate_fraud.py:26,29  (deleted)
+normal = _generate_transactions(rng, n_normal, is_fraud=False)
+fraud  = _generate_transactions(rng, n_fraud,  is_fraud=True)
+
+# src/data/generate_fraud.py:42,50  (deleted)
+if is_fraud:  transaction_amount = rng.lognormal(mean=5.5, sigma=1.5, ...)
+else:         transaction_amount = rng.lognormal(mean=3.5, sigma=1.0, ...)
+```
+
+The model's entire task was to separate `lognormal(5.5, 1.5)` from
+`lognormal(3.5, 1.0)`. It was measuring how far apart I had put two of my own
+random number generators. The credit-risk and housing targets had the same
+defect: the label was a closed-form function of the features, which I wrote.
+
+**All four published numbers are retracted** — fraud 0.964, credit risk 0.888,
+housing R² 0.942, forecasting MAE 22.2. Every synthetic generator is deleted, and
+`src/config.py` now raises at load time on any config that does not name a real,
+downloadable dataset. The replacement numbers will be lower and honest.
+
+Full reasoning, including the enforcement that stops this recurring:
+**[ADR-0003 — Real public data only](docs/adr/0003-real-data-over-synthetic.md)**.
+
+---
+
+## Current status
+
+**No model metric is published, because none has been measured on real data yet.**
+
+The engineering is complete: data adapters, time-based splits, the trainer, the
+quality gates, the serving path, the tests and CI all work end to end on the
+committed fixtures. What has not run is the download and the training, because
+all three datasets need a free Kaggle account and IEEE-CIS additionally needs a
+one-click acceptance of the competition rules — a credential this build did not
+have and would not fabricate.
+
+[`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
+commands to unblock it.
+
+---
+
+## Key Findings
+
+- **The old fraud result was not a model result.** `generate_fraud.py` passed the
+  label into the generator as a parameter, so 0.964 measured the separation
+  between two hand-chosen lognormals. Retracted rather than quietly deleted.
+- **A model can be right and still look bad, and this repo is built to say so.**
+  Each config declares the ROC-AUC band the result must fall in *before* training
+  — fraud ≈ 0.90, credit risk ≈ 0.70. Exceeding the ceiling is recorded as
+  **suspected leakage** in `metadata.json` and fails `tests/test_quality_gates.py`.
+  A suspiciously good number now has to justify itself.
+- **The old test suite could not have caught any of it.** 360 tests, 90%
+  coverage, and `pyproject.toml` hid `-m 'not network and not parity'` inside
+  `addopts` — silently deselecting both the Kaggle canary and the pre-ship gate.
+  `tests/test_serving.py` asserted only key presence and `0 <= score <= 1`, which
+  a predictor hardcoded to `0.5` passes. That exclusion is gone and the gates now
+  assert a floor, a ceiling, and monotonic direction.
+
+## Results
+
+| Problem | Dataset (rows × cols, % positive) | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline PR-AUC | Δ vs baseline | Source |
+|---|---|---|---|---|---|---|---|---|
+| Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM |  |  |  |  | `reports/fraud_metrics.csv` |
+| Fraud (unsup. baseline) | same | same | Autoencoder (MPS) |  |  | — | — | same |
+| Credit risk | LendingClub · terminal statuses only | time (`issue_d`) | LightGBM |  |  |  |  | `reports/credit_risk_metrics.csv` |
+| Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM |  |  |  |  | `reports/churn_metrics.csv` |
+
+<sub>**Every cell is empty because nothing has been measured yet, and a placeholder
+number is exactly the failure this rebuild corrects.** `scripts/evaluate.py` reads
+these cells from `reports/*_metrics.csv` — files written only by a training run —
+so no number here can be typed by hand. The expected honest results, recorded in
+`configs/*.yaml` before any run: fraud ≈ 0.90 ROC-AUC, credit risk ≈ 0.70. See
+[`docs/PROGRESS.md`](docs/PROGRESS.md) and [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
+
+> **Figures.** `reports/figures/` will hold the PR curve, ROC curve, calibration
+> plot, confusion matrix at the 1%-review threshold, SHAP summary and gain plot
+> for each problem, all produced by `make figures` from a real checkpoint. It is
+> empty for the same reason the table is: `scripts/make_figures.py` exits
+> non-zero rather than drawing an empty axis.
 
 ---
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph client["Client"]
+        U["Reviewer / recruiter<br/>browser"]
+    end
+    subgraph web["ml-web · Next.js 14 · :3070"]
+        P["/fintech/{fraud,credit-risk,churn}<br/>Zod forms + SHAP charts"]
+        D["/dashboard · ISR 30s"]
+    end
+    subgraph api["ml-api · FastAPI · :8070"]
+        R["routes: /predict/* /explain/* /models /health<br/>src/serving/api.py"]
+        REG["checkpoint registry<br/>src/serving/registry.py"]
+        PRE["request → features<br/>src/serving/preprocessing.py"]
+        PRD["predictors/{fraud,credit_risk,churn}.py"]
+        EXP["SHAP + gradient<br/>src/explainability/"]
+    end
+    subgraph store["Artifacts (gitignored)"]
+        CK[("checkpoints/&lt;problem&gt;/<br/>model.joblib · features.joblib<br/>metadata.json")]
+    end
+    subgraph track["ml-mlflow · :5070"]
+        ML[("runs · params · metrics<br/>model registry")]
+    end
+    U --> P --> R
+    U --> D --> ML
+    R --> PRE --> PRD --> EXP
+    REG --> CK
+    PRD --> REG
+    R -->|"training-time only"| ML
 ```
-Data Generation     Feature Engineering     Training + Tracking     Serving                  Demo UI
- (Faker + NumPy)     (scikit-learn)          (W&B + MLflow)         (FastAPI)               (Next.js 14)
 
-  credit_risk ──┐                                                                  ┌──> /fintech/credit-risk
-  fraud ────────│                                                                  │    /fintech/fraud
-  price ────────├──> feature pipelines ──> XGBoost / LightGBM ──> checkpoints ──> ML├──> /fintech/churn
-  rental_price ─│                          / Autoencoder (MPS) /                  api │    /real-estate/price
-  no-show ──────│                          / LSTM (MPS)         /                 :8070    /real-estate/rental-price
-  ...           │                                                                  │    /dental/no-show
-                                                                                   │    /healthcare/heart-disease
-                                                                                   │    /logistics/eta
-                                                                                   │    /logistics/demand
-                                                                                   │    /legal/h1b-approval
-                                                                                   └──> /dashboard  (live status of all 20)
+The API discovers models by globbing `checkpoints/*/metadata.json` rather than
+holding a hardcoded list, so adding a model needs no change to `api.py` and no
+redeploy — and a fresh clone with zero checkpoints reports `status: ok` with three
+unavailable models instead of crash-looping.
+[SVG](docs/diagrams/c4-container.svg) · [full notes](docs/architecture.md)
+
+## How a prediction happens
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant W as Next.js /fintech/fraud
+    participant A as FastAPI /predict/fraud
+    participant G as serving/registry.py
+    participant F as features/fraud_features.py
+    participant M as LightGBM checkpoint
+    participant S as explainability/shap_explainer.py
+    U->>W: submit transaction form (Zod-validated)
+    W->>A: POST /predict/fraud {json}
+    A->>G: load("fraud")
+    G-->>A: model + feature_columns + category_dtypes + metadata
+    Note over A,G: 503 with the exact train command<br/>when no checkpoint exists
+    A->>F: engineer_features(payload, fit=False)
+    Note over F: the SAME function training called,<br/>with the frequency maps fitted on train
+    F-->>A: feature frame
+    A->>M: predict_proba(X)
+    M-->>A: fraud probability
+    A->>S: explain(model, X)
+    S-->>A: per-feature SHAP contributions
+    A-->>W: {probability, risk_band, action, model_version}
+    W-->>U: score + provenance + SHAP bar chart
 ```
+
+Step 5 calls the *same* `engineer_features` training called, with the frequency
+maps and category dtypes training fitted, loaded from the checkpoint.
+Training/serving skew is the most common production ML bug and the only
+structural defence is refusing to have a second implementation —
+`tests/serving/test_skew.py` scores the same rows through both paths and demands
+identical matrices. [SVG](docs/diagrams/sequence-predict.svg)
+
+## Data pipeline
+
+```mermaid
+flowchart LR
+    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
+    OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
+    P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
+    T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]
+    X -->|"src/training/tabular.py<br/>configs/&lt;problem&gt;.yaml"| MDL["LightGBM + baselines<br/>prior · logreg"]
+    MDL --> CK[("checkpoints/&lt;problem&gt;/")]
+    MDL --> ML[("MLflow :5070")]
+    MDL --> RES["reports/RESULTS.md<br/>reports/*_metrics.csv"]
+    CK --> API["FastAPI :8070"] --> WEB["Next.js :3070"]
+    SMP[("data/sample/*.csv<br/>500-row CI fixtures")] -.->|"CI only · writes NO checkpoint"| T
+```
+
+The split happens **before** feature engineering. Frequency encodings and group
+aggregates are fitted on the training rows only; fitting them on the full frame
+leaks the test distribution and is worth roughly a point of AUC that evaporates
+in production. The dotted edge is the other load-bearing detail: fixtures reach
+the trainer but cannot reach `checkpoints/` or `reports/`.
+[SVG](docs/diagrams/pipeline-dag.svg)
+
+There is **no ERD** here on purpose: this project has no application database.
+The only durable state is MLflow's SQLite store, which is a vendor schema this
+project does not own. [`docs/architecture.md`](docs/architecture.md) says so in
+one line rather than drawing a fictional one.
 
 ---
 
-## Quick Start
-
-**Prerequisites:** Python 3.11+, macOS/Linux
+## Repository Structure
 
 ```bash
-# Install uv (if not installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone and setup
-git clone https://github.com/YOUR_USERNAME/portfolio-ml-system.git
-cd portfolio-ml-system
-uv sync
-
-# Run the full pipeline
-make all          # Generate data -> Train models -> Evaluate
-
-# Launch the Next.js demo UI (native, fastest)
-make web-dev      # Opens at http://localhost:3071
-
-# Or run the full Docker stack — 3 services (mlflow, ml-api, ml-web)
-make docker-up    # /dashboard at http://localhost:3071/dashboard
-```
-
-Or step-by-step:
-
-```bash
-uv run python scripts/generate_data.py --problem all
-uv run python scripts/train.py --model all --no-wandb
-uv run python scripts/evaluate.py
-uv run python scripts/serve.py           # FastAPI inference server (port 8070)
-cd web && pnpm install && pnpm dev       # Next.js demo UI (port 3071)
-```
-
----
-
-## Streaming Datasets (Phase A.1+)
-
-Models whose config declares `data.kaggle_slug` can be trained on **real public datasets** without ever committing them to the repo. Each such model supports three training modalities:
-
-| Modality | Data source | Use case |
-|---|---|---|
-| `synthetic` | Bundled generator | Self-contained demo (no network, default) |
-| `stream` | Real Kaggle dataset, streamed via `kagglehub` | Best-case "real data" performance |
-| `mixed` | Concatenation of both, with a `modality` feature column | Demonstrates augmentation value |
-
-Train all three and let the CLI pick a winner:
-
-```bash
-uv run python scripts/train.py --model price --modality all
-```
-
-This creates one MLflow parent run with three nested children, writes three modality-specific checkpoints under `checkpoints/price_prediction_<modality>/`, and emits `results/modality_comparison_price_prediction.csv` with the ranked comparison. The best-metric variant is flagged `recommended: true` in its `metadata.json` — that's the checkpoint the demo UI should load.
-
-**Kaggle credentials** — one of:
-
-```bash
-# Option 1: environment variables (copy .env.example → .env, fill in)
-export KAGGLE_USERNAME=your_username
-export KAGGLE_KEY=your_api_key
-
-# Option 2: standard Kaggle location
-# Drop kaggle.json at ~/.kaggle/kaggle.json
-```
-
-Get an API key at [kaggle.com/settings/account](https://www.kaggle.com/settings/account) → *Create New Token*.
-
-**Cache location:** Real datasets are cached to `~/.cache/kagglehub/` (outside the repo, outside Docker build context). `data/raw/` stays small even after training on all three modalities.
-
-**Running network tests:** The mocked test suite catches logic bugs; a single `@pytest.mark.network` test in `tests/test_streaming.py` is the canary for real-Kaggle integration. It's skipped by default; run it explicitly once creds are set:
-
-```bash
-uv run pytest -m network tests/test_streaming.py
-```
-
----
-
-## Project Structure
-
-```
-portfolio-ml-system/
-├── configs/                    # YAML configs (hyperparameters, data paths)
-│   ├── credit_risk.yaml
-│   ├── fraud_detection.yaml
-│   ├── price_prediction.yaml
-│   └── demand_forecasting.yaml
+07-Portfolio-ML-System/
+├── configs/                    # EXACTLY 3 files. Each names a real dataset, a seed,
+│   │                           #   a split strategy, and the band the result must fall in.
+│   ├── fraud.yaml              #   IEEE-CIS · time split on TransactionDT
+│   ├── credit_risk.yaml        #   LendingClub · time split on issue_d · 28-column denylist
+│   └── churn.yaml              #   Card attrition · 5-fold stratified CV
 ├── src/
-│   ├── config.py               # Config loader
-│   ├── device.py               # MPS/CUDA/CPU auto-detection
-│   ├── data/                   # Synthetic data generators
-│   ├── features/               # Feature engineering pipelines
-│   ├── models/                 # Model architectures
-│   ├── training/               # Trainers with W&B integration
-│   ├── evaluation/             # Metric computation
-│   └── serving/                # Predictor + FastAPI server
-├── scripts/                    # CLI entry points
-├── web/                        # Next.js 14 demo UI (per-industry pages + /dashboard)
-├── docs/decisions/             # ADRs (e.g., ADR-001 = Gradio → Next.js migration)
-├── checkpoints/                # Saved model weights + metadata
-├── results/                    # Evaluation CSVs
-└── tests/                      # pytest test suite
+│   ├── config.py               # Loads AND validates. Refuses a config with no real data.source.
+│   ├── data/
+│   │   ├── download.py         #   kaggle_dataset / kaggle_competition / openml. No fallback.
+│   │   ├── split.py            #   Time-based by default; val sits between train and test.
+│   │   └── adapters/           #   raw vendor columns -> canonical schema, one per dataset
+│   ├── features/               # 3 modules + schema.py. Imported by training AND serving.
+│   ├── models/registry.py      # @register("lightgbm"). Unknown name -> KeyError listing valid ones.
+│   ├── training/
+│   │   ├── trainer.py          #   BaseTrainer: config, MLflow, W&B, model registry
+│   │   ├── tabular.py          #   ONE config-driven trainer. Replaced 8 train_*.py files.
+│   │   └── autoencoder_pipeline.py  # the unsupervised fraud baseline (the only MPS user)
+│   ├── evaluation/             # PR-AUC primary; precision@k and recall@FPR for the ops framing
+│   ├── explainability/         # SHAP (trees) + input gradients (autoencoder)
+│   └── serving/                # registry · preprocessing · predictors/ · explain · handlers · api
+│                               #   Every file under 150 lines. Was one 573-line monolith.
+├── scripts/                    # download_data · train · evaluate · serve · make_figures
+│                               #   make_fixtures · capture_screenshots · verify_fresh_clone.sh
+├── data/
+│   ├── README.md               # Provenance, licence, access gate, and the leakage traps per dataset
+│   └── sample/                 # COMMITTED 500-row synthetic CI fixtures. Labels are pure noise.
+├── tests/                      # Mirrors src/ package-for-package. 179 tests, 85% coverage.
+│   ├── data/test_leakage_denylist.py   # the highest-value test in the repo
+│   ├── serving/test_skew.py            # training features == serving features
+│   ├── test_quality_gates.py           # metric floor AND leakage ceiling AND monotonicity
+│   └── e2e/test_train_to_serve.py      # fixtures -> train -> checkpoint -> HTTP, under 30s
+├── web/                        # Next.js 14. Three routes + /dashboard. Zero placeholder copy.
+├── infra/                      # docker/ multi-stage non-root images · compose/ 3-service stack
+├── docs/                       # adr/ 0001-0005 · diagrams/ Mermaid + SVG · architecture.md
+├── reports/                    # RESULTS.md + *_metrics.csv (written by training, never by hand)
+├── conftest.py                 # AT ROOT ON PURPOSE — imports xgboost+lightgbm before torch (libomp)
+└── uv.lock                     # COMMITTED. The Docker build fails without it.
 ```
 
 ---
 
-## Training Pipeline
-
-All hyperparameters live in YAML config files -- nothing is hardcoded in training scripts.
+## Quickstart
 
 ```bash
-# Train a specific model
-uv run python scripts/train.py --model credit_risk
-uv run python scripts/train.py --model fraud
-uv run python scripts/train.py --model price
-uv run python scripts/train.py --model forecaster
+git clone https://github.com/armandogon94/Portfolio-ML-System.git
+cd Portfolio-ML-System
+cp .env.example .env
 
-# Train all models
-uv run python scripts/train.py --model all
-
-# Disable W&B (use local logging only)
-uv run python scripts/train.py --model all --no-wandb
+make setup           # uv sync --frozen --extra dev
+make test            # 179 tests on the committed fixtures — no credentials, no network
+make train-sample    # smoke-train all three problems on fixtures (writes NO checkpoint)
 ```
 
-Each training run produces:
-- `checkpoints/<model>/model.*` -- model weights
-- `checkpoints/<model>/metadata.json` -- metrics, hyperparams, timestamps
-- `results/<model>_metrics.csv` -- evaluation results
+**Everything above works with no Kaggle account and no network.** The fixture
+path exists precisely so a reviewer can verify the pipeline before deciding
+whether to sign up for anything.
 
----
-
-## Apple Silicon MPS
-
-Two of the four models use PyTorch with the Metal Performance Shaders (MPS) backend for GPU acceleration on Apple Silicon:
-
-- **Fraud Autoencoder**: Symmetric autoencoder (Input->64->32->16->32->64->Output) trained on normal transactions. Anomaly = high reconstruction error.
-- **LSTM Forecaster**: 2-layer LSTM with 64 hidden units, 30-day lookback, 7-day forecast.
-
-Device is auto-detected via `src/device.py`. Set `PYTORCH_ENABLE_MPS_FALLBACK=1` for operations not yet supported on MPS (handled automatically).
-
----
-
-## Experiment Tracking
-
-**Weights & Biases** (free tier) is supported for cloud experiment tracking:
+To train on real data:
 
 ```bash
-# Set your W&B API key
-export WANDB_API_KEY=your_key_here
-
-# Train with W&B logging
-uv run python scripts/train.py --model all
+make data            # needs a Kaggle token — see data/README.md
+make train
+make evaluate        # reads reports/*_metrics.csv
+make figures         # PR curves, calibration, SHAP -> reports/figures/
 ```
 
-Without an API key, all metrics are still saved locally to `checkpoints/*/metadata.json` and `results/*.csv`.
-
----
-
-## Web Interface
-
-The Next.js demo UI (`web/`) hosts one page per ready model plus a live dashboard:
-
-- **Landing** (`/`) — 6 industry tiles linking into their model lists
-- **/dashboard** — sortable table of all 20 cataloged models with status badges, key metrics, and MLflow training-history sparklines for the ready ones; auto-refreshes every 30 s via Next.js ISR
-- **Per-industry model pages** — one page per ready model, each with a Zod-validated input form on the left and the model's prediction + SHAP/gradient explanation on the right:
-  - `/fintech/credit-risk` · `/fintech/fraud` · `/fintech/churn`
-  - `/real-estate/price` · `/real-estate/rental-price`
-  - `/dental/no-show`
-  - `/healthcare/heart-disease`
-  - `/logistics/eta` · `/logistics/demand`
-  - `/legal/h1b-approval`
+To run the stack:
 
 ```bash
-make web-dev      # Native pnpm dev — fastest iteration, hot reload
-make docker-up    # Full Docker stack (3 services), demo at http://localhost:3071
+make docker-up       # mlflow :5070 · api :8070 · web :3070
+curl http://localhost:8070/health
+open http://localhost:3070/dashboard
 ```
 
-The original Gradio prototype was retired in Phase A.9 — see `docs/decisions/ADR-001-gradio-to-nextjs.md` for the rationale.
+**Requires:** Python 3.11+, Docker 24+, pnpm 10 (for the web app only).
 
 ---
 
-## API Server
+## Data & access
 
-FastAPI inference server with REST endpoints:
+All three datasets are public and free, and **one of them is not
+anonymously downloadable** — a distinction worth stating plainly rather than
+glossing:
 
-```bash
-make serve  # Launches at http://localhost:8000
+| Dataset | Account | Extra gate | Redistributable |
+|---|---|---|---|
+| IEEE-CIS Fraud Detection | Free Kaggle | **Yes — one-click rules acceptance** | **No** |
+| LendingClub 2007-2018Q4 | Free Kaggle | No | Yes (CC0) |
+| Credit Card Customers | Free Kaggle | No | Yes (CC0) |
+| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Yes (DbCL 1.0) |
 
-# Endpoints
-curl -X POST http://localhost:8000/predict/credit-risk -H "Content-Type: application/json" \
-  -d '{"age": 35, "annual_income": 65000, "credit_score": 700, "num_open_accounts": 3, "payment_history_pct": 85, "debt_to_income_ratio": 0.3, "employment_years": 8, "loan_amount": 25000}'
+IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
+rules that cannot be scripted; `src/data/download.py` converts the resulting 403
+into the exact URL to visit. The ULB/OpenML path needs **no account at all**, so
+a reviewer with zero Kaggle presence can still reproduce a real-data fraud result
+end to end.
 
-curl -X POST http://localhost:8000/predict/fraud -H "Content-Type: application/json" \
-  -d '{"transaction_amount": 500, "merchant_category": "electronics", "hour_of_day": 2, "day_of_week": 3, "distance_from_home": 100, "is_online": 1, "card_age_days": 30, "num_transactions_last_hour": 5, "amount_vs_avg_ratio": 10}'
+Because IEEE-CIS competition data is not redistributable, **no real row from any
+of these datasets is committed here.** The only data in git is `data/sample/` —
+500-row synthetic fixtures whose labels are drawn independently of the features,
+used by CI and by nothing else.
 
-curl http://localhost:8000/health
-curl http://localhost:8000/models
-```
+Full provenance, per-dataset column notes and both leakage traps:
+[`data/README.md`](data/README.md).
 
 ---
+
+## Reproducibility
+
+- **Seed 42**, declared once per config and threaded into the split,
+  preprocessing and every estimator by `BaseTrainer._seed_everything`.
+- **`uv.lock` is committed** (758 KB). Before this, `.gitignore` hid it while
+  `api.Dockerfile` ran `COPY pyproject.toml uv.lock ./` and `uv sync --frozen` —
+  the advertised quickstart was physically unbuildable from a fresh clone.
+  `scripts/verify_fresh_clone.sh` exists to keep that fixed.
+- **Every checkpoint carries its own provenance.**
+  `checkpoints/<problem>/metadata.json` records the git SHA that trained it, the
+  seed, the dataset source, the split config, the full feature column list, every
+  metric, and a `suspected_leakage` field.
+- **`/predict` returns `model_version`** — the short git SHA from that metadata —
+  on every response. A score with no provenance is unreviewable.
+- **No number is typed by hand.** `scripts/evaluate.py` reads
+  `reports/*_metrics.csv`; it computes nothing. There is no code path from a
+  fixture to a published table.
+
+## Explainability
+
+Two explainers, dispatched on the checkpoint's model type by
+[`src/serving/explain.py`](src/serving/explain.py):
+
+- **SHAP `TreeExplainer`** for LightGBM and XGBoost — exact, fast enough for a
+  request path, and returns signed per-feature contributions.
+- **Input-gradient attribution** for the autoencoder baseline, because
+  `TreeExplainer` does not apply and `KernelExplainer` on a 12-layer MLP is far
+  too slow to serve.
+
+An unknown model type raises `NotImplementedError` → HTTP 501 rather than
+returning an empty explanation that a UI would render as "no important features".
+
+The `/explain/*` routes reuse the exact feature frame the score was computed
+from, so the explanation always describes the number beside it.
 
 ## Testing
 
 ```bash
-make test                    # Run all tests
-uv run pytest tests/ -v      # Verbose output
+make test       # 179 tests, excludes the live-Kaggle canary
+make test-all   # includes it (needs credentials)
+make lint typecheck
+make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
----
+**179 tests · 18 skipped · 85% coverage on `src/`.** The 18 skips are the quality
+gates, which need a real checkpoint and skip with the command that creates one —
+skipping is correct; a vacuously passing gate is not.
 
-## Data
+What the gates assert, beyond plumbing:
 
-All datasets are **synthetic**, generated via Python scripts with realistic statistical distributions. No external downloads required -- the project is fully self-contained.
+| Test | Assertion |
+|---|---|
+| [`tests/data/test_leakage_denylist.py`](tests/data/test_leakage_denylist.py) | No post-origination LendingClub column and neither `Naive_Bayes_Classifier_*` column reaches a model matrix |
+| [`tests/training/test_split.py`](tests/training/test_split.py) | No training timestamp is later than the earliest test timestamp; validation sits between them |
+| [`tests/serving/test_skew.py`](tests/serving/test_skew.py) | Serving features == training features, row for row, on a fixture batch |
+| [`tests/test_quality_gates.py`](tests/test_quality_gates.py) | Metric floor, **leakage ceiling**, model beats its own baseline, monotonic direction |
+| [`tests/e2e/test_train_to_serve.py`](tests/e2e/test_train_to_serve.py) | Fixtures → train → checkpoint → HTTP predict in under 30s, and asserts the fixture result is **near chance** |
 
-| Dataset | Rows | Features | Generation Method |
-|---------|------|----------|------------------|
-| Credit Risk | 50,000 | 8 + engineered | Log-normal income, logistic default target |
-| Fraud | 200,000 | 9 + engineered | Shifted distributions for fraud patterns |
-| Housing | 30,000 | 9 + engineered | Polynomial price function + noise |
-| Time Series | 5,475 | 4 | Trend + seasonality + holidays + noise |
-
----
-
-## Tech Stack
-
-- **ML**: PyTorch, XGBoost, LightGBM, scikit-learn
-- **Tracking**: Weights & Biases (free tier) + MLflow (always-on local)
-- **Web UI**: Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui + Recharts
-- **API**: FastAPI + Uvicorn
-- **Data**: Faker, NumPy, Pandas; real Kaggle datasets streamed via `kagglehub`
-- **Environment**: uv (10-100x faster than pip), pnpm for the web app
-- **Hardware**: Apple Silicon MPS acceleration
+`pyproject.toml` no longer hides `-m 'not network and not parity'` in `addopts`.
+The network exclusion now lives visibly in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
+
+## Limitations & Known Caveats
+
+- **No metric is published yet.** The code is complete; the datasets require
+  credentials this build did not have. See [`docs/PROGRESS.md`](docs/PROGRESS.md).
+- **IEEE-CIS test labels do not exist.** The competition's `test_transaction.csv`
+  is unlabelled, so evaluation is a temporal split *within* the training file.
+  That is the only honest option, and a random split would inflate AUC by putting
+  the same card and device on both sides of the boundary.
+- **Churn is n = 10,127 and easy.** Expect a high number that means little. It is
+  reported as a 5-fold mean ± std, and both the API response and the UI carry
+  that caveat inline.
+- **The credit-risk thresholds are illustrative, not a credit policy.** A real
+  approve/decline cut point comes from expected loss at a target approval rate,
+  which needs a pricing model this repository does not contain.
+- **MPS on the host, CPU in Docker.** `src/device.py` selects MPS on Apple
+  Silicon, but `infra/docker/api.Dockerfile` force-installs CPU PyTorch — MPS is
+  macOS-only and cannot exist in a Linux container. LightGBM and XGBoost ship
+  CPU-only wheels on macOS arm64 regardless, so the three headline models gain
+  nothing from MPS either way.
+- **No deployment.** Zero cloud budget, and no dead "Live:" link. Docker plus the
+  committed screenshot script is the demo.
+- **`docs/images/` is empty.** `scripts/capture_screenshots.py` is committed and
+  regenerable but was not run: with no trained checkpoints it would capture empty
+  states, and faking them is the exact failure this rebuild corrects.
+
+## Tech decisions
+
+| ADR | Decision |
+|---|---|
+| [0001](docs/adr/0001-gradio-to-nextjs.md) | Gradio → Next.js + shadcn/ui. Gradio could not do per-model deep links or bespoke result cards, and every Gradio app looks like a research prototype. |
+| [0002](docs/adr/0002-experiment-tracking.md) | MLflow primary and always-on, W&B optional. MLflow is self-hosted with zero config and gives a model registry; the W&B free tier does not. |
+| [0003](docs/adr/0003-real-data-over-synthetic.md) | **Real public data only.** Every generator deleted, the config loader enforces it, and the old 0.964 is publicly retracted with its mechanism stated. |
+| [0004](docs/adr/0004-narrow-to-fintech.md) | Ten industries → three fintech problems. Twenty-one catalogued models over four checkpoints was breadth as a tell, not as range. |
+| [0005](docs/adr/0005-assumptions-log.md) | Assumptions taken during the autonomous rebuild, each reversible in one commit. |
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+## Author
+
+**Armando Gonzalez** — ex-software engineer at a fintech company, finishing an
+M.S. in Data Science & AI at FIU.
+[GitHub](https://github.com/armandogon94)

@@ -1,0 +1,78 @@
+# Credit-card customer attrition — sakshigoyal7/credit-card-customers.
+#
+# n = 10,127. That is small. A single hold-out number on this dataset is noise
+# dressed as a result, so evaluation is 5-fold STRATIFIED CV and every metric is
+# reported as mean +/- std across folds.
+problem: churn
+seed: 42
+
+data:
+  source:
+    kind: kaggle_dataset
+    slug: sakshigoyal7/credit-card-customers
+    filename: BankChurners.csv
+    adapter: src.data.adapters.credit_card_churn
+  sample_path: data/sample/churn_sample.csv
+  processed_path: data/processed/churn.parquet
+  target: is_attrited
+
+  # The published CSV ships two pre-computed Naive-Bayes posterior columns that
+  # the dataset's own author instructs you to delete. They are the target,
+  # laundered. reports/RESULTS.md reports the AUC with AND without them as an
+  # explicit leakage demonstration.
+  denylist:
+    - CLIENTNUM
+    - Attrition_Flag
+    - is_attrited
+    - Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_1
+    - Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2
+
+split:
+  type: stratified_kfold
+  n_splits: 5
+
+features:
+  module: src.features.churn_features
+
+model:
+  type: lightgbm
+  params:
+    objective: binary
+    metric: average_precision
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 20
+    feature_fraction: 0.9
+    bagging_fraction: 0.9
+    bagging_freq: 1
+    n_estimators: 400
+    n_jobs: 8
+    verbose: -1
+
+baselines:
+  - type: prior
+  - type: logreg
+    params:
+      max_iter: 1000
+      class_weight: balanced
+
+metrics:
+  primary: pr_auc
+  report:
+    - pr_auc
+    - roc_auc
+    - precision_at_1pct
+    - recall_at_1pct_fpr
+    - brier
+
+# This is an easy, well-separated dataset. A high score here is not evidence of
+# skill and the README says so. The floor exists to catch a broken pipeline,
+# not to celebrate.
+expected:
+  roc_auc_min: 0.85
+  roc_auc_max: 1.0
+
+training:
+  checkpoint_dir: checkpoints/churn
+  reports_dir: reports
+  mlflow_experiment: fintech-ml-system

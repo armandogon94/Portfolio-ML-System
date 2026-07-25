@@ -12,9 +12,6 @@ build/
 venv/
 env/
 
-# uv
-uv.lock
-
 # Data (regenerated via scripts)
 data/raw/*.csv
 data/processed/*.csv
@@ -65,3 +62,15 @@ mlartifacts/
 
 # --- build artifacts ---
 *.tsbuildinfo
+
+# Agent scaffolding — never published
+ops/ports.local.md
+
+# Generated state
+artifacts/
+.coverage*
+
+# Superseded process docs — content migrated to docs/adr/ (0002, 0004).
+# Kept out of the tree entirely; git history is the record.
+/SPEC.md
+/decision.md

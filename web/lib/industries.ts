@@ -1,27 +1,29 @@
 /**
- * Industry registry — the single source of truth for landing tiles,
- * sidebar nav, and dashboard listings.
+ * Industry registry — the single source of truth for landing tiles, nav and the
+ * dashboard.
  *
- * Each entry describes one industry vertical and the ML models Phase A.3+
- * will ship underneath. As industry slices land (A.3–A.8), the agents will
- * append model entries to their industry's `models` list so the stub
- * industry-index pages can enumerate what's available.
+ * One industry. Three models. Every entry is `ready: true` and every tagline is
+ * real copy.
  *
- * Icons are lucide-react components. Keep them consistent with the tile
- * art; swap in a better icon only if the current one misleads the viewer.
- * All taglines are marked TODO(copy) — placeholders that Armando can edit
- * without touching any component code.
+ * The previous version listed six industries and twenty-one models, ten of which
+ * were permanent placeholders carrying literal `TODO(copy)` taglines. A dashboard
+ * whose rows never resolve reads as abandonment, and six unrelated verticals read
+ * as generated breadth. See `docs/adr/0004-narrow-to-fintech.md`.
  */
-import { DollarSign, Gavel, HeartPulse, Home, Smile, Truck, type LucideIcon } from "lucide-react";
+import { DollarSign, type LucideIcon } from "lucide-react";
 
 export type IndustryModel = {
-  /** Route slug relative to the industry index (e.g., "credit-risk"). */
+  /** Route slug relative to the industry index (e.g. "credit-risk"). */
   slug: string;
   /** Display name on the industry page. */
   title: string;
-  /** One-line description of what this model does. */
+  /** One line on what this model does and what it is trained on. */
   description: string;
-  /** Whether the model page has been built yet. */
+  /**
+   * Whether the model page exists. Every entry here is true — an unbuilt model
+   * does not get a catalogue row. Whether a *checkpoint* exists is a separate,
+   * runtime question answered by the FastAPI `/models` endpoint.
+   */
   ready: boolean;
 };
 
@@ -30,202 +32,64 @@ export type Industry = {
   slug: string;
   /** Display name. */
   title: string;
-  /** TODO(copy) — short tagline shown on the landing tile. */
+  /** Short tagline shown on the landing tile. */
   tagline: string;
   /** Route href (always "/" + slug). */
   href: string;
   /** lucide-react icon component. */
   icon: LucideIcon;
-  /** Total models planned for this industry (incl. not-yet-shipped). */
+  /** Number of models. Derived from `models.length`, never hand-maintained. */
   modelCount: number;
-  /** Model list — A.3–A.8 flip `ready: true` and point slug at their page. */
   models: IndustryModel[];
 };
 
-export const INDUSTRIES: Industry[] = [
+const FINTECH_MODELS: IndustryModel[] = [
   {
-    slug: "real-estate",
-    title: "Real Estate",
-    tagline: "Price prediction, rental estimates, days-on-market", // TODO(copy)
-    href: "/real-estate",
-    icon: Home,
-    modelCount: 3,
-    models: [
-      {
-        slug: "price",
-        title: "Price Prediction",
-        description: "Synthetic home-price regressor (LightGBM).",
-        ready: true,
-      },
-      {
-        slug: "rental-price",
-        title: "Rental Price",
-        description: "Airbnb-trained nightly rate estimator.",
-        ready: true,
-      },
-      {
-        slug: "days-on-market",
-        title: "Days on Market",
-        description: "How long a listing will take to sell.",
-        ready: false,
-      },
-    ],
+    slug: "fraud",
+    title: "Payment Fraud",
+    description:
+      "LightGBM on IEEE-CIS (Vesta) real e-commerce payments, evaluated on a time-based split.",
+    ready: true,
   },
   {
-    slug: "dental",
-    title: "Dental Clinics",
-    tagline: "Cavity detection from X-rays, no-show prediction, treatment plans", // TODO(copy)
-    href: "/dental",
-    icon: Smile,
-    modelCount: 3,
-    models: [
-      {
-        slug: "caries",
-        title: "Cavity Detection",
-        description: "EfficientNet-B0 X-ray classifier (MPS).",
-        ready: false,
-      },
-      {
-        slug: "no-show",
-        title: "Patient No-Show",
-        description: "XGBoost risk of missed appointment.",
-        ready: true,
-      },
-      {
-        slug: "treatment-plan",
-        title: "Treatment Plan",
-        description: "Recommender for next-procedure.",
-        ready: false,
-      },
-    ],
+    slug: "credit-risk",
+    title: "Consumer Credit Risk",
+    description:
+      "LightGBM on LendingClub 2007-2018Q4. Terminal loan outcomes only, post-origination fields denylisted.",
+    ready: true,
   },
   {
-    slug: "healthcare",
-    title: "Healthcare",
-    tagline: "Readmission risk, heart disease, diabetes, length-of-stay", // TODO(copy)
-    href: "/healthcare",
-    icon: HeartPulse,
-    modelCount: 4,
-    models: [
-      {
-        slug: "readmission",
-        title: "30-Day Readmission",
-        description: "UCI Diabetes 130 risk model.",
-        ready: false,
-      },
-      {
-        slug: "heart-disease",
-        title: "Heart Disease Risk",
-        description: "Cleveland dataset LightGBM.",
-        ready: true,
-      },
-      {
-        slug: "diabetes-onset",
-        title: "Diabetes Onset",
-        description: "PIMA-style XGBoost classifier.",
-        ready: false,
-      },
-      {
-        slug: "length-of-stay",
-        title: "Length of Stay",
-        description: "LSTM over synthetic vitals windows.",
-        ready: false,
-      },
-    ],
-  },
-  {
-    slug: "fintech",
-    title: "Fintech",
-    tagline: "Credit risk, fraud detection, loan approval, customer churn", // TODO(copy)
-    href: "/fintech",
-    icon: DollarSign,
-    modelCount: 4,
-    models: [
-      {
-        slug: "credit-risk",
-        title: "Credit Risk Scoring",
-        description: "XGBoost loan-default classifier.",
-        ready: true,
-      },
-      {
-        slug: "fraud",
-        title: "Fraud Detection",
-        description: "PyTorch autoencoder + isolation forest.",
-        ready: true,
-      },
-      {
-        slug: "loan-approval",
-        title: "Loan Approval",
-        description: "LightGBM eligibility classifier.",
-        ready: false,
-      },
-      {
-        slug: "churn",
-        title: "Customer Churn",
-        description: "Bank churn XGBoost classifier.",
-        ready: true,
-      },
-    ],
-  },
-  {
-    slug: "logistics",
-    title: "Logistics",
-    tagline: "Demand forecasting, delivery ETA, shipment damage risk", // TODO(copy)
-    href: "/logistics",
-    icon: Truck,
-    modelCount: 3,
-    models: [
-      {
-        slug: "demand",
-        title: "Demand Forecasting",
-        description: "PyTorch LSTM 7-day forecast.",
-        ready: true,
-      },
-      {
-        slug: "eta",
-        title: "Delivery ETA",
-        description: "XGBoost regressor on synthetic delivery data.",
-        ready: true,
-      },
-      {
-        slug: "damage-risk",
-        title: "Shipment Damage Risk",
-        description: "XGBoost risk classifier.",
-        ready: false,
-      },
-    ],
-  },
-  {
-    slug: "legal",
-    title: "Legal / Immigration",
-    tagline: "H-1B approval, case duration, legal document classification", // TODO(copy)
-    href: "/legal",
-    icon: Gavel,
-    modelCount: 3,
-    models: [
-      {
-        slug: "h1b-approval",
-        title: "H-1B Approval",
-        description: "XGBoost on LCA disclosure data.",
-        ready: true,
-      },
-      {
-        slug: "case-duration",
-        title: "Case Duration",
-        description: "LightGBM regressor on USCIS data.",
-        ready: false,
-      },
-      {
-        slug: "doc-classification",
-        title: "Legal Doc Classifier",
-        description: "DistilBERT fine-tune (MPS).",
-        ready: false,
-      },
-    ],
+    slug: "churn",
+    title: "Card Attrition",
+    description:
+      "LightGBM on 10,127 real bank cardholders, scored by 5-fold stratified cross-validation.",
+    ready: true,
   },
 ];
 
-/** Lookup by slug — used by industry-index pages to enumerate their models. */
+export const INDUSTRIES: Industry[] = [
+  {
+    slug: "fintech",
+    title: "Fintech",
+    tagline: "Payment fraud, consumer credit risk, and card attrition",
+    href: "/fintech",
+    icon: DollarSign,
+    modelCount: FINTECH_MODELS.length,
+    models: FINTECH_MODELS,
+  },
+];
+
+/** Look up an industry by slug. Returns undefined for an unknown slug. */
 export function getIndustry(slug: string): Industry | undefined {
-  return INDUSTRIES.find((i) => i.slug === slug);
+  return INDUSTRIES.find((industry) => industry.slug === slug);
 }
+
+/** Flat list of every (industry, model) pair. Used by nav and the dashboard. */
+export const ALL_MODELS = INDUSTRIES.flatMap((industry) =>
+  industry.models.map((model) => ({
+    ...model,
+    industrySlug: industry.slug,
+    industryTitle: industry.title,
+    href: `/${industry.slug}/${model.slug}`,
+  })),
+);

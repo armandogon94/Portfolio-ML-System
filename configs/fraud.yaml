@@ -1,0 +1,79 @@
+# Payment fraud — IEEE-CIS Fraud Detection (Vesta Corporation real e-commerce payments).
+#
+# The label `isFraud` comes with the dataset. Nothing in this repo generates it.
+# The split is TIME-BASED on TransactionDT: a random split puts the same card and
+# device on both sides of the boundary and inflates AUC by several points.
+problem: fraud
+seed: 42
+
+data:
+  source:
+    kind: kaggle_competition          # requires one-click rules acceptance, see data/README.md
+    slug: ieee-fraud-detection
+    adapter: src.data.adapters.ieee_cis
+  sample_path: data/sample/ieee_cis_sample.csv   # CI fixture only — never a published number
+  processed_path: data/processed/fraud.parquet
+  target: isFraud
+
+  # Columns the feature layer must never hand to the model. TransactionID is a row
+  # id that increases with time, so it encodes the split boundary directly.
+  denylist:
+    - TransactionID
+    - isFraud
+
+split:
+  type: time
+  column: TransactionDT
+  test_size: 0.2
+  # Validation fold carved out of the tail of train, also time-ordered.
+  val_size: 0.1
+
+features:
+  module: src.features.fraud_features
+
+model:
+  type: lightgbm
+  params:
+    objective: binary
+    metric: average_precision
+    learning_rate: 0.05
+    num_leaves: 63
+    min_child_samples: 100
+    feature_fraction: 0.7
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    n_estimators: 2000
+    early_stopping_rounds: 100
+    n_jobs: 8            # 4P + 6E cores; 8 avoids starving the OS. No GPU: LightGBM
+                         # has CPU-only wheels on macOS arm64 (no Metal backend exists).
+    verbose: -1
+
+# Baselines are mandatory. No leaderboard row without them.
+baselines:
+  - type: prior
+  - type: logreg
+    params:
+      max_iter: 1000
+      class_weight: balanced
+
+metrics:
+  primary: pr_auc        # 3.5% positives — average precision, not ROC-AUC
+  report:
+    - pr_auc
+    - roc_auc
+    - precision_at_1pct
+    - recall_at_1pct_fpr
+    - brier
+
+# Sanity band. Outside this range the run is a bug, not a result.
+# IEEE-CIS winning ensembles reached ~0.94-0.95 private-LB ROC-AUC after months
+# of feature engineering and blending. A single honest LightGBM on a temporal
+# split should land near 0.90. >= 0.96 means leakage — investigate, do not ship.
+expected:
+  roc_auc_min: 0.85
+  roc_auc_max: 0.96
+
+training:
+  checkpoint_dir: checkpoints/fraud
+  reports_dir: reports
+  mlflow_experiment: fintech-ml-system

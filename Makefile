@@ -1,79 +1,115 @@
-.PHONY: setup data train evaluate serve test lint format clean all
-.PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean docker-dev-up docker-dev-down
-.PHONY: web-install web-dev web-build web-test web-lint web-typecheck
+# Fintech ML System — one entrypoint per stage.
+#
+# The default target is `help`, so `make` on its own tells you what exists
+# instead of silently running the first rule.
 
-setup:
-	uv sync --extra dev
+COMPOSE := docker compose -f infra/compose/base.yml
+COMPOSE_DEV := $(COMPOSE) -f infra/compose/dev.yml
 
-data:
-	uv run python scripts/generate_data.py --problem all
+.DEFAULT_GOAL := help
+.PHONY: help setup data train train-sample evaluate figures diagrams screenshots serve \
+        test test-all lint format typecheck verify clean \
+        docker-build docker-up docker-down docker-logs docker-test docker-clean \
+        docker-dev-up docker-dev-down \
+        web-install web-dev web-build web-test web-lint web-typecheck
 
-train:
+help:  ## Show this help
+	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+# ── Python pipeline ─────────────────────────────────────────────────────────
+
+setup:  ## Install Python deps from the committed lockfile
+	uv sync --frozen --extra dev
+
+data:  ## Download the real datasets (needs a Kaggle token — see data/README.md)
+	uv run python scripts/download_data.py --dataset all
+
+train:  ## Train all three models on real data
 	uv run python scripts/train.py --model all
 
-evaluate:
-	uv run python scripts/evaluate.py --model all
+train-sample:  ## Smoke-train on the committed CI fixtures (writes NO checkpoint)
+	uv run python scripts/train.py --model all --sample
 
-serve:
+evaluate:  ## Print the results table, read from reports/*_metrics.csv
+	uv run python scripts/evaluate.py
+
+figures:  ## Regenerate every chart from real checkpoints
+	uv run python scripts/make_figures.py
+
+diagrams:  ## Export docs/diagrams/*.mmd to SVG
+	@for f in docs/diagrams/*.mmd; do \
+	  echo "  $$f"; \
+	  npx -y @mermaid-js/mermaid-cli -i "$$f" -o "$${f%.mmd}.svg" -b transparent; \
+	done
+
+screenshots:  ## Capture README screenshots (needs the stack running + a trained model)
+	uv run python scripts/capture_screenshots.py
+
+serve:  ## Run the inference API on :8070
 	uv run python scripts/serve.py
 
-test:
-	uv run pytest tests/ -v --tb=short
+# ── Quality gates ───────────────────────────────────────────────────────────
 
-lint:
+test:  ## Run the test suite (excludes the live-Kaggle canary)
+	uv run pytest -m "not network"
+
+test-all:  ## Run everything INCLUDING the live-Kaggle canary (needs credentials)
+	uv run pytest
+
+lint:  ## ruff check + format check
 	uv run ruff check src/ scripts/ tests/
 	uv run ruff format --check src/ scripts/ tests/
 
-format:
+format:  ## Apply ruff formatting
 	uv run ruff format src/ scripts/ tests/
 
-clean:
-	rm -rf data/raw/*.csv data/processed/*.csv
-	rm -rf checkpoints/*/
-	rm -rf results/*.csv
-	rm -rf wandb/
-	rm -rf __pycache__ .pytest_cache
+typecheck:  ## mypy on src/
+	uv run mypy src/
 
-all: data train evaluate
-	@echo "Full pipeline complete. Run 'make web-dev' (or 'make docker-up') to launch the Next.js demo UI at http://localhost:3071"
+verify:  ## Clone HEAD into a temp dir and run the documented quickstart
+	./scripts/verify_fresh_clone.sh
 
-# ── Docker targets ──────────────────────────────────────────────────
+clean:  ## Remove generated data, checkpoints and caches
+	rm -rf data/raw/*.csv data/processed/* checkpoints/*/ reports/figures/*.png
+	rm -rf .pytest_cache .ruff_cache .coverage htmlcov __pycache__
 
-docker-build:
-	docker compose build
+# ── Docker ──────────────────────────────────────────────────────────────────
 
-docker-up:
-	docker compose up -d
+docker-build:  ## Build all images
+	$(COMPOSE) build
 
-docker-down:
-	docker compose down
+docker-up:  ## Start the full stack (mlflow :5070, api :8070, web :3070)
+	$(COMPOSE) up -d --wait
+	@echo "  web      http://localhost:3070"
+	@echo "  api      http://localhost:8070/docs"
+	@echo "  mlflow   http://localhost:5070"
 
-docker-logs:
-	docker compose logs -f
+docker-down:  ## Stop the stack
+	$(COMPOSE) down
 
-docker-test:
-	docker compose run --rm ml-api python -m pytest tests/ -v --tb=short
+docker-logs:  ## Tail the stack logs
+	$(COMPOSE) logs -f
 
-docker-clean:
-	docker compose down -v --rmi local
+docker-test:  ## Run the test suite inside the API container
+	$(COMPOSE) run --rm ml-api python -m pytest -m "not network" -q
 
-# Dev override — ml-web runs `pnpm dev` with volume-mounted source
-# so file edits hot-reload in the container. Other services
-# (mlflow, ml-api) stay production-style.
-docker-dev-up:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+docker-clean:  ## Stop the stack and remove its volumes and local images
+	$(COMPOSE) down -v --rmi local
+
+docker-dev-up:  ## Stack with the web service in hot-reload mode
+	$(COMPOSE_DEV) up
 
 docker-dev-down:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+	$(COMPOSE_DEV) down
 
-# ── Next.js frontend targets (web/) ─────────────────────────────────
-# Prefer these for day-to-day dev — native pnpm is faster than Docker.
-# INTERNAL_API_URL is the server-side rewrite target (see web/next.config.mjs).
+# ── Next.js frontend ────────────────────────────────────────────────────────
+# Prefer these over Docker for day-to-day work; native pnpm is much faster.
 
 web-install:
-	cd web && pnpm install
+	cd web && pnpm install --frozen-lockfile
 
-web-dev:
+web-dev:  ## Next.js dev server on :3070, proxying /api to :8070
 	cd web && INTERNAL_API_URL=http://localhost:8070 pnpm dev
 
 web-build:

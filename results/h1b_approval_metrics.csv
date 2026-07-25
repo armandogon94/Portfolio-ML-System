@@ -1,6 +1,0 @@
-metric,value
-test_accuracy,0.7537
-test_precision,0.7793912639405205
-test_recall,0.9224529080159494
-test_f1,0.844909010767584
-test_auc_roc,0.7585881462705141

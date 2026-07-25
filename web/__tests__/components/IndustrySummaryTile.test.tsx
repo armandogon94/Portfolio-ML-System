@@ -24,8 +24,8 @@ function row(
     keyMetric:
       metric === null
         ? null
-        : { name: "test_auc_roc", label: "AUC-ROC", value: metric, higherIsBetter: true },
-    lastTrained: status === "ready" ? "2026-04-23T00:00:00" : null,
+        : { name: "test_pr_auc", label: "PR-AUC", value: metric, higherIsBetter: true },
+    lastTrained: status === "ready" ? "2026-07-24T00:00:00+00:00" : null,
     history: [],
   };
 }
@@ -42,20 +42,30 @@ describe("IndustrySummaryTile", () => {
 
   it("shows ready-count over total in the format 'N/M ready'", () => {
     const rows = [
-      row("credit-risk", "ready", 0.85),
-      row("fraud", "ready", 0.91),
-      row("loan-approval", "not_built", null),
-      row("churn", "ready", 0.79),
+      row("credit-risk", "ready", 0.31),
+      row("fraud", "ready", 0.28),
+      row("churn", "not_built", null),
     ];
     render(<IndustrySummaryTile industry={FINTECH} rows={rows} />);
-    // FINTECH has modelCount=4 total
-    expect(screen.getByTestId("ready-count")).toHaveTextContent("3/4 ready");
+    // Fintech has three catalogued models; two of them have checkpoints.
+    expect(screen.getByTestId("ready-count")).toHaveTextContent("2/3 ready");
   });
 
-  it("shows the average key-metric across ready rows when ≥1 ready", () => {
+  it("reports 0/3 on a fresh clone with no checkpoints at all", () => {
+    // The repository's real current state — see docs/PROGRESS.md.
+    const rows = [
+      row("fraud", "not_built", null),
+      row("credit-risk", "not_built", null),
+      row("churn", "not_built", null),
+    ];
+    render(<IndustrySummaryTile industry={FINTECH} rows={rows} />);
+    expect(screen.getByTestId("ready-count")).toHaveTextContent("0/3 ready");
+  });
+
+  it("shows the average key-metric across ready rows when at least one is ready", () => {
     const rows = [row("credit-risk", "ready", 0.8), row("fraud", "ready", 0.9)];
     render(<IndustrySummaryTile industry={FINTECH} rows={rows} />);
-    // (0.80 + 0.90) / 2 = 0.85 → "85.0%"
+    // (0.80 + 0.90) / 2 = 0.85 -> "85.0%"
     expect(screen.getByTestId("avg-metric")).toHaveTextContent(/85\.0%|0\.850|0\.85/);
   });
 

@@ -1,44 +1,56 @@
-"""Run the full pipeline: generate data -> train all models -> evaluate."""
+#!/usr/bin/env python
+"""Run the documented pipeline end to end: download -> train -> evaluate.
 
+A thin orchestrator over the three scripts that do the work, so the README can
+say "make all" and mean it. Each stage's exit code is honoured — a failed download
+does not silently proceed to training on nothing.
+
+Usage:
+    uv run python scripts/run_all.py
+    uv run python scripts/run_all.py --sample     # fixtures only, no downloads
+"""
+
+from __future__ import annotations
+
+import argparse
 import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from rich.console import Console
-
-console = Console()
-
-SCRIPTS_DIR = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent
 
 
-def run_step(description: str, cmd: list[str]) -> None:
-    console.print(f"\n[bold blue]{'='*60}[/bold blue]")
-    console.print(f"[bold blue]{description}[/bold blue]")
-    console.print(f"[bold blue]{'='*60}[/bold blue]")
-    result = subprocess.run(cmd, cwd=SCRIPTS_DIR.parent)
-    if result.returncode != 0:
-        console.print(f"[bold red]Failed: {description}[/bold red]")
-        sys.exit(1)
+def _run(stage: str, command: list[str]) -> int:
+    print(f"\n{'=' * 70}\n==> {stage}\n{'=' * 70}", flush=True)
+    return subprocess.call([sys.executable, *command], cwd=ROOT)
 
 
-def main():
-    console.print("[bold]Full ML Pipeline[/bold]\n")
-
-    run_step(
-        "Step 1: Generate Synthetic Data",
-        [sys.executable, str(SCRIPTS_DIR / "generate_data.py"), "--problem", "all"],
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument(
+        "--sample",
+        action="store_true",
+        help="Skip downloads and train on the committed CI fixtures (writes nothing).",
     )
-    run_step(
-        "Step 2: Train All Models",
-        [sys.executable, str(SCRIPTS_DIR / "train.py"), "--model", "all", "--no-wandb"],
-    )
-    run_step("Step 3: Evaluate and Summarize", [sys.executable, str(SCRIPTS_DIR / "evaluate.py")])
+    args = parser.parse_args()
 
-    console.print("\n[bold green]Full pipeline complete![/bold green]")
-    console.print("Run [cyan]make ui[/cyan] to launch the web interface.")
+    if not args.sample:
+        code = _run("download", ["scripts/download_data.py", "--dataset", "all"])
+        if code != 0:
+            print(
+                "\nDownload failed. Nothing was trained and no metric was written.\n"
+                "See the remediation above, or docs/PROGRESS.md.",
+                file=sys.stderr,
+            )
+            return code
+
+    train = ["scripts/train.py", "--model", "all"] + (["--sample"] if args.sample else [])
+    code = _run("train", train)
+    if code != 0:
+        return code
+
+    return _run("evaluate", ["scripts/evaluate.py"])
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -36,22 +36,23 @@ class GradientExplainer:
         model.eval()
 
         x = X.clone().detach().requires_grad_(True)
-        recon_error = model.reconstruction_error(x)
+        recon_error = model.reconstruction_error(x)  # type: ignore[operator]
         recon_error.sum().backward()
 
+        gradient = x.grad
+        if gradient is None:  # pragma: no cover - autograd always populates .grad here
+            raise RuntimeError(
+                "No gradient reached the input. The model must be in a graph-building "
+                "state and reconstruction_error must be differentiable w.r.t. its input."
+            )
         # Absolute gradient as importance
-        importances = x.grad.abs().squeeze(0).detach().numpy()
+        importances = gradient.abs().squeeze(0).detach().numpy()
 
-        feature_importances = {
-            name: float(val) for name, val in zip(feature_names, importances)
-        }
+        feature_importances = {name: float(val) for name, val in zip(feature_names, importances)}
 
-        sorted_features = sorted(
-            feature_importances.items(), key=lambda kv: kv[1], reverse=True
-        )
+        sorted_features = sorted(feature_importances.items(), key=lambda kv: kv[1], reverse=True)
         top_features = [
-            {"feature": name, "importance": float(val)}
-            for name, val in sorted_features[:top_n]
+            {"feature": name, "importance": float(val)} for name, val in sorted_features[:top_n]
         ]
 
         return {
