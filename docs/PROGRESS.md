@@ -41,9 +41,12 @@ Branch: `rebuild/fintech-real-data`. Every slice below is a separate commit.
 - [x] **Slice 9 — Docs, diagrams, ADRs, README rewrite.** ADRs 0001–0005; three
       Mermaid diagrams inline and exported to SVG; `docs/architecture.md`;
       `docs/ports.example.md`; `data/README.md`; `reports/RESULTS.md`.
-- [x] **Slice 10 — CI + fresh-clone verifier.** `.github/workflows/ci.yml` (the
-      directory had been empty across 84 commits) and
-      `scripts/verify_fresh_clone.sh`.
+- [~] **Slice 10 — CI + fresh-clone verifier.** `.github/workflows/ci.yml` written
+      (the directory had been empty across 84 commits) and
+      `scripts/verify_fresh_clone.sh` written, run, and its findings fixed —
+      stages 1-6 pass, stage 7 (Docker) did not complete here, see below.
+      **CI has never run**, because pushing was forbidden. The badge will show
+      "no status" until you push.
 
 ---
 
@@ -175,40 +178,78 @@ why, so the absence is disclosed rather than hidden.
 
 `scripts/verify_fresh_clone.sh` is committed and executable. It clones the
 committed HEAD into a throwaway directory — so only tracked files exist — and
-runs the documented quickstart in seven stages.
+runs the documented quickstart in seven stages. Run with `make verify`.
+
+**Result of the last full run:**
 
 | Stage | Result |
 |---|---|
 | 1. Clone committed HEAD | **PASS** |
 | 2. Files the quickstart needs are tracked (`uv.lock`, `LICENSE`, `.env.example`, `pnpm-lock.yaml`, Dockerfile, compose, `data/sample/`) | **PASS** |
-| 3. Hygiene — no `CLAUDE.md`/`AGENTS.md`/`PORT-MAP`/`.claude/`/`.bak` tracked; no `src/data/generate_*.py`; no `YOUR_USERNAME`; the retraction section still present | **PASS** |
+| 3. Hygiene — no `CLAUDE.md`/`AGENTS.md`/`PORT-MAP`/`.claude/`/`.bak` tracked; no `src/data/generate_*.py`; no `YOUR_USERNAME`; the retraction section present | **PASS** |
 | 4. Every relative README link resolves inside the clone | **PASS** |
-| 5. `uv sync --frozen` then `pytest -m "not network"` | **PASS** |
-| 6. `pnpm install --frozen-lockfile` → typecheck → test → build | see run log |
-| 7. `docker build` + `compose up --wait` + `GET /health` + `POST /predict/fraud` → **503** | see run log |
+| 5. `uv sync --frozen` then `pytest -m "not network"` | **PASS** — 179 passed, 18 skipped, 1 deselected |
+| 6. `pnpm install --frozen-lockfile` → typecheck → test → build | **PASS** — 98 web tests, build emits 7 routes |
+| 7. `docker build` + `compose up --wait` + `GET /health` + `POST /predict/fraud` → 503 | **NOT COMPLETED** — see below |
 
-Stage 7 asserts that on a clone with no checkpoints `POST /predict/fraud` returns
-**503**, not 500 and not 200. A 200 would mean a model appeared from nowhere.
+### Stage 7 — what happened, honestly
 
-**Things the verifier caught and that were then fixed** (this list is the useful
-part):
+Stage 7 did **not** produce a pass in this session. Two distinct things were found,
+one fixed and one an environment constraint:
 
-1. `infra/docker/api.Dockerfile` had `COPY checkpoints/ ./checkpoints/`.
+1. **Fixed.** The first run failed with
+   `error getting credentials - exec: "docker-credential-osxkeychain": not found`.
+   Docker Desktop installs that helper in
+   `/Applications/Docker.app/Contents/Resources/bin` and adds the directory to
+   PATH **only for login shells**, so `docker build` fails from any script or CI
+   step even for anonymous public images. The verifier now prepends that
+   directory when it exists, and its failure hint is derived from the build log
+   instead of asserting a wrong cause. This changes nothing that any check
+   asserts.
+
+2. **Not resolved here.** With the PATH fixed, the build was queued behind other
+   Docker builds on a machine sitting at **loadavg 26–29** from parallel work in
+   other repositories. This session was instructed not to add heavy compute, so
+   the build was left to run rather than being forced, and it had not finished
+   when this file was written.
+
+**To finish stage 7 yourself**, on a quiet machine:
+
+```bash
+make verify                          # all seven stages
+SKIP_WEB=1 make verify               # stage 7 plus the cheap ones, faster
+```
+
+What stage 7 asserts, so you know what a pass means: the API image builds from
+the clone (which is only possible because `uv.lock` is now tracked), the stack
+comes up with `--wait`, `GET /health` answers within 60s, and
+`POST /predict/fraud` returns **503** — not 500 and not 200. A 200 would mean a
+model appeared from nowhere on a clone with no checkpoints.
+
+### Things the verifier caught, and that were then fixed
+
+This list is the useful part of running it:
+
+1. **`infra/docker/api.Dockerfile` had `COPY checkpoints/ ./checkpoints/`.**
    `checkpoints/` is gitignored, so on a fresh clone the directory does not exist
-   and the build fails. Replaced with a bind mount in `infra/compose/base.yml`
-   plus `RUN mkdir -p /app/checkpoints`.
-2. `infra/compose/*.yml` still declared `context: .` and
-   `dockerfile: Dockerfile.api` after the files moved to `infra/`. Build context
-   corrected to the repository root.
-3. The `Makefile` `docker-*` targets ran bare `docker compose`, which finds no
-   compose file now that it lives in `infra/compose/`. All targets now pass
+   and the build fails outright. Replaced with a read-only bind mount in
+   `infra/compose/base.yml` plus `RUN mkdir -p /app/checkpoints` so the
+   registry's glob has a directory to find.
+2. **`infra/compose/*.yml` still declared `context: .` and
+   `dockerfile: Dockerfile.api`** after those files moved into `infra/`. Build
+   context corrected to the repository root.
+3. **The `Makefile` `docker-*` targets ran bare `docker compose`,** which finds
+   no compose file now that it lives in `infra/compose/`. Every target now passes
    `-f infra/compose/base.yml`.
-4. `data/sample/` was not copied into the API image, so the container could not
-   run its own offline path.
+4. **`data/sample/` was not copied into the API image,** so the container could
+   not run its own offline path.
+5. **A TypeScript error in a test I had just written** (`TS2802`: spreading
+   `HTMLOptionsCollection`). The local working tree had been typechecked *before*
+   that test existed, so only the fresh-clone run found it.
+6. **`SPEC.md` and `decision.md` had been silently re-added** by a `git add -A`
+   after being untracked. Caught by counting tracked root entries.
 
 None of these were fixed by weakening a check.
-
----
 
 ## Owner action items (small, but they are claims)
 
