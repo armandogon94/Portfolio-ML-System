@@ -1,12 +1,31 @@
 # PROGRESS — fintech real-data rebuild
 
-HEAD: `4584c9b` on `main` (the current audit repair is uncommitted by owner instruction)
-NEXT ACTION: `./scripts/verify_fresh_clone.sh`
-SUCCESS: exit 0 with `PASS: every fresh-clone stage ran and the documented quickstart reproduced.`
+HEAD: `60ee15f` on `main`
+NEXT ACTION: `uv run python scripts/train.py --model credit_risk`
+SUCCESS: `reports/credit_risk_metrics.csv` exists and
+`uv run python scripts/evaluate.py --markdown` shows a filled `credit_risk` row.
+That is the last of the five result rows reachable without a Kaggle competition
+token; it needs the 648 MB LendingClub download first
+(`uv run python scripts/download_data.py --dataset lending-club`).
 
-The verifier clones committed `HEAD`; run the next action only after the owner
-has reviewed and committed this batch. Running it before then verifies
-`4584c9b`, not the uncommitted working tree.
+**`./scripts/verify_fresh_clone.sh` PASSES — all seven stages, 2026-07-25 at
+`60ee15f`.** This is the first time stage 7 has ever completed. Verbatim tail:
+
+```
+==> [7/7] docker compose up + /health
+    PASS: docker build (API image)
+    PASS: GET /health
+    PASS: POST /predict/fraud -> 503 on an untrained clone (correct)
+    PASS: teardown
+PASS: every fresh-clone stage ran and the documented quickstart reproduced.
+```
+
+Stage 7 had never passed because every container healthcheck fetched
+`http://localhost:<port>`, and those images resolve `localhost` to `::1` only
+while the servers bind IPv4 `0.0.0.0`. The healthchecks now use `127.0.0.1`.
+
+The verifier clones committed `HEAD`, so it verifies the last commit rather than
+the working tree.
 
 Status legend: `[x]` complete · `[~]` partial · `[ ]` not started · `BLOCKED`
 needs an external input. Commit SHAs describe existing history only; this batch
