@@ -124,8 +124,8 @@ flowchart LR
 **Design decision this encodes.** The split happens **before** feature
 engineering, not after. Frequency encodings and group aggregates are fitted on
 the training rows only and carried forward as artifacts; fitting them on the full
-frame leaks the test distribution and is worth roughly a point of AUC that
-evaporates in production.
+frame leaks information about the test distribution and does not represent
+deployment.
 
 The dotted edge is the other load-bearing detail: the CI fixtures reach the
 trainer but **cannot** reach MLflow, W&B, `checkpoints/` or `reports/`.
@@ -165,8 +165,8 @@ cores, 32 GB RAM, torch 2.13.0, MPS available.
 - **LightGBM and XGBoost ship CPU-only wheels on macOS arm64.** No Metal backend
   exists for either. The three headline models are gradient-boosted trees, so
   MPS buys them nothing; `n_jobs` in the config is the only lever that matters.
-- **MPS gives roughly 1.9–2.2× over CPU on dense matmul**, not 5–10×. The only
-  model here that touches it is the fraud autoencoder baseline.
+- **MPS is available for the fraud autoencoder baseline.** This repository does
+  not contain a committed MPS-versus-CPU benchmark, so it makes no speedup claim.
 - `torch.get_num_threads()` defaults to **4**, not 10.
 - **torch 2.13.0 MPS bug, reproduced twice on this machine:**
   `torch.nn.MultiheadAttention` hangs on MPS, and a CPU tensor loop deadlocked at

@@ -113,8 +113,7 @@ class TabularTrainer(BaseTrainer):
         """Engineer features and assemble train/val/test matrices for one split.
 
         Feature state is fitted on the training rows only. Doing it on the whole
-        frame leaks the test distribution into the encodings and is worth roughly
-        a point of AUC that evaporates in production.
+        frame leaks information about the test distribution into training.
         """
         features = importlib.import_module(self.config["features"]["module"])
         target = self.config["data"]["target"]

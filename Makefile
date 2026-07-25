@@ -7,9 +7,10 @@ COMPOSE := docker compose -f infra/compose/base.yml
 COMPOSE_DEV := $(COMPOSE) -f infra/compose/dev.yml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup data train train-sample evaluate figures diagrams screenshots serve \
+.PHONY: help setup data train train-sample evaluate figures diagrams \
+        screenshots-install screenshots serve \
         test test-all lint format typecheck verify clean \
-        docker-build docker-up docker-down docker-logs docker-test docker-clean \
+        docker-build docker-up docker-down docker-logs docker-clean \
         docker-dev-up docker-dev-down \
         web-install web-dev web-build web-test web-lint web-typecheck
 
@@ -44,7 +45,10 @@ diagrams:  ## Export docs/diagrams/*.mmd to SVG
 	done
 
 screenshots:  ## Capture README screenshots (needs the stack running + a trained model)
-	uv run python scripts/capture_screenshots.py
+	uv run --extra dev python scripts/capture_screenshots.py
+
+screenshots-install:  ## Install the Chromium browser used by the screenshot script
+	uv run --extra dev playwright install chromium
 
 serve:  ## Run the inference API on :8070
 	uv run python scripts/serve.py
@@ -90,9 +94,6 @@ docker-down:  ## Stop the stack
 
 docker-logs:  ## Tail the stack logs
 	$(COMPOSE) logs -f
-
-docker-test:  ## Run the test suite inside the API container
-	$(COMPOSE) run --rm ml-api python -m pytest -m "not network" -q
 
 docker-clean:  ## Stop the stack and remove its volumes and local images
 	$(COMPOSE) down -v --rmi local

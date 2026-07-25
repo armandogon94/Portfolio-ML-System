@@ -12,8 +12,8 @@
 > `403 ... Please make sure you are authenticated and have accepted the
 > competition rules`. Kaggle datasets authenticate with that token; Kaggle
 > competitions do not. IEEE-CIS needs a classic `~/.kaggle/kaggle.json` API
-> token. LendingClub was not run; its 648 MB download was not attempted in this
-> session. The autoencoder needs the blocked IEEE-CIS data.
+> token. LendingClub has not been run. The autoencoder needs the blocked
+> IEEE-CIS data.
 >
 > Every accepted metric below is read from `reports/*_metrics.csv`, written by
 > training. Empty cells remain empty rather than becoming estimates.
@@ -30,7 +30,7 @@ class is rare; ROC-AUC is retained only as a familiar secondary diagnostic.
 | `fraud` |  |  |  |  |  |  | **not yet measured — BLOCKED:** IEEE-CIS competition download needs a classic `kaggle.json` token |
 | `fraud_ulb` | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 | measured · [`fraud_ulb_metrics.csv`](fraud_ulb_metrics.csv) |
 | `fraud_autoencoder` |  |  |  |  |  |  | **not yet measured — BLOCKED:** needs the same IEEE-CIS data |
-| `credit_risk` |  |  |  |  |  |  | **not yet measured:** the 648 MB LendingClub download was not attempted in this session |
+| `credit_risk` |  |  |  |  |  |  | **not yet measured:** LendingClub has not been run |
 | `churn` | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 | measured · [`churn_metrics.csv`](churn_metrics.csv) |
 
 ### `fraud_ulb`: PR-AUC is the informative result
@@ -129,6 +129,8 @@ The version of this repository before the rebuild published four metrics:
 | Demand Forecasting | Avg MAE | 22.2 |
 
 All four reproduced exactly from committed CSVs. None of them measured anything.
+The retraction narrative deliberately quotes these values. The gate is that no
+retracted number may appear in an **active** results table.
 
 **Fraud.** `src/data/generate_fraud.py` generated two populations from two
 distributions and took `is_fraud` as a *function parameter*:
@@ -152,9 +154,8 @@ score from the features and drew the label from it:
 that the author wrote is a unit test for `model.fit()`, not a credit model.
 
 **Housing.** Price was a polynomial of the features times
-`rng.normal(1.0, 0.10)`. R² 0.942 is approximately the arithmetic ceiling of 10%
-injected multiplicative noise — the model could not have scored much differently
-whatever it did.
+`rng.normal(1.0, 0.10)`. The target was therefore constructed directly from the
+features by the same codebase that later reported R² 0.942.
 
 The old README disclosed that the data was "synthetic". That was true and
 insufficient: readers hear "synthetic" as "simulated but structurally realistic".
@@ -171,8 +172,7 @@ features, written by the person reporting the score.** See
 **Splitting comes before feature engineering.** Frequency encodings and group
 aggregates are fitted on the training rows only and carried into validation, test
 and serving as artifacts stored in the checkpoint. Fitting them on the full frame
-leaks the test distribution — a subtle, popular mistake worth roughly a point of
-AUC that does not survive deployment.
+leaks information about the test distribution and does not represent deployment.
 
 **Chronological boundaries are tie-safe.** The row-count cut moves forward to the
 next change in the split key, assigning a tied timestamp to the earlier partition.
@@ -231,10 +231,9 @@ last 20% tests, with a 10% validation fold carved chronologically from the tail
 of train for early stopping. Equal `TransactionDT` values stay on the earlier
 side of each boundary, so one timestamp can never appear in two partitions.
 
-This is not a stylistic preference. **A random split inflates the score by
-several points**, because the same card, the same device and the same billing
-address appear on both sides of a random boundary — the model memorises entities
-rather than learning fraud, and the memorised entities are gone in production.
+This is not a stylistic preference. A random split puts the same card, device,
+and billing address on both sides of the boundary, so the model can memorise
+entities that will not be available as shared identities in production.
 The competition's own `test_transaction.csv` is **unlabelled**, so a temporal
 split within the training file is the only honest evaluation available.
 
@@ -255,12 +254,10 @@ rows inside the same training window. This makes the offline estimate
 **optimistic** relative to deployment, where only prior transactions would exist.
 A full event-time feature-store rewrite is deliberately outside this baseline.
 
-**Expected result: ≈ 0.90 ROC-AUC**, written into `configs/fraud.yaml` before any
-run. Kaggle winning *ensembles* reached 0.94–0.95 on the private leaderboard after
-months of feature engineering and blending. A single honest LightGBM on a
-temporal split lands near 0.90. **Anything ≥ 0.96 means a leak** — check for a
-random split, `TransactionID` in the features, or identity columns joined after
-the split. Investigate; do not celebrate.
+**Expected result: ≈ 0.90 ROC-AUC**, a hand-entered config expectation rather
+than a measurement. The configured sanity band is 0.85–0.96. A result outside
+that range requires investigation of the split, `TransactionID`, and identity
+features before publication.
 
 ### Results
 
@@ -328,7 +325,7 @@ the model would be used.
 
 ### The leakage denylist — the most informative thing in this document
 
-`configs/credit_risk.yaml` names ~28 columns the model may never see, enforced by
+`configs/credit_risk.yaml` names 29 entries the model may never see, enforced by
 `tests/data/test_leakage_denylist.py` and additionally never read at all
 (`src/data/adapters/lending_club.py` uses a `usecols` allowlist of ~30
 origination-time fields).
@@ -339,9 +336,9 @@ The ones that matter:
 `total_pymnt` · `last_pymnt_amnt` · `out_prncp` · `debt_settlement_flag` ·
 `settlement_*` · `last_fico_range_*` · `hardship_*`
 
-Every one is recorded **after** origination. `recoveries` is non-zero only for a
-loan that has already defaulted. A model that sees it reports ~0.99 ROC-AUC and
-is completely worthless, because at decision time the value is always zero.
+Every one is recorded **after** origination. `recoveries` changes only after a
+loan has defaulted. A model that sees it is completely worthless, because the
+field is not an origination-time input.
 
 | Configuration | ROC-AUC | Interpretation |
 |---|---|---|
@@ -350,8 +347,8 @@ is completely worthless, because at decision time the value is always zero.
 | Δ |  |  |
 
 That delta is the point. **A correct LendingClub model is not
-impressive-looking**, and the ~0.30 gap between the two rows is the difference
-between a portfolio number and a model.
+impressive-looking**; the controlled comparison remains empty until both rows
+have been measured by the documented training path.
 
 **The business framing matters more than the AUC here.** At origination the
 decision is not "classify this loan" but "approve at what rate". Expected loss at
@@ -369,8 +366,7 @@ body rather than implying a calibrated policy.
 | Logistic regression (FICO + DTI + term + grade) |  |  |  |  |  |
 | Prior (baseline) |  |  | — | — |  |
 
-*Not yet measured.* The 648 MB LendingClub download was not attempted in this
-session.
+*Not yet measured.* LendingClub has not been run.
 
 ---
 
@@ -432,6 +428,22 @@ a prospective task.
 
 ## Reproducing this document
 
+### Rows no run has produced
+
+No run has produced the `fraud`, `fraud_autoencoder`, or `credit_risk` result
+tables yet. When their data prerequisites are available, the commands will be:
+
+```bash
+uv run python scripts/download_data.py --dataset ieee-cis
+uv run python scripts/train.py --model fraud
+uv run python scripts/train.py --model fraud --autoencoder
+uv run python scripts/download_data.py --dataset lending-club
+uv run python scripts/train.py --model credit_risk
+./.venv/bin/python scripts/evaluate.py --markdown
+```
+
+### Rows produced by completed runs
+
 ```bash
 uv run python scripts/train.py --model fraud_ulb
 uv run python scripts/train.py --model churn
@@ -442,7 +454,7 @@ uv run python scripts/train.py --model churn
 > files record training SHA `05d32cae0d54dee97a70be575097182e9b5f8278`,
 > seed 42, and `macOS-26.5.2-arm64-arm-64bit` on arm64; LightGBM used its CPU-only
 > macOS wheel. The current repository HEAD used to render this document is
-> `e15842a`. `fraud`, `fraud_autoencoder`, and `credit_risk` were not run.
+> `4584c9b`. `fraud`, `fraud_autoencoder`, and `credit_risk` were not run.
 > `scripts/evaluate.py` computed nothing; it read the two training-written CSVs.
 
 LightGBM and XGBoost ship CPU-only wheels on macOS arm64; there is no Metal

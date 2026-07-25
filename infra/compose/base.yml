@@ -12,7 +12,7 @@
 services:
   # MLflow Experiment Tracking Server (SQLite backend for dev)
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:v3.11.1
     container_name: ml-system-mlflow
     command: >
       mlflow server

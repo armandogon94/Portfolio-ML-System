@@ -7,13 +7,12 @@
 # It is what caught the missing uv.lock: `docker build` failed at
 # `COPY pyproject.toml uv.lock ./` because .gitignore was hiding the file.
 #
-# Stages run in increasing cost order and each is skippable, so a machine
-# without Docker still gets signal from the cheap stages instead of one blanket
-# failure.
+# Stages run in increasing cost order. A skipped stage makes the default run
+# incomplete and non-zero; --allow-skips is the explicit diagnostic-only mode.
 #
 #   ./scripts/verify_fresh_clone.sh                 # everything available
-#   SKIP_DOCKER=1 ./scripts/verify_fresh_clone.sh   # no Docker daemon
-#   SKIP_WEB=1    ./scripts/verify_fresh_clone.sh   # no pnpm
+#   SKIP_DOCKER=1 ./scripts/verify_fresh_clone.sh --allow-skips
+#   SKIP_WEB=1    ./scripts/verify_fresh_clone.sh --allow-skips
 #
 # Never make this pass by weakening a check. If the README is wrong, fix the
 # README and re-run the fixed version.
@@ -28,6 +27,25 @@ trap cleanup EXIT INT TERM
 : "${SKIP_DOCKER:=0}"
 : "${SKIP_WEB:=0}"
 : "${BACKEND_PORT:=8070}"
+
+ALLOW_SKIPS=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --allow-skips)
+      ALLOW_SKIPS=1
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--allow-skips]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      echo "Usage: $0 [--allow-skips]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
 
 # Docker Desktop on macOS installs its credential helper here and adds it to
 # PATH only for LOGIN shells. Run this script from a non-login shell (a CI step,
@@ -66,7 +84,7 @@ pass "required files are tracked"
 
 # ── 3. No agent scaffolding or retracted claim escaped into the clone ────────
 echo "==> [3/7] Repository hygiene"
-if git ls-files | grep -iE 'CLAUDE\.md|AGENTS\.md|PORT-MAP|^PORTS\.md|^PLAN\.md|LOOP_|FABLE|\.handoff|^\.claude/|\.bak$'; then
+if git ls-files | grep -iE 'AGENT-BRIEF|AGENTS\.md|CLAUDE\.md|(^|/)\.claude/|(^|/)\.handoff/|PORT-MAP|^PORTS\.md|^PLAN\.md|LOOP_|FABLE|\.bak$'; then
   fail "agent scaffolding is tracked" "Listed above. Add to .gitignore and 'git rm --cached'."
 fi
 if ls src/data/generate_*.py >/dev/null 2>&1; then
@@ -82,18 +100,35 @@ if ! grep -q "A correction, and why it's here" README.md; then
 fi
 pass "hygiene"
 
-# ── 4. Every relative link in the README resolves inside the clone ───────────
+# ── 4. Every relative link in both onboarding READMEs resolves ───────────────
 echo "==> [4/7] README links resolve"
 BROKEN=0
-while read -r target; do
-  [ -z "$target" ] && continue
-  [ -e "${target%%#*}" ] || { echo "    BROKEN LINK: $target"; BROKEN=1; }
-done < <(grep -oE '\]\(([^)#h][^)]*)\)' README.md | sed -E 's/^\]\(//; s/\)$//')
+check_markdown_links() {
+  local document="$1"
+  local base
+  local target
+  local link_path
+  base="$(dirname "$document")"
+  while read -r target; do
+    [ -z "$target" ] && continue
+    case "$target" in
+      http://*|https://*|mailto:*|\#*) continue ;;
+    esac
+    link_path="${target%%#*}"
+    [ -z "$link_path" ] && continue
+    [ -e "$base/$link_path" ] || {
+      echo "    BROKEN LINK in $document: $target"
+      BROKEN=1
+    }
+  done < <(grep -oE '\]\(([^)]*)\)' "$document" | sed -E 's/^\]\(//; s/\)$//' || true)
+}
+check_markdown_links README.md
+check_markdown_links web/README.md
 [ "$BROKEN" -eq 0 ] || fail "README links point at files that are not committed" ""
-pass "README links"
+pass "root and web README links"
 
 # ── 5. Python: install and test exactly as the README says ──────────────────
-echo "==> [5/7] make setup && make test"
+echo "==> [5/7] make setup && make test && make train-sample"
 if ! command -v uv >/dev/null 2>&1; then
   skip "python setup + tests" "uv is not installed"
 else
@@ -106,9 +141,19 @@ else
   if uv run pytest -m "not network" >"$WORK/pytest.log" 2>&1; then
     SUMMARY="$(grep -oE '[0-9]+ passed[^=]*' "$WORK/pytest.log" | tail -1 | sed 's/ *$//')"
     pass "pytest — ${SUMMARY:-completed}"
+    echo "    NOTE: checkpoint-dependent tests in tests/test_quality_gates.py"
+    echo "          skip on a fresh clone because checkpoints are intentionally untracked."
+    echo "          Their skip is not counted as an executed model-quality gate."
   else
     tail -40 "$WORK/pytest.log"
     fail "the test suite does not pass from a fresh clone" ""
+  fi
+
+  if make train-sample >"$WORK/train-sample.log" 2>&1; then
+    pass "make train-sample"
+  else
+    tail -40 "$WORK/train-sample.log"
+    fail "the committed-fixture smoke training failed" ""
   fi
 fi
 
@@ -198,4 +243,13 @@ if [ "${#STAGES_SKIPPED[@]}" -gt 0 ]; then
   echo "SKIPPED (${#STAGES_SKIPPED[@]}): ${STAGES_SKIPPED[*]}"
 fi
 echo "──────────────────────────────────────────────────────────────"
-echo "PASS: a fresh clone reproduces the documented quickstart."
+if [ "${#STAGES_SKIPPED[@]}" -gt 0 ]; then
+  if [ "$ALLOW_SKIPS" -eq 1 ]; then
+    echo "PARTIAL PASS: ${#STAGES_SKIPPED[@]} stage(s) skipped: ${STAGES_SKIPPED[*]}"
+    exit 0
+  fi
+  echo "INCOMPLETE: ${#STAGES_SKIPPED[@]} stage(s) skipped: ${STAGES_SKIPPED[*]}"
+  echo "Re-run with all prerequisites, or pass --allow-skips for a diagnostic partial pass."
+  exit 1
+fi
+echo "PASS: every fresh-clone stage ran and the documented quickstart reproduced."

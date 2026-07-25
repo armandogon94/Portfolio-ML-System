@@ -60,7 +60,7 @@ The same defect ran through the whole repository:
 |---|---|
 | `generate_credit_risk.py:50-63` | `z = -3.0 + 0.02*(40-age) - 1.5*((credit_score-680)/100) + ...`, then `is_default = rng.random() < sigmoid(z)` |
 | `generate_customer_churn.py:71-86` | Same shape: a hand-written logistic score, then a Bernoulli draw |
-| `generate_housing.py:52-70` | Polynomial price × `rng.normal(1.0, 0.10)` — the published R² 0.942 is roughly the arithmetic ceiling of 10% injected noise |
+| `generate_housing.py:52-70` | Polynomial price × `rng.normal(1.0, 0.10)`; the target was constructed directly from the features before the model reported R² 0.942 |
 
 XGBoost recovering a logistic function that the author wrote is not a credit
 model. It is a unit test for `model.fit()`.
@@ -141,7 +141,7 @@ after the fact:
 
 | Problem | Expected ROC-AUC | Interpretation |
 |---|---|---|
-| Fraud (IEEE-CIS, temporal split) | ≈ **0.90** | Kaggle winning *ensembles* reached 0.94–0.95 on the private leaderboard after months of feature engineering. A single honest LightGBM lands near 0.90. |
+| Fraud (IEEE-CIS, temporal split) | ≈ **0.90** | Hand-entered pre-run expectation in `configs/fraud.yaml`; not a measurement. |
 | Credit risk (LendingClub, denylist applied) | ≈ **0.70** | A correct consumer-credit model is not impressive-looking. Saying so is the point. |
 | Churn (5-fold CV) | high | An easy, well-separated 10,127-row dataset. Reported with mean ± std and an explicit caveat. |
 

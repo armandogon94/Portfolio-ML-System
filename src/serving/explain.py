@@ -2,7 +2,7 @@
 
 Tree models (LightGBM, XGBoost) get exact SHAP via ``TreeExplainer``. The
 autoencoder gets input-gradient attribution, because SHAP's ``TreeExplainer`` does
-not apply and ``KernelExplainer`` on a 12-layer MLP is too slow for a request path.
+not apply and model-agnostic ``KernelExplainer`` is unsuitable for this request path.
 
 Both explainers already existed and work; this module is only the dispatch, split
 out of the old monolith so ``api.py`` holds routes and nothing else.

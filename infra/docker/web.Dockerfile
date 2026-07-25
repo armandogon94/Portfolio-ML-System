@@ -10,7 +10,7 @@
 # .env.example if ever needed; the actual COPY scope is web/.
 
 # ───── 1. Base image ─────────────────────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:20.19-alpine AS base
 # corepack ships with node 20 — pin the pnpm version matching
 # web/package.json's packageManager field so local + container agree.
 RUN apk add --no-cache libc6-compat \
@@ -35,7 +35,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 # ───── 4. Runner (minimal production image) ──────────────────────────
-FROM node:20-alpine AS runner
+FROM node:20.19-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \

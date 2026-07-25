@@ -66,8 +66,7 @@ Full reasoning, including the enforcement that stops this recurring:
 
 The other three remain empty. IEEE-CIS is blocked because its competition
 download needs a classic `kaggle.json` token rather than the working Kaggle OAuth
-token; `fraud_autoencoder` needs the same data. LendingClub was not run, and its
-648 MB download was not attempted in this session.
+token; `fraud_autoencoder` needs the same data. LendingClub has not been run.
 
 [`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
 commands to unblock it.
@@ -85,8 +84,8 @@ commands to unblock it.
 - **The churn score is not prospective.** Its **0.9735 ± 0.0078 PR-AUC**
   substantially detects an attrition that already happened because current
   status and trailing-activity features describe the same period.
-- **The old test suite could not have caught any of it.** 360 tests, 90%
-  coverage, and `pyproject.toml` hid `-m 'not network and not parity'` inside
+- **The old test suite could not have caught any of it.** `pyproject.toml` hid
+  `-m 'not network and not parity'` inside
   `addopts` — silently deselecting both the Kaggle canary and the pre-ship gate.
   `tests/test_serving.py` asserted only key presence and `0 <= score <= 1`, which
   a predictor hardcoded to `0.5` passes. That exclusion is gone and the gates now
@@ -229,8 +228,8 @@ flowchart LR
 
 The split happens **before** feature engineering. Frequency encodings and group
 aggregates are fitted on the training rows only; fitting them on the full frame
-leaks the test distribution and is worth roughly a point of AUC that evaporates
-in production. The dotted edge is the other load-bearing detail: fixtures reach
+leaks information about the test distribution into training. The dotted edge is
+the other load-bearing detail: fixtures reach
 the trainer but open no tracking run and cannot reach `checkpoints/` or
 `reports/`.
 [SVG](docs/diagrams/pipeline-dag.svg)
@@ -250,7 +249,7 @@ one line rather than drawing a fictional one.
 │   │                           #   Each names a real source, split, seed, and sanity band.
 │   ├── fraud.yaml              #   IEEE-CIS · time split on TransactionDT
 │   ├── fraud_ulb.yaml          #   OpenML 1597 · credential-free · time split on Time
-│   ├── credit_risk.yaml        #   LendingClub · time split on issue_d · 28-column denylist
+│   ├── credit_risk.yaml        #   LendingClub · time split on issue_d · 29-entry denylist
 │   └── churn.yaml              #   Card attrition · 5-fold stratified CV
 ├── src/
 │   ├── config.py               # Loads AND validates. Refuses a config with no real data.source.
@@ -273,7 +272,7 @@ one line rather than drawing a fictional one.
 ├── data/
 │   ├── README.md               # Provenance, licence, access gate, and the leakage traps per dataset
 │   └── sample/                 # COMMITTED 500-row synthetic CI fixtures. Labels are pure noise.
-├── tests/                      # Mirrors src/ package-for-package. 221 pass, 88% coverage.
+├── tests/                      # Mirrors src/ package-for-package; local coverage gate is 80%.
 │   ├── data/test_leakage_denylist.py   # the highest-value test in the repo
 │   ├── serving/test_skew.py            # training features == serving features
 │   ├── test_quality_gates.py           # sanity band, baseline improvement, monotonicity
@@ -300,9 +299,9 @@ make test            # test suite on committed fixtures — no credentials, no n
 make train-sample    # smoke-train all 4 configs (opens no tracker; writes no artifacts)
 ```
 
-**Everything above works with no Kaggle account and no network.** The fixture
-path exists precisely so a reviewer can verify the pipeline before deciding
-whether to sign up for anything.
+The fixture path needs no Kaggle account and makes no dataset-network calls. A
+cold clone still needs network access for the clone and the first dependency
+install; cached dependencies can be reused afterward.
 
 To train on real data:
 
@@ -311,6 +310,8 @@ make data            # needs a Kaggle token — see data/README.md
 make train
 make evaluate        # reads reports/*_metrics.csv
 make figures         # PR curves, calibration, SHAP -> reports/figures/
+make screenshots-install  # one-time Chromium install
+make screenshots     # needs the running stack and trained checkpoints
 ```
 
 Credential-free real-data fraud path:
@@ -333,7 +334,9 @@ curl http://localhost:8070/health
 open http://localhost:3070/dashboard
 ```
 
-**Requires:** Python 3.11+, Docker 24+, pnpm 10 (for the web app only).
+**Requires:** Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/)
+(`curl -LsSf https://astral.sh/uv/install.sh | sh`), Docker 24+, and pnpm 10
+for the web app.
 
 ---
 
@@ -374,8 +377,9 @@ Full provenance, per-dataset column notes and both leakage traps:
   PyTorch weight initialisation, dropout and shuffling. Seeded MPS kernels are not
   guaranteed bit-deterministic, and the code says so rather than claiming exact
   reproducibility.
-- **`uv.lock` is committed** (758 KB). Before this, `.gitignore` hid it while
-  `api.Dockerfile` ran `COPY pyproject.toml uv.lock ./` and `uv sync --frozen` —
+- **`uv.lock` is committed.** Before this, `.gitignore` hid it while
+  `api.Dockerfile` ran
+  `COPY pyproject.toml uv.lock ./` and `uv sync --frozen` —
   the advertised quickstart was physically unbuildable from a fresh clone.
   `scripts/verify_fresh_clone.sh` exists to keep that fixed.
 - **Every checkpoint carries its own provenance.**
@@ -386,7 +390,7 @@ Full provenance, per-dataset column notes and both leakage traps:
   CSV path as tabular checkpoints.
 - **`/predict` returns `model_version`** — the short git SHA from that metadata —
   on every response. A score with no provenance is unreviewable.
-- **No number is typed by hand.** `scripts/evaluate.py` reads
+- **No published result metric is typed by hand.** `scripts/evaluate.py` reads
   `reports/*_metrics.csv`; it computes nothing. There is no code path from a
   fixture to a published table: sample mode opens no MLflow/W&B run and writes
   no checkpoint or metrics CSV, while dashboard history requires
@@ -400,8 +404,9 @@ Two explainers, dispatched on the checkpoint's model type by
 - **SHAP `TreeExplainer`** for LightGBM and XGBoost — exact, fast enough for a
   request path, and returns signed per-feature contributions.
 - **Input-gradient attribution** for the autoencoder baseline, because
-  `TreeExplainer` does not apply and `KernelExplainer` on a 12-layer MLP is far
-  too slow to serve.
+  `TreeExplainer` does not apply. The model is a symmetric autoencoder with six
+  `nn.Linear` transforms and a 16-unit bottleneck; model-agnostic explanation is
+  not used on the request path.
 
 An unknown model type raises `NotImplementedError` → HTTP 501 rather than
 returning an empty explanation that a UI would render as "no important features".
@@ -412,15 +417,20 @@ from, so the explanation always describes the number beside it.
 ## Testing
 
 ```bash
-make test       # 221 pass, excludes the live-Kaggle canary
+make test       # excludes the live-Kaggle canary
 make test-all   # includes it (needs credentials)
 make lint typecheck
 make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
-**221 passed · 17 skipped · 88% coverage on `src/`.** The 17 skips are the quality
-gates, which need a real checkpoint and skip with the command that creates one —
-skipping is correct; a vacuously passing gate is not.
+Checkpoint-dependent quality gates skip with an explicit training command when a
+real checkpoint is absent. The fresh-clone verifier names that skip rather than
+implying those model-quality gates ran; a vacuously passing gate is not evidence.
+The **88%** coverage badge is the rounded **88.24%** reported by:
+
+```bash
+./.venv/bin/pytest -p no:cacheprovider -m "not network" --cov=src --cov-report=term-missing
+```
 
 What the gates assert, beyond plumbing:
 

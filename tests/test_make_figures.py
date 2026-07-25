@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pandas as pd
 
 import scripts.make_figures as figures
@@ -25,3 +27,16 @@ def test_cv_figure_loader_reads_persisted_out_of_fold_predictions(tmp_path):
     assert labels.tolist() == [0, 1, 1, 0]
     assert scores["LightGBM"].tolist() == [0.1, 0.7, 0.8, 0.2]
     assert scores["prior"].tolist() == [0.5, 0.5, 0.5, 0.5]
+
+
+def test_all_problem_run_fails_when_any_checkpoint_is_missing(monkeypatch):
+    monkeypatch.setattr(figures, "available_config_names", lambda: ["fraud", "churn"])
+    monkeypatch.setattr(figures, "CheckpointRegistry", object)
+    monkeypatch.setattr(
+        figures,
+        "figures_for",
+        lambda problem, registry: int(problem == "churn"),
+    )
+    monkeypatch.setattr(sys, "argv", ["make_figures.py", "--problem", "all"])
+
+    assert figures.main() == 1

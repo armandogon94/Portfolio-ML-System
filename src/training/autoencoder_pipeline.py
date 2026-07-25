@@ -11,8 +11,8 @@ which on IEEE-CIS is a lot, and saying so is the point.
 Hardware facts that shaped this file (measured on the target machine — Apple
 Silicon, 4 performance + 6 efficiency cores, 32 GB, torch 2.13.0):
 
-* MPS gives roughly 1.9-2.2x over CPU on dense matmul. Not 5-10x. A 12-layer MLP
-  on 500k x 100 floats is minutes either way.
+* MPS is available for the six-linear-transform autoencoder, but this repository
+  has no committed benchmark comparing it with CPU.
 * ``torch.get_num_threads()`` defaults to 4, not 10.
 * **torch 2.13.0 MPS bug, reproduced twice:** ``torch.nn.MultiheadAttention`` hangs
   on MPS, and a CPU tensor loop deadlocked at 0% CPU after a preceding MPS matmul

@@ -50,9 +50,10 @@ decisions in one domain**, each with a different shape:
 | Credit risk | 2.26M rows, target derived from loan outcome | Leakage discipline — the with/without-denylist delta is the single best data-science paragraph available here |
 | Churn | 10,127 rows | Correct statistics on small n: 5-fold CV with mean ± std, never a single hold-out number |
 
-They share a vocabulary a fintech interviewer already has, and one of them is
-deliberately unimpressive (credit risk at ~0.70 ROC-AUC), which is a stronger
-signal than three impressive-looking numbers.
+They share a vocabulary a fintech interviewer already has. Credit risk carries
+a deliberately unimpressive hand-entered pre-run expectation of roughly 0.70
+ROC-AUC, which is a stronger framing than promising three impressive-looking
+numbers.
 
 ## Consequences
 
@@ -87,8 +88,9 @@ enumerated.
 
 **Narrow to one problem — fraud only.** Rejected as too far. Three problems in
 one domain lets the results table show *contrast*: an imbalanced problem where
-PR-AUC is the right metric, a hard problem where 0.70 is a good score, and an
-easy problem where a high score means nothing. One problem cannot show that.
+PR-AUC is the right metric, a hard problem with a pre-run expectation around
+0.70, and an easy problem where a high score means nothing. One problem cannot
+show that.
 
 ## References
 

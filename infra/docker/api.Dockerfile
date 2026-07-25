@@ -13,7 +13,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: Builder — install Python dependencies with uv
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.11.15-slim AS builder
 
 # Install system build dependencies
 RUN apt-get update && \
@@ -21,7 +21,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.3 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -34,12 +34,15 @@ RUN uv sync --frozen --no-dev --no-install-project
 # CPU-only PyTorch. MPS is macOS-only and cannot exist in a Linux container;
 # CUDA would need an NVIDIA host. The README states this tradeoff explicitly
 # rather than implying the container is GPU-accelerated.
-RUN uv pip install torch --index-url https://download.pytorch.org/whl/cpu --reinstall
+RUN uv pip install "torch==2.11.0" \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --reinstall \
+    --no-deps
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime — minimal image with only what's needed
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.11.15-slim AS runtime
 
 # Install runtime system dependencies (curl for healthcheck)
 RUN apt-get update && \

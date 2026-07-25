@@ -25,6 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #: Host-side default for this repository. See docs/ports.example.md.
 DEFAULT_PORT = 8070
 
+#: Host ports reserved by docs/ports.example.md. Keep this named constant so a
+#: parameterized test can prevent the documentation and launcher from drifting.
+REFUSED_PORTS = {80, 443, 3000, 5000, 5432, 6379, 7000, 8000, 11434}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -38,11 +42,12 @@ def main() -> int:
     parser.add_argument("--reload", action="store_true", help="Auto-reload on code changes.")
     args = parser.parse_args()
 
-    if args.port in {3000, 5000, 5432, 6379, 7000, 8000, 11434}:
+    if args.port in REFUSED_PORTS:
         parser.error(
             f"Port {args.port} is reserved: 5000/7000 are macOS AirPlay Receiver, "
-            f"11434 is Ollama, and 3000/8000/5432/6379 are framework defaults that "
-            f"collide across projects. Use 8070. See docs/ports.example.md."
+            "11434 is Ollama, 3000/8000/5432/6379 are framework defaults that "
+            "collide across projects, and 80/443 need root privileges and belong "
+            "to a reverse proxy. Use 8070. See docs/ports.example.md."
         )
 
     import uvicorn

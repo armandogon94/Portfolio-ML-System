@@ -69,6 +69,12 @@ metrics paths.
 
 ## Getting the data
 
+The Python commands below do not load the repository's `.env` file. They read
+real process environment variables and Kaggle's own files under `~/.kaggle/`.
+Use `export KAGGLE_USERNAME=... KAGGLE_KEY=...`, a classic
+`~/.kaggle/kaggle.json`, or `kagglehub login` for dataset downloads. The OAuth
+token created by `kagglehub login` does not unblock the IEEE-CIS competition.
+
 ```bash
 # What each dataset needs, without downloading anything:
 uv run python scripts/download_data.py --check
@@ -77,6 +83,9 @@ uv run python scripts/download_data.py --check
 #   https://www.kaggle.com/settings/account -> "Create New Token"
 mkdir -p ~/.kaggle && mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
 chmod 600 ~/.kaggle/kaggle.json
+
+# Dataset-only OAuth alternative (does not unblock IEEE-CIS):
+kagglehub login
 
 # One-time IEEE-CIS rules acceptance (browser, cannot be scripted)
 #   https://www.kaggle.com/competitions/ieee-fraud-detection/rules
@@ -182,7 +191,7 @@ toward optimism on recent vintages, which are exactly the ones with the most
 
 ### The leakage denylist
 
-`configs/credit_risk.yaml` names ~28 columns the model must never see, and
+`configs/credit_risk.yaml` names 29 entries the model must never see, and
 `tests/data/test_leakage_denylist.py` fails if any of them reaches the feature
 matrix. The important ones:
 
@@ -190,9 +199,9 @@ matrix. The important ones:
 `total_pymnt` · `last_pymnt_amnt` · `out_prncp` · `debt_settlement_flag` ·
 `settlement_*` · `last_fico_range_*` · `hardship_*`
 
-Every one is recorded **after** origination. `recoveries` is non-zero only for a
-loan that has already defaulted — a model that sees it reports ~0.99 ROC-AUC and
-is worthless, because at decision time the value is always zero. The adapter
+Every one is recorded **after** origination. `recoveries` changes only after a
+loan has defaulted; a model that sees it is worthless because the field is not
+available at origination. The adapter
 additionally never *reads* these columns: `usecols` is an allowlist of ~30
 origination-time fields, which is also what keeps a 648 MB file from becoming a
 3 GB frame.

@@ -2,7 +2,9 @@
 
 Next.js 14 + shadcn/ui + TanStack Query + Tailwind v3. The web UI for the industry-specific ML demo system. Talks to FastAPI (`../src/serving/api.py`) via Next.js rewrites — no CORS, no backend middleware.
 
-> See the parent [README](../README.md), [SPEC.md §"Phase A.2"](../SPEC.md), and [`tasks/plan.md`](../tasks/plan.md) for the broader context.
+> See the parent [README](../README.md), the current
+> [architecture notes](../docs/architecture.md), and
+> [ADR-0001](../docs/adr/0001-gradio-to-nextjs.md) for the migration history.
 
 ## Prerequisites
 
@@ -10,7 +12,8 @@ Next.js 14 + shadcn/ui + TanStack Query + Tailwind v3. The web UI for the indust
 - **pnpm 10** — `npm install -g pnpm` or `brew install pnpm`
 - **Docker + Docker Compose** (only if you want the containerized workflow)
 
-For the full-stack backend you also need the root project set up — see the root [README](../README.md#quick-start).
+For the full-stack backend you also need the root project set up — see the root
+[README](../README.md#quickstart).
 
 ## Three ways to run
 

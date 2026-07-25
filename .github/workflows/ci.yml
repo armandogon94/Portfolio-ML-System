@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -29,7 +34,7 @@ jobs:
       # --frozen proves uv.lock is committed AND resolves. Before this repo
       # tracked the lockfile, `docker build` failed at `COPY ... uv.lock`.
       - name: Sync (frozen)
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --extra dev --python "${{ matrix.python-version }}"
 
       - name: Lint
         run: |
@@ -42,7 +47,7 @@ jobs:
       # The network exclusion is HERE, visibly, and not hidden in pyproject's
       # addopts. The previous version buried `-m 'not network and not parity'`
       # in config, which silently deselected the Kaggle canary and the pre-ship
-      # gate: 360 green tests, two of which had never run.
+      # gate: a green suite in which two required gates had never run.
       - name: Tests (committed fixtures only, no credentials)
         run: uv run pytest -m "not network" --cov=src --cov-report=term-missing --cov-fail-under=80
 
@@ -89,19 +94,43 @@ jobs:
       - name: No placeholders, no resurrected claims
         run: |
           set -e
-          ! grep -n "YOUR_USERNAME" README.md
-          ! grep -nE "localhost:8000|localhost:3000|all 20 cataloged" README.md
-          ! grep -nE "^\s*Live:" README.md
-          ! grep -rn "TODO(copy)" web/lib/ || true
+          if grep -n "YOUR_USERNAME" README.md; then
+            echo "README contains the placeholder repository owner."
+            exit 1
+          fi
+          if grep -nE "localhost:8000|localhost:3000|all 20 cataloged" README.md; then
+            echo "README contains a retired endpoint or catalog claim."
+            exit 1
+          fi
+          if grep -nE "^\s*Live:" README.md; then
+            echo "README contains an unsupported live-deployment claim."
+            exit 1
+          fi
+          if grep -rn "TODO(copy)" web/lib/; then
+            echo "Tracked placeholder copy remains in web/lib/."
+            exit 1
+          fi
           grep -q "docs/adr/0003-real-data-over-synthetic.md" README.md
           grep -q "A correction, and why it's here" README.md
 
       - name: Every relative README link resolves to a real file
         run: |
-          set -e
-          grep -oE '\]\(([^)#h][^)]*)\)' README.md | sed -E 's/^\]\(//; s/\)$//' | while read -r p; do
-            [ -e "${p%%#*}" ] || { echo "BROKEN LINK: $p"; exit 1; }
-          done
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          failures = []
+          for document in (Path("README.md"), Path("web/README.md")):
+              for raw_target in re.findall(r"\]\(([^)]+)\)", document.read_text()):
+                  target = raw_target.strip().strip("<>")
+                  if target.startswith(("#", "http://", "https://", "mailto:")):
+                      continue
+                  relative = target.split("#", 1)[0]
+                  if relative and not (document.parent / relative).exists():
+                      failures.append(f"{document}: {target}")
+          if failures:
+              raise SystemExit("BROKEN LINK(S):\n" + "\n".join(failures))
+          PY
 
       - name: Every Mermaid block has an exported SVG
         run: |
@@ -118,9 +147,18 @@ jobs:
       - name: No synthetic data generator has returned
         run: |
           set -e
-          ! ls src/data/generate_*.py 2>/dev/null
-          ! grep -rnE "^\s*(from|import)\s+.*generate_(fraud|credit_risk|customer_churn|housing)" src/ scripts/ tests/
-          ! grep -rnE "generate_(fraud|credit_risk|customer_churn)\s*\(" src/ scripts/ configs/
+          if ls src/data/generate_*.py 2>/dev/null; then
+            echo "A synthetic data generator has returned."
+            exit 1
+          fi
+          if grep -rnE "^\s*(from|import)\s+.*generate_(fraud|credit_risk|customer_churn|housing)" src/ scripts/ tests/; then
+            echo "Production or test code imports a retired synthetic generator."
+            exit 1
+          fi
+          if grep -rnE "generate_(fraud|credit_risk|customer_churn)\s*\(" src/ scripts/ configs/; then
+            echo "Production code calls a retired synthetic generator."
+            exit 1
+          fi
 
   verify:
     name: fresh-clone verify
@@ -134,5 +172,13 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - name: Clone HEAD into a throwaway dir and run the documented quickstart
         run: ./scripts/verify_fresh_clone.sh

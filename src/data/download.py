@@ -125,6 +125,10 @@ def kaggle_competition_cached(slug: str, *, filename: str | None = None) -> Path
             "cannot be automated:\n"
             f"  {COMPETITION_RULES_URL.format(slug=slug)}\n"
             "  -> 'I Understand and Accept'\n"
+            "If the rules are already accepted and ~/.kaggle/access_token is the "
+            "only credential, install a classic API token at "
+            "~/.kaggle/kaggle.json; Kaggle competition downloads do not accept "
+            "the OAuth token on this machine.\n"
             "Then re-run this command."
         ) from exc
 

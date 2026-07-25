@@ -15,8 +15,8 @@ Prerequisites — both services running, and at least one trained checkpoint:
     uv run python scripts/train.py --model all
 
 Usage:
-    uv run python scripts/capture_screenshots.py
-    uv run python scripts/capture_screenshots.py --base-url http://localhost:3070
+    uv run --extra dev python scripts/capture_screenshots.py
+    uv run --extra dev python scripts/capture_screenshots.py --base-url http://localhost:3070
 """
 
 from __future__ import annotations
@@ -83,10 +83,9 @@ def capture(base_url: str, mlflow_url: str, *, timeout_ms: int) -> int:
         from playwright.sync_api import sync_playwright
     except ImportError:
         console.print(
-            "[bold red]Playwright is not installed.[/bold red]\n"
-            "  uv add --dev playwright && uv run playwright install chromium"
+            "[bold red]Playwright is not installed.[/bold red]\n  make screenshots-install"
         )
-        return 1
+        return 0
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     captured = 0
@@ -148,11 +147,14 @@ def main() -> int:
 
     captured = capture(args.base_url, args.mlflow_url, timeout_ms=args.timeout)
 
-    if captured == 0:
+    expected = len(SHOTS) + 1  # application views plus the MLflow UI
+    if captured != expected:
         console.print(
-            "\n[bold red]Nothing captured.[/bold red]\n"
+            f"\n[bold red]Incomplete capture: {captured}/{expected} screenshots.[/bold red]\n"
             "  1. make docker-up            (or: make serve && make web-dev)\n"
             "  2. uv run python scripts/train.py --model all\n"
+            "Every documented application view and the MLflow UI must be captured in "
+            "one run.\n"
             "Screenshots of empty states are not worth committing — see docs/PROGRESS.md."
         )
         return 1

@@ -1,5 +1,20 @@
 # ADR-001: Replace Gradio with Next.js + shadcn/ui for the demo UI
 
+## Status/Amendment — 2026-07-25
+
+**Accepted; historical references amended.** The decision and its original
+reasoning remain below unchanged. `SPEC.md`, `tasks/plan.md`, the parity test,
+and `tests/fixtures/gradio_parity/` were later deleted when the repository
+narrowed to three fintech problems; current architecture and verification live
+in `docs/architecture.md`, `docs/PROGRESS.md`, and
+`scripts/verify_fresh_clone.sh`.
+
+The original verification claim of “360+ tests” is stale. The narrowed suite
+was **181 passing tests at commit `8d9e9bc`**, measured by running
+`./.venv/bin/pytest -p no:cacheprovider --no-cov -m "not network"` at that
+commit. Subsequent work has added tests, so `docs/PROGRESS.md` records the latest
+command output instead of treating 181 as a permanent count.
+
 ## Status
 
 **Accepted** — implemented in Phase A.9 (slices A.9.2 through A.9.11).

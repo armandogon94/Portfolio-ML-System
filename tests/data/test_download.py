@@ -55,6 +55,8 @@ def test_competition_failure_points_at_the_rules_page(fake_credentials):
     message = str(excinfo.value)
     assert "competitions/ieee-fraud-detection/rules" in message
     assert "I Understand and Accept" in message
+    assert "~/.kaggle/access_token" in message
+    assert "~/.kaggle/kaggle.json" in message
 
 
 def test_competition_download_is_used_for_competitions(fake_credentials, tmp_path):

@@ -2,7 +2,7 @@
 #
 # The label `isFraud` comes with the dataset. Nothing in this repo generates it.
 # The split is TIME-BASED on TransactionDT: a random split puts the same card and
-# device on both sides of the boundary and inflates AUC by several points.
+# device on both sides of the boundary, leaking entity identity across the split.
 problem: fraud
 seed: 42
 
@@ -65,10 +65,8 @@ metrics:
     - recall_at_1pct_fpr
     - brier
 
-# Expected-range sanity band. This is a smoke alarm, not a leakage test.
-# IEEE-CIS winning ensembles reached ~0.94-0.95 private-LB ROC-AUC after months
-# of feature engineering and blending. A single honest LightGBM on a temporal
-# split should land near 0.90. A result outside the range requires investigation.
+# Expected-range sanity band. This is a hand-entered expectation and smoke alarm,
+# not a measurement or leakage test. A result outside it requires investigation.
 sanity_band:
   metric: roc_auc
   min: 0.85

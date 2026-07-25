@@ -20,8 +20,8 @@ data:
   # LEAKAGE DENYLIST — enforced by tests/data/test_leakage_denylist.py
   #
   # Every column below is recorded AFTER origination. A model that sees
-  # `recoveries` or `total_rec_prncp` reports ~0.99 ROC-AUC and is worthless:
-  # those fields only take non-zero values once the loan has already defaulted.
+  # `recoveries` or `total_rec_prncp` reveals post-outcome information and makes
+  # the model worthless: those fields only change after loan origination.
   # reports/RESULTS.md carries the with/without delta.
   # ─────────────────────────────────────────────────────────────────────────
   denylist:
@@ -96,9 +96,9 @@ metrics:
     - recall_at_1pct_fpr
     - brier
 
-# Expected-range sanity band: a smoke alarm, not a leakage test. A correct
-# LendingClub model is not impressive-looking; a result outside this range
-# requires investigation of the split, target, and denylist.
+# Hand-entered expected-range sanity band: a smoke alarm, not a measurement or
+# leakage test. A correct LendingClub model is not impressive-looking; a result
+# outside this range requires investigation of the split, target, and denylist.
 sanity_band:
   metric: roc_auc
   min: 0.62

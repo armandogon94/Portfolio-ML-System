@@ -327,14 +327,25 @@ def main() -> int:
     registry = CheckpointRegistry()
     problems = list(config_names) if args.problem == "all" else [args.problem]
     produced = sum(figures_for(problem, registry) for problem in problems)
+    train_target = "all" if args.problem == "all" else args.problem
 
     if produced == 0:
         console.print(
             "\n[bold red]No figures produced — no trained checkpoint exists.[/bold red]\n"
             "A blank chart in a README is worse than no chart, so nothing was drawn.\n"
             "  uv run python scripts/download_data.py --dataset all\n"
-            "  uv run python scripts/train.py --model all\n"
+            f"  uv run python scripts/train.py --model {train_target}\n"
             "See docs/PROGRESS.md."
+        )
+        return 1
+
+    if produced != len(problems):
+        console.print(
+            f"\n[bold red]Incomplete figure set: {produced}/{len(problems)} "
+            "requested problems had checkpoints.[/bold red]\n"
+            "Train every requested problem, then regenerate the figures:\n"
+            f"  uv run python scripts/train.py --model {train_target}\n"
+            f"  uv run python scripts/make_figures.py --problem {args.problem}"
         )
         return 1
 
