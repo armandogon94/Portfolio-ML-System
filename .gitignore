@@ -57,3 +57,11 @@ mlartifacts/
 # Claude Code - user/session specific (keep .claude/rules + .claude/settings.json tracked)
 .claude/projects/
 .claude/worktrees/
+
+# --- agent runtime scaffolding (never publish) ---
+.claude/
+.handoff/
+.playwright-mcp/
+
+# --- build artifacts ---
+*.tsbuildinfo
