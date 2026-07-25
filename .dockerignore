@@ -30,14 +30,21 @@ mlruns/
 # Environment secrets
 .env
 
-# Documentation (not needed in container)
+# Documentation (not needed in the container)
 *.md
 !README.md
 docs/
-tasks/
+reports/
 
-# Claude / agent artifacts
+# Agent artifacts
 .claude/
+.handoff/
+
+# Checkpoints are NOT baked into the image — they arrive at runtime through the
+# read-only bind mount in infra/compose/base.yml. Excluding them here keeps the
+# build context small and stops a stale local model from being frozen into an
+# image that then disagrees with what MLflow has on record.
+checkpoints/
 
 # Next.js / web frontend build artifacts (A.2.10)
 web/node_modules/
