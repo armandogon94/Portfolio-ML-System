@@ -1,4 +1,4 @@
-# Dockerfile.web — production image for the Next.js frontend.
+# web.Dockerfile — production image for the Next.js frontend.
 #
 # Uses Next.js `output: "standalone"` (see web/next.config.mjs) so the
 # runner stage only carries the files `next start` actually needs.

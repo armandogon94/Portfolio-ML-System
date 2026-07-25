@@ -1,0 +1,27 @@
+flowchart TB
+    subgraph client["Client"]
+        U["Reviewer / recruiter<br/>browser"]
+    end
+    subgraph web["ml-web · Next.js 14 · :3070"]
+        P["/fintech/{fraud,credit-risk,churn}<br/>Zod forms + SHAP charts"]
+        D["/dashboard · ISR 30s"]
+    end
+    subgraph api["ml-api · FastAPI · :8070"]
+        R["routes: /predict/* /explain/* /models /health<br/>src/serving/api.py"]
+        REG["checkpoint registry<br/>src/serving/registry.py"]
+        PRE["request → features<br/>src/serving/preprocessing.py"]
+        PRD["predictors/{fraud,credit_risk,churn}.py"]
+        EXP["SHAP + gradient<br/>src/explainability/"]
+    end
+    subgraph store["Artifacts (gitignored)"]
+        CK[("checkpoints/&lt;problem&gt;/<br/>model.joblib · features.joblib<br/>metadata.json")]
+    end
+    subgraph track["ml-mlflow · :5070"]
+        ML[("runs · params · metrics<br/>model registry")]
+    end
+    U --> P --> R
+    U --> D --> ML
+    R --> PRE --> PRD --> EXP
+    REG --> CK
+    PRD --> REG
+    R -->|"training-time only"| ML

@@ -1,6 +1,13 @@
-# Self-contained development stack — no external dependencies.
-# Run: docker compose up --build
-# See docker-compose.prod.yml for production config (PostgreSQL, Traefik).
+# Self-contained stack: MLflow + FastAPI + Next.js. No external dependencies.
+#
+#   make docker-up        ->  docker compose -f infra/compose/base.yml up -d
+#
+# Build context is the REPOSITORY ROOT, not this directory, because the
+# Dockerfiles copy src/, configs/ and data/sample/. Hence `context: ../..`.
+#
+# Host ports come from .env with the values in docs/ports.example.md. The
+# container-internal ports are the framework defaults (8000, 3070) — container
+# network namespaces are isolated, so only the host side needs allocating.
 
 services:
   # MLflow Experiment Tracking Server (SQLite backend for dev)
@@ -30,8 +37,8 @@ services:
   # Prediction API Server (FastAPI)
   ml-api:
     build:
-      context: .
-      dockerfile: Dockerfile.api
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
     container_name: ml-system-api
     depends_on:
       mlflow:
@@ -41,6 +48,12 @@ services:
       - LOG_FORMAT=json
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PYTORCH_ENABLE_MPS_FALLBACK=1
+    volumes:
+      # Checkpoints are gitignored and are NOT baked into the image — training
+      # happens on the host (where LightGBM has all the cores) and the API picks
+      # the result up through this mount. A fresh clone with no checkpoints
+      # starts fine and reports every model as unavailable.
+      - ../../checkpoints:/app/checkpoints:ro
     ports:
       - "${BACKEND_PORT:-8070}:8000"
     networks:
@@ -53,16 +66,15 @@ services:
       retries: 3
       start_period: 30s
 
-  # ML Demo UI (Next.js + shadcn/ui) — industry-specific model pages
-  # plus the live /dashboard. Added in Phase A.2.10; took over fully
-  # from the Gradio prototype in Phase A.9 (see
-  # docs/decisions/ADR-001-gradio-to-nextjs.md). Proxies /api/* to
+  # ML Demo UI (Next.js + shadcn/ui) — three fintech model pages
+  # plus the live /dashboard. Replaced the Gradio prototype — see
+  # docs/adr/0001-gradio-to-nextjs.md. Proxies /api/* to
   # ml-api via next.config.mjs rewrites so the browser stays on a
   # single origin (no CORS preflight, no backend middleware).
   ml-web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
     container_name: ml-system-web
     depends_on:
       ml-api:

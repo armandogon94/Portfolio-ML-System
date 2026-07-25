@@ -1,6 +1,13 @@
 # =============================================================================
-# Dockerfile.api — FastAPI ML Inference Server
-# Multi-stage build: builder (install deps) → runtime (minimal image)
+# api.Dockerfile — FastAPI inference server.
+# Multi-stage: builder installs deps, runtime carries only what serving needs.
+#
+# Build context is the REPOSITORY ROOT:
+#   docker build -f infra/docker/api.Dockerfile .
+#
+# This build fails immediately if uv.lock is not committed, because of the
+# COPY + `uv sync --frozen` pair below. That is deliberate: it is the check that
+# caught the lockfile being gitignored while the README advertised the build.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -24,7 +31,9 @@ COPY pyproject.toml uv.lock ./
 # Install dependencies only (not the project itself — source copied in runtime)
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Replace PyTorch with CPU-only version (no CUDA needed in Docker)
+# CPU-only PyTorch. MPS is macOS-only and cannot exist in a Linux container;
+# CUDA would need an NVIDIA host. The README states this tradeoff explicitly
+# rather than implying the container is GPU-accelerated.
 RUN uv pip install torch --index-url https://download.pytorch.org/whl/cpu --reinstall
 
 # ---------------------------------------------------------------------------
@@ -51,13 +60,20 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV MPLCONFIGDIR=/tmp/matplotlib
 
-# Copy application code
+# Application code.
 COPY --chown=mluser:mluser src/ ./src/
 COPY --chown=mluser:mluser configs/ ./configs/
 COPY --chown=mluser:mluser scripts/serve.py ./scripts/serve.py
 
-# Copy checkpoints (pre-trained models for inference)
-COPY --chown=mluser:mluser checkpoints/ ./checkpoints/
+# The committed CI fixtures. Small, synthetic, and never used for a published
+# number — see data/README.md. They let the container's e2e path run offline.
+COPY --chown=mluser:mluser data/sample/ ./data/sample/
+
+# Checkpoints are NOT copied. They are gitignored, so on a fresh clone the
+# directory does not exist and a COPY here would fail the build. They arrive at
+# runtime through the read-only bind mount in infra/compose/base.yml. Created
+# empty so the registry's glob has a directory to find.
+RUN mkdir -p /app/checkpoints && chown mluser:mluser /app/checkpoints
 
 USER mluser
 

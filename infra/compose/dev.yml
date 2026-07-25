@@ -1,7 +1,8 @@
-# docker-compose.dev.yml — override layer for local development.
+# dev.yml — override layer for local development.
 #
-# Applied on top of docker-compose.yml:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Applied on top of base.yml:
+#   make docker-dev-up
+#   docker compose -f infra/compose/base.yml -f infra/compose/dev.yml up
 #
 # Currently only overrides ml-web (replaces `node server.js` with
 # `pnpm dev` so saved file changes hot-reload). The rest of the stack
@@ -16,8 +17,8 @@
 services:
   ml-web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
       target: builder  # stop before runner — we need the full deps tree for dev
     command: pnpm dev -p 3070
     environment:
@@ -25,7 +26,7 @@ services:
       - INTERNAL_API_URL=http://ml-api:8000
     volumes:
       # Mount the source tree so edits reflect inside the container.
-      - ./web:/app/web
+      - ../../web:/app/web
       # Anonymous volume shadows node_modules so the container keeps
       # its own (built for Linux/Alpine) rather than the host's
       # (built for macOS), which would cause native-binary mismatches.

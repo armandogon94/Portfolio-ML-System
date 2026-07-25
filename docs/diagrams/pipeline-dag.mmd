@@ -1,0 +1,15 @@
+flowchart LR
+    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
+    OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
+    P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
+    T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]
+    X -->|"src/training/tabular.py<br/>configs/&lt;problem&gt;.yaml"| MDL["LightGBM + baselines<br/>prior · logreg"]
+    MDL --> CK[("checkpoints/&lt;problem&gt;/")]
+    MDL --> ML[("MLflow :5070")]
+    MDL --> RES["reports/RESULTS.md<br/>reports/*_metrics.csv"]
+    CK --> API["FastAPI :8070"] --> WEB["Next.js :3070"]
+    SMP[("data/sample/*.csv<br/>500-row CI fixtures")] -.->|"CI only · writes NO checkpoint"| T
