@@ -13,8 +13,10 @@ venv/
 env/
 
 # Data (regenerated via scripts)
-data/raw/*.csv
-data/processed/*.csv
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
 
 # Model checkpoints (regenerated via training)
 checkpoints/*/
@@ -74,3 +76,7 @@ artifacts/
 # Kept out of the tree entirely; git history is the record.
 /SPEC.md
 /decision.md
+
+# Agent scaffolding — never published
+AGENTS.md
+docs/AGENT-BRIEF.md

@@ -1,6 +1,6 @@
 # PROGRESS — rebuild to fintech + real data
 
-Tracking file for the rebuild described in [`AGENT-BRIEF.md`](AGENT-BRIEF.md).
+This file is the standalone handoff and status tracker for the fintech rebuild.
 Branch: `rebuild/fintech-real-data`. Every slice below is a separate commit.
 
 **Legend:** `[x]` done and committed · `[~]` partially done, see notes ·

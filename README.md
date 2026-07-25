@@ -14,7 +14,7 @@ completely meaningless.
 **Can a fraud model hold up when the labels aren't ones I wrote myself?**
 
 - **Focus** — payment fraud · consumer credit risk · card attrition
-- **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151, CC0) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23)
+- **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
 - **Stack** — Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
 - **Output** — a results table where every cell traces to a CSV written by a training run
 
@@ -194,7 +194,7 @@ identical matrices. [SVG](docs/diagrams/sequence-predict.svg)
 ```mermaid
 flowchart LR
     K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
-    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · rights unresolved")]
     K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
     K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
@@ -314,9 +314,9 @@ glossing:
 | Dataset | Account | Extra gate | Redistributable |
 |---|---|---|---|
 | IEEE-CIS Fraud Detection | Free Kaggle | **Yes — one-click rules acceptance** | **No** |
-| LendingClub 2007-2018Q4 | Free Kaggle | No | Yes (CC0) |
-| Credit Card Customers | Free Kaggle | No | Yes (CC0) |
-| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Yes (DbCL 1.0) |
+| LendingClub 2007-2018Q4 | Free Kaggle | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| Credit Card Customers | Free Kaggle | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
 IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
 rules that cannot be scripted; `src/data/download.py` converts the resulting 403
@@ -435,7 +435,8 @@ The network exclusion now lives visibly in
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+- Repository licence: MIT — see [LICENSE](LICENSE).
+- Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Author
 

@@ -69,7 +69,10 @@ DATASETS = {
             "kind": "openml",
             "data_id": 1597,
             "url": "https://www.openml.org/d/1597",
-            "licence": "DbCL 1.0 — redistributable",
+            "licence": (
+                'Unresolved — OpenML records only "Public"; the Kaggle mirror indicates '
+                "ODbL-style terms. Treat as NOT cleared for redistribution."
+            ),
             "access": "NO ACCOUNT REQUIRED. Fetched via sklearn.datasets.fetch_openml.",
             "expected_rows": 284_807,
             "expected_positive_rate": 0.001727,

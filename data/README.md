@@ -4,10 +4,17 @@ Three real, public datasets. No generator, no simulation, no synthetic
 augmentation. See [ADR-0003](../docs/adr/0003-real-data-over-synthetic.md) for
 why the previous synthetic pipeline was deleted rather than improved.
 
-**Nothing in `data/raw/` or `data/processed/` is committed.** Downloads land in
-`~/.cache/kagglehub/`, outside the repository and outside the Docker build
-context. The only data files in git are the ~500-row CI fixtures in
-`data/sample/`, described at the bottom of this page.
+Downloads land in `~/.cache/kagglehub/`, outside the repository and outside the
+Docker build context.
+
+---
+
+## What this repository redistributes
+
+No rows from any of these datasets are committed. The only committed data files
+are the PRNG-generated fixtures in `data/sample/`, produced by
+`scripts/make_fixtures.py` with seed 42. Derived and processed artifacts are
+gitignored.
 
 ---
 
@@ -16,9 +23,9 @@ context. The only data files in git are the ~500-row CI fixtures in
 | Dataset | Account needed | Extra gate | Redistributable |
 |---|---|---|---|
 | IEEE-CIS Fraud Detection | Free Kaggle account | **Yes** — one-click acceptance of the competition rules | **No** |
-| LendingClub 2007-2018Q4 | Free Kaggle account | No | Yes (CC0) |
-| Credit Card Customers | Free Kaggle account | No | Yes (CC0) |
-| ULB Credit Card Fraud | **None** | No | Yes (DbCL 1.0) |
+| LendingClub 2007-2018Q4 | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| Credit Card Customers | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| ULB Credit Card Fraud | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
 **IEEE-CIS is public and free, but it is not anonymous-`curl`-able.** It sits
 behind a Kaggle account *and* an explicit rules acceptance that cannot be
@@ -113,7 +120,7 @@ artifacts. Fitting them on the full frame leaks the test distribution.
 | | |
 |---|---|
 | Source | <https://www.kaggle.com/datasets/wordsforthewise/lending-club> |
-| Licence | **CC0 1.0** (public domain) |
+| Licence | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
 | File | `accepted_2007_to_2018Q4.csv.gz` |
 | Scale | ~2,260,701 rows × 151 columns |
 | Size | ~648 MB gzipped |
@@ -122,6 +129,10 @@ artifacts. Fitting them on the full frame leaks the test distribution.
 | Split | Time-based on `issue_d` |
 | Rows after filtering | *not yet recorded — the download has not been run* |
 | sha256 | *not yet recorded* |
+
+The upload originates from LendingClub itself. The uploader tags it CC0, but
+the uploader's authority to apply CC0 to the upstream data is undocumented; do
+not redistribute rows.
 
 ### Target construction
 
@@ -166,7 +177,7 @@ comparison this repository can offer.
 | | |
 |---|---|
 | Source | <https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers> |
-| Licence | CC0 1.0 per the dataset page |
+| Licence | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
 | File | `BankChurners.csv` |
 | Scale | **10,127 rows × 23 columns** |
 | Positive rate | 16.07% attrited |
@@ -175,6 +186,10 @@ comparison this repository can offer.
 | Target | `is_attrited`, mapped from `Attrition_Flag` |
 | Split | **5-fold stratified cross-validation** |
 | sha256 | *not yet recorded* |
+
+The upload originates from `leaps.analyttica.com`. The uploader tags it CC0,
+but the uploader's authority to apply CC0 to the upstream data is undocumented;
+do not redistribute rows.
 
 **n = 10,127 is small.** A single hold-out number on this dataset is noise wearing
 a decimal point, so every metric is reported as a 5-fold mean ± standard
@@ -207,7 +222,7 @@ protection.
 | | |
 |---|---|
 | Source | <https://www.openml.org/d/1597> (also Kaggle `mlg-ulb/creditcardfraud`) |
-| Licence | **DbCL 1.0** — redistributable |
+| Licence | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 | Scale | 284,807 transactions × 30 |
 | Positive rate | **0.172%** (492 frauds) |
 | Access | **No account. No token. No rules acceptance.** |

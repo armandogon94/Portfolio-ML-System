@@ -10,6 +10,10 @@ The guard is structural, not a promise: ``src/training/tabular.py`` refuses to
 write a checkpoint when ``--sample`` is set, and ``tests/test_quality_gates.py``
 skips rather than passes when no real checkpoint exists.
 
+The CSVs contain only their schema header and data rows. Their synthetic status
+is documented in ``data/README.md`` rather than written as a comment row because
+the adapters read them with the standard CSV header parser.
+
 Why synthetic fixtures at all, when the whole point of this rebuild was to stop
 using synthetic data? Because IEEE-CIS competition data is not redistributable —
 committing 500 real rows would violate the competition rules. This is the one
@@ -35,10 +39,6 @@ from src.data.adapters import credit_card_churn, ieee_cis, lending_club
 
 SEED = 42
 N_ROWS = 500
-
-#: Written as the first data row of every fixture so a reader who opens the CSV
-#: sees the warning before the numbers.
-FIXTURE_BANNER = "SYNTHETIC-CI-FIXTURE-NOT-REAL-DATA"
 
 
 def _rng() -> np.random.Generator:
@@ -228,7 +228,7 @@ def main() -> int:
             f"positive rate {loaded[adapter.TARGET].mean():.4f}  "
             f"({path.stat().st_size / 1024:.0f} KB)"
         )
-    print(f"\nAll fixtures are {FIXTURE_BANNER}. See data/README.md.")
+    print("\nAll fixtures regenerated. Their synthetic status is documented in data/README.md.")
     return 0
 
 
