@@ -36,7 +36,7 @@ Branch: `rebuild/fintech-real-data`. Every slice below is a separate commit.
       `predictor.py` → seven files, every one under 150 lines;
       `src/models/registry.py`; `src/features/schema.py` for categorical replay.
 - [x] **Slice 8 — Tests that could actually fail.** `tests/` mirrors `src/`.
-      **179 passing, 18 skipped, 85% coverage.** `-m 'not network and not parity'`
+      **181 passing, 18 skipped, 85% coverage.** `-m 'not network and not parity'`
       removed from `addopts`. `mypy` added and clean.
 - [x] **Slice 9 — Docs, diagrams, ADRs, README rewrite.** ADRs 0001–0005; three
       Mermaid diagrams inline and exported to SVG; `docs/architecture.md`;
@@ -188,7 +188,7 @@ runs the documented quickstart in seven stages. Run with `make verify`.
 | 2. Files the quickstart needs are tracked (`uv.lock`, `LICENSE`, `.env.example`, `pnpm-lock.yaml`, Dockerfile, compose, `data/sample/`) | **PASS** |
 | 3. Hygiene — no `CLAUDE.md`/`AGENTS.md`/`PORT-MAP`/`.claude/`/`.bak` tracked; no `src/data/generate_*.py`; no `YOUR_USERNAME`; the retraction section present | **PASS** |
 | 4. Every relative README link resolves inside the clone | **PASS** |
-| 5. `uv sync --frozen` then `pytest -m "not network"` | **PASS** — 179 passed, 18 skipped, 1 deselected |
+| 5. `uv sync --frozen` then `pytest -m "not network"` | **PASS** — 181 passed, 18 skipped, 1 deselected |
 | 6. `pnpm install --frozen-lockfile` → typecheck → test → build | **PASS** — 98 web tests, build emits 7 routes |
 | 7. `docker build` + `compose up --wait` + `GET /health` + `POST /predict/fraud` → 503 | **NOT COMPLETED** — see below |
 

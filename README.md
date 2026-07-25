@@ -253,7 +253,7 @@ one line rather than drawing a fictional one.
 ├── data/
 │   ├── README.md               # Provenance, licence, access gate, and the leakage traps per dataset
 │   └── sample/                 # COMMITTED 500-row synthetic CI fixtures. Labels are pure noise.
-├── tests/                      # Mirrors src/ package-for-package. 179 tests, 85% coverage.
+├── tests/                      # Mirrors src/ package-for-package. 181 tests, 85% coverage.
 │   ├── data/test_leakage_denylist.py   # the highest-value test in the repo
 │   ├── serving/test_skew.py            # training features == serving features
 │   ├── test_quality_gates.py           # metric floor AND leakage ceiling AND monotonicity
@@ -276,7 +276,7 @@ cd Portfolio-ML-System
 cp .env.example .env
 
 make setup           # uv sync --frozen --extra dev
-make test            # 179 tests on the committed fixtures — no credentials, no network
+make test            # 181 tests on the committed fixtures — no credentials, no network
 make train-sample    # smoke-train all three problems on fixtures (writes NO checkpoint)
 ```
 
@@ -372,13 +372,13 @@ from, so the explanation always describes the number beside it.
 ## Testing
 
 ```bash
-make test       # 179 tests, excludes the live-Kaggle canary
+make test       # 181 tests, excludes the live-Kaggle canary
 make test-all   # includes it (needs credentials)
 make lint typecheck
 make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
-**179 tests · 18 skipped · 85% coverage on `src/`.** The 18 skips are the quality
+**181 tests · 18 skipped · 85% coverage on `src/`.** The 18 skips are the quality
 gates, which need a real checkpoint and skip with the command that creates one —
 skipping is correct; a vacuously passing gate is not.
 
