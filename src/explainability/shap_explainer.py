@@ -43,16 +43,13 @@ class SHAPExplainer:
         else:
             values = np.array(shap_values).flatten()
 
-        feature_importances = {
-            name: float(val) for name, val in zip(feature_names, values)
-        }
+        feature_importances = {name: float(val) for name, val in zip(feature_names, values)}
 
         sorted_features = sorted(
             feature_importances.items(), key=lambda kv: abs(kv[1]), reverse=True
         )
         top_features = [
-            {"feature": name, "importance": float(val)}
-            for name, val in sorted_features[:top_n]
+            {"feature": name, "importance": float(val)} for name, val in sorted_features[:top_n]
         ]
 
         return {

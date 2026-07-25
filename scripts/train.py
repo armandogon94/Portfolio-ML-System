@@ -1,256 +1,136 @@
-"""CLI script to train models.
+#!/usr/bin/env python
+"""Train one problem, or all three, from its config.
 
-Phase A.1.9 adds ``--modality {synthetic,stream,mixed,all}``. When ``all``,
-three training runs execute sequentially under one MLflow parent run; the
-trainer's ``_init_mlflow`` auto-nests each child. After the loop we pick a
-"recommended" modality by the per-model key metric and flag it in the
-winning checkpoint's ``metadata.json``.
+There is no ``--modality`` flag. The old three-modality
+(synthetic / stream / mixed) machinery was deleted: real data is now the only
+path. See ``docs/adr/0003-real-data-over-synthetic.md``.
+
+Usage:
+    uv run python scripts/train.py --model churn
+    uv run python scripts/train.py --model fraud --autoencoder
+    uv run python scripts/train.py --model all
+    uv run python scripts/train.py --model churn --sample     # CI fixture, no checkpoint
+
+Requires data. Run ``scripts/download_data.py`` first; without it this exits with
+the exact remediation rather than falling back to anything synthetic.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from src.config import get_project_root, load_config
+from src.config import PROBLEMS
+from src.data.download import DatasetAccessError
 
 console = Console()
 
-TRAINERS = {
-    "credit_risk": "src.training.train_credit_risk:CreditRiskTrainer",
-    "fraud": "src.training.train_fraud:FraudDetectionTrainer",
-    "price": "src.training.train_price:PricePredictionTrainer",
-    "forecaster": "src.training.train_forecaster:DemandForecastTrainer",
-    "rental_price": "src.training.train_rental_price:RentalPriceTrainer",
-    "dental_noshow": "src.training.train_dental_noshow:DentalNoShowTrainer",
-    "heart_disease": "src.training.train_heart_disease:HeartDiseaseTrainer",
-    "delivery_eta": "src.training.train_delivery_eta:DeliveryEtaTrainer",
-    "customer_churn": "src.training.train_customer_churn:CustomerChurnTrainer",
-    "h1b_approval": "src.training.train_h1b_approval:H1BApprovalTrainer",
-}
-
-# CLI model name → problem / config name used by BaseTrainer.
-CONFIG_NAMES = {
-    "credit_risk": "credit_risk",
-    "fraud": "fraud_detection",
-    "price": "price_prediction",
-    "forecaster": "demand_forecasting",
-    "rental_price": "rental_price",
-    "dental_noshow": "dental_noshow",
-    "heart_disease": "heart_disease",
-    "delivery_eta": "delivery_eta",
-    "customer_churn": "customer_churn",
-    "h1b_approval": "h1b_approval",
-}
-
-MODALITY_CHOICES = ("synthetic", "stream", "mixed", "all")
-_ITER_MODALITIES = ("synthetic", "stream", "mixed")
-
-# Which metric ranks modalities per model, and whether higher is better.
-# Used to pick the "recommended" modality after --modality all.
-RECOMMENDATION_KEY: dict[str, tuple[str, bool]] = {
-    "price": ("test_r2", True),
-    "credit_risk": ("test_auc_roc", True),
-    "fraud": ("test_autoencoder_auc_roc", True),
-    "forecaster": ("test_avg_mae", False),
-    "rental_price": ("test_r2", True),
-    "dental_noshow": ("test_auc_roc", True),
-    "heart_disease": ("test_auc_roc", True),
-    # Lower RMSE is better for the delivery-ETA regressor.
-    "delivery_eta": ("test_rmse", False),
-    "customer_churn": ("test_auc_roc", True),
-    "h1b_approval": ("test_auc_roc", True),
-}
+#: Metrics worth printing after a run. Everything else lands in the CSV.
+_HEADLINE = (
+    "test_pr_auc",
+    "test_roc_auc",
+    "test_pr_auc_baseline",
+    "test_pr_auc_delta",
+    "test_precision_at_1pct",
+    "test_recall_at_1pct_fpr",
+    "cv_pr_auc_mean",
+    "cv_pr_auc_std",
+    "cv_roc_auc_mean",
+    "cv_roc_auc_std",
+)
 
 
-def get_trainer_class(name: str):
-    module_path, class_name = TRAINERS[name].rsplit(":", 1)
-    module = importlib.import_module(module_path)
-    return getattr(module, class_name)
+def _summary_table(results: dict[str, dict[str, float]]) -> Table:
+    table = Table(title="Measured metrics (also written to reports/<problem>_metrics.csv)")
+    table.add_column("problem", style="cyan")
+    for name in _HEADLINE:
+        table.add_column(name.replace("test_", "").replace("cv_", "cv "), justify="right")
+
+    for problem, metrics in results.items():
+        row = [problem]
+        for name in _HEADLINE:
+            value = metrics.get(name)
+            row.append(f"{value:.4f}" if isinstance(value, float) else "—")
+        table.add_row(*row)
+    return table
 
 
-def _supports_modalities(model_name: str) -> bool:
-    """A model supports modalities iff its config declares a kaggle_slug."""
-    config = load_config(CONFIG_NAMES[model_name])
-    return bool(config.get("data", {}).get("kaggle_slug"))
-
-
-def _pick_recommended(
-    model_name: str, per_modality: dict[str, dict]
-) -> str | None:
-    """Return the modality whose key metric wins, or None if none reported it."""
-    spec = RECOMMENDATION_KEY.get(model_name)
-    if spec is None:
-        return None
-    metric_name, higher_better = spec
-
-    scored = {
-        m: metrics.get(metric_name)
-        for m, metrics in per_modality.items()
-        if isinstance(metrics.get(metric_name), (int, float))
-    }
-    if not scored:
-        return None
-    return max(scored, key=scored.get) if higher_better else min(
-        scored, key=scored.get
-    )
-
-
-def _flag_recommended_metadata(model_name: str, modality: str) -> None:
-    """Write ``recommended=True`` into the winning checkpoint's metadata.json."""
-    problem = CONFIG_NAMES[model_name]
-    metadata_path = (
-        get_project_root()
-        / "checkpoints"
-        / f"{problem}_{modality}"
-        / "metadata.json"
-    )
-    if not metadata_path.exists():
-        return
-    with open(metadata_path) as f:
-        metadata = json.load(f)
-    metadata["recommended"] = True
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2, default=str)
-
-
-def _write_comparison_csv(
-    model_name: str, per_modality: dict[str, dict], recommended: str | None
-) -> Path:
-    """Write results/modality_comparison_<problem>.csv — 3 rows, wide format."""
-    problem = CONFIG_NAMES[model_name]
-    rows = []
-    for modality in _ITER_MODALITIES:
-        metrics = per_modality.get(modality, {})
-        row = {"modality": modality}
-        row.update({k: v for k, v in metrics.items() if isinstance(v, (int, float))})
-        row["recommended"] = modality == recommended
-        rows.append(row)
-
-    out = get_project_root() / "results" / f"modality_comparison_{problem}.csv"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_csv(out, index=False)
-    return out
-
-
-def _print_comparison_table(
-    model_name: str, per_modality: dict[str, dict], recommended: str | None
-) -> None:
-    spec = RECOMMENDATION_KEY.get(model_name)
-    metric_name = spec[0] if spec else "test_accuracy"
-
-    table = Table(title=f"{model_name} — modality comparison")
-    table.add_column("modality", style="cyan")
-    table.add_column(metric_name)
-    table.add_column("recommended", justify="center")
-
-    for modality in _ITER_MODALITIES:
-        metrics = per_modality.get(modality, {})
-        val = metrics.get(metric_name)
-        val_str = f"{val:.4f}" if isinstance(val, float) else (str(val) if val is not None else "—")
-        table.add_row(modality, val_str, "✓" if modality == recommended else "")
-
-    console.print()
-    console.print(table)
-    if recommended:
-        console.print(
-            f"[bold green]Recommended for demo: {recommended}[/bold green]"
-        )
-
-
-def _run_modality_all(model_name: str, use_wandb: bool) -> dict[str, dict]:
-    """Train all 3 modalities under one MLflow parent run and write comparison."""
-    import mlflow
-
-    TrainerClass = get_trainer_class(model_name)
-    per_modality: dict[str, dict] = {}
-
-    parent_name = (
-        f"{model_name}_modality_comparison_"
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    )
-    with mlflow.start_run(run_name=parent_name):
-        mlflow.set_tag("modality", "all")
-        for modality in _ITER_MODALITIES:
-            console.print(
-                f"\n[bold cyan]══ Training {model_name} ({modality}) ══[/bold cyan]"
-            )
-            trainer = TrainerClass(use_wandb=use_wandb, modality=modality)
-            per_modality[modality] = trainer.run()
-
-    recommended = _pick_recommended(model_name, per_modality)
-    if recommended:
-        _flag_recommended_metadata(model_name, recommended)
-
-    comparison_path = _write_comparison_csv(model_name, per_modality, recommended)
-    console.print(f"[dim]Comparison CSV: {comparison_path}[/dim]")
-    _print_comparison_table(model_name, per_modality, recommended)
-
-    return per_modality
-
-
-def _train_one(model_name: str, modality: str | None, use_wandb: bool) -> dict:
-    TrainerClass = get_trainer_class(model_name)
-    trainer = TrainerClass(use_wandb=use_wandb, modality=modality)
-    return trainer.run()
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Train ML models")
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--model", choices=[*PROBLEMS, "all"], required=True)
     parser.add_argument(
-        "--model",
-        choices=list(TRAINERS.keys()) + ["all"],
-        required=True,
-        help="Which model to train",
+        "--autoencoder",
+        action="store_true",
+        help="Train the unsupervised MPS autoencoder baseline instead (fraud only).",
     )
     parser.add_argument(
-        "--modality",
-        choices=MODALITY_CHOICES,
-        default=None,
+        "--sample",
+        action="store_true",
         help=(
-            "Data modality: synthetic | stream | mixed | all. "
-            "With 'all', trains all three under one MLflow parent run and "
-            "writes a comparison CSV. Models without kaggle_slug in their "
-            "config fall back to legacy single-run behavior."
+            "Train on the committed CI fixtures. Writes NO checkpoint and NO metrics "
+            "CSV — fixture numbers must never become published numbers."
         ),
     )
-    parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
+    parser.add_argument("--wandb", action="store_true", help="Also log to W&B if a key is set.")
     args = parser.parse_args()
 
-    models = list(TRAINERS.keys()) if args.model == "all" else [args.model]
-    use_wandb = not args.no_wandb
+    if args.autoencoder and args.model not in ("fraud", "all"):
+        parser.error("--autoencoder applies to the fraud problem only.")
 
-    console.print("[bold]Model Training Pipeline[/bold]")
-    all_metrics: dict[str, dict] = {}
+    problems = list(PROBLEMS) if args.model == "all" else [args.model]
+    results: dict[str, dict[str, float]] = {}
+    failures: list[str] = []
 
-    for model_name in models:
-        if args.modality == "all":
-            if _supports_modalities(model_name):
-                all_metrics[model_name] = _run_modality_all(model_name, use_wandb)
-                continue
-            console.print(
-                f"[yellow]{model_name}: no kaggle_slug in config; "
-                f"ignoring --modality all, running legacy single train.[/yellow]"
-            )
-            all_metrics[model_name] = _train_one(model_name, None, use_wandb)
-        elif args.modality in _ITER_MODALITIES:
-            all_metrics[model_name] = _train_one(model_name, args.modality, use_wandb)
-        else:
-            # --modality not provided → legacy behavior (modality=None)
-            all_metrics[model_name] = _train_one(model_name, None, use_wandb)
+    for problem in problems:
+        console.rule(f"[bold cyan]{problem}")
+        try:
+            trainer = _build_trainer(problem, args)
+            results[trainer_label(problem, args)] = trainer.run()
+        except DatasetAccessError as exc:
+            console.print(f"[bold red]{problem}: data unavailable[/bold red]\n{exc}")
+            failures.append(problem)
+        except FileNotFoundError as exc:
+            console.print(f"[bold red]{problem}: {exc}[/bold red]")
+            failures.append(problem)
 
-    console.print("\n[bold green]All models trained successfully![/bold green]")
+    if results:
+        console.print()
+        console.print(_summary_table(results))
+    if args.sample:
+        console.print(
+            "\n[yellow]SAMPLE MODE — nothing was checkpointed. These numbers are "
+            "from synthetic fixtures and are meaningless as model results.[/yellow]"
+        )
+
+    if failures:
+        console.print(
+            f"\n[bold red]{len(failures)} problem(s) not trained: {failures}[/bold red]\n"
+            "Fetch the data first:  uv run python scripts/download_data.py --dataset all"
+        )
+        return 1
+    return 0
+
+
+def trainer_label(problem: str, args: argparse.Namespace) -> str:
+    return f"{problem}_autoencoder" if args.autoencoder and problem == "fraud" else problem
+
+
+def _build_trainer(problem: str, args: argparse.Namespace):
+    if args.autoencoder and problem == "fraud":
+        from src.training.autoencoder_pipeline import AutoencoderTrainer
+
+        return AutoencoderTrainer(problem, use_wandb=args.wandb, sample=args.sample)
+
+    from src.training.tabular import TabularTrainer
+
+    return TabularTrainer(problem, use_wandb=args.wandb, sample=args.sample)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

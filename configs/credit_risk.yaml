@@ -1,42 +1,109 @@
+# Consumer credit risk — LendingClub accepted loans 2007-2018Q4 (CC0 / public domain).
+#
+# Target is derived from `loan_status`, filtered to TERMINAL statuses only:
+# "Fully Paid" -> 0, "Charged Off" -> 1. `Current` loans have no outcome yet and
+# are dropped; including them would label an unresolved loan as non-default.
 problem: credit_risk
+seed: 42
 
 data:
-  raw_data_path: data/raw/credit_risk.csv
-  processed_data_path: data/processed/credit_risk.csv
-  n_samples: 50000
-  test_size: 0.2
-  random_seed: 42
-
-features:
-  numerical:
-    - age
-    - annual_income
-    - credit_score
-    - num_open_accounts
-    - payment_history_pct
-    - debt_to_income_ratio
-    - employment_years
-    - loan_amount
+  source:
+    kind: kaggle_dataset
+    slug: wordsforthewise/lending-club
+    filename: accepted_2007_to_2018Q4.csv.gz
+    adapter: src.data.adapters.lending_club
+  sample_path: data/sample/lending_club_sample.csv
+  processed_path: data/processed/credit_risk.parquet
   target: is_default
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # LEAKAGE DENYLIST — enforced by tests/data/test_leakage_denylist.py
+  #
+  # Every column below is recorded AFTER origination. A model that sees
+  # `recoveries` or `total_rec_prncp` reports ~0.99 ROC-AUC and is worthless:
+  # those fields only take non-zero values once the loan has already defaulted.
+  # reports/RESULTS.md carries the with/without delta.
+  # ─────────────────────────────────────────────────────────────────────────
+  denylist:
+    - recoveries
+    - collection_recovery_fee
+    - total_rec_prncp
+    - total_rec_int
+    - total_rec_late_fee
+    - total_pymnt
+    - total_pymnt_inv
+    - last_pymnt_amnt
+    - last_pymnt_d
+    - next_pymnt_d
+    - out_prncp
+    - out_prncp_inv
+    - debt_settlement_flag
+    - debt_settlement_flag_date
+    - settlement_status
+    - settlement_date
+    - settlement_amount
+    - settlement_percentage
+    - settlement_term
+    - funded_amnt_inv
+    - last_credit_pull_d
+    - last_fico_range_high
+    - last_fico_range_low
+    - hardship_flag
+    - hardship_type
+    - hardship_status
+    - hardship_amount
+    - loan_status
+    - is_default
+
+split:
+  type: time
+  column: issue_d          # train on earlier vintages, test on later ones
+  test_size: 0.2
+  val_size: 0.1
+
+features:
+  module: src.features.credit_risk_features
+
 model:
-  type: xgboost
+  type: lightgbm
   params:
-    max_depth: 6
-    learning_rate: 0.1
-    n_estimators: 200
-    objective: "binary:logistic"
-    eval_metric: auc
-    early_stopping_rounds: 20
-    subsample: 0.8
-    colsample_bytree: 0.8
-    scale_pos_weight: 11.5  # ~1/0.08 for 8% default rate
+    objective: binary
+    metric: average_precision
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    n_estimators: 1500
+    early_stopping_rounds: 100
+    n_jobs: 8
+    verbose: -1
+
+baselines:
+  - type: prior
+  - type: logreg
+    params:
+      max_iter: 1000
+      class_weight: balanced
+
+metrics:
+  primary: pr_auc
+  report:
+    - pr_auc
+    - roc_auc
+    - precision_at_1pct
+    - recall_at_1pct_fpr
+    - brier
+
+# A correct LendingClub model is NOT impressive-looking. ~0.70 ROC-AUC is the
+# honest ceiling once post-origination fields are removed. Anything >= 0.80
+# means a denylisted column got through.
+expected:
+  roc_auc_min: 0.62
+  roc_auc_max: 0.80
 
 training:
   checkpoint_dir: checkpoints/credit_risk
-  results_dir: results
-  wandb_project: portfolio-ml-system
-  wandb_tags:
-    - credit_risk
-    - xgboost
-    - classification
+  reports_dir: reports
+  mlflow_experiment: fintech-ml-system

@@ -1,7 +1,7 @@
 [project]
 name = "portfolio-ml-system"
-version = "1.0.0"
-description = "Production ML system with credit risk, fraud detection, price prediction, and demand forecasting"
+version = "2.0.0"
+description = "Fintech ML system: payment fraud, consumer credit risk and card attrition on real public data"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -15,11 +15,12 @@ dependencies = [
     # Data
     "pandas>=2.1",
     "numpy>=1.26",
-    "faker>=22.0",
+    "pyarrow>=15.0",
 
-    # Streaming datasets (Phase A.1 — real Kaggle/HF data without repo bloat)
-    "kagglehub>=0.3",
-    "datasets>=2.18",
+    # Real dataset acquisition. kagglehub>=0.3.4 is the floor for
+    # competition_download() — IEEE-CIS is a competition, not a dataset,
+    # and dataset_download() physically cannot fetch it.
+    "kagglehub>=0.3.4",
 
     # Experiment Tracking
     "wandb>=0.16",
@@ -31,12 +32,8 @@ dependencies = [
     # Config
     "pyyaml>=6.0",
 
-    # Visualization (matplotlib still used by evaluator + notebooks; plotly
-    # was the Gradio chart backend — kept around because some training
-    # scripts still produce Plotly HTML artifacts that the dashboard might
-    # consume in a future slice).
+    # Figures for reports/figures and docs/images (scripts/make_figures.py).
     "matplotlib>=3.8",
-    "plotly>=5.18",
 
     # API
     "fastapi>=0.109",
@@ -53,6 +50,10 @@ dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "ruff>=0.2",
+    "mypy>=1.9",
+    "httpx>=0.27",          # fastapi.testclient
+    "types-PyYAML>=6.0",
+    "pandas-stubs>=2.1",
 ]
 
 [build-system]
@@ -75,10 +76,13 @@ select = ["E", "F", "I", "W"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--cov=src --cov-report=term-missing --tb=short -q -m 'not network and not parity'"
+# NOTE: no `-m` filter here. The previous version hid `-m 'not network and not
+# parity'` in this line, which silently deselected the Kaggle canary AND the
+# pre-ship gate — 360 green tests, two of which never ran. Network exclusion now
+# lives visibly in .github/workflows/ci.yml as `-m "not network"`.
+addopts = "--cov=src --cov-report=term-missing --tb=short -q"
 markers = [
-    "network: tests that hit real external APIs (Kaggle/HF); skipped by default, run with '-m network'",
-    "parity: pre-ship regression gates against committed JSON snapshots (require real checkpoints); skipped by default, run with '-m parity'",
+    "network: hits a real external API (Kaggle). Excluded in CI via -m 'not network'.",
 ]
 
 [tool.coverage.run]
@@ -93,3 +97,12 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "if TYPE_CHECKING:",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+ignore_missing_imports = true      # lightgbm, shap, kagglehub and mlflow ship no stubs
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true

@@ -1,303 +1,159 @@
-"""Base trainer with W&B + MLflow integration and checkpointing."""
+"""``BaseTrainer`` — config loading, experiment tracking, and the MLflow registry.
 
-import json
+Kept deliberately small. It owns what every trainer needs and knows nothing about
+tabular data, splits or metrics: those belong to ``tabular.py`` and
+``autoencoder_pipeline.py``, the two concrete trainers.
+
+MLflow is primary and always-on (local file store by default, HTTP when
+``MLFLOW_TRACKING_URI`` points at the container). W&B is optional and off unless a
+real API key is present — see ``docs/adr/0002-experiment-tracking.md``.
+"""
+
+from __future__ import annotations
+
 import logging
 import os
-import shutil
-import time
 from abc import ABC, abstractmethod
 from datetime import datetime
-from pathlib import Path
+from typing import Any
 
 import mlflow
-import pandas as pd
-from rich.console import Console
 
-from src.config import get_project_root, load_config
+from src.config import load_config
 from src.logging_config import setup_logging
 
-console = Console()
 logger = logging.getLogger(__name__)
+
+#: Placeholder shipped in ``.env.example``. Treated as "unset" so a user who
+#: copies the example file does not get confusing W&B auth failures.
+_WANDB_PLACEHOLDER = "your_key_here"
 
 
 class BaseTrainer(ABC):
-    """Base class for all model trainers.
+    """Shared scaffolding for a training run.
 
-    Handles: config loading, W&B + MLflow initialization, checkpoint saving, results CSV export.
-    Subclasses implement: load_data, preprocess, train, evaluate.
+    Args:
+        config_name: Problem name resolving to ``configs/<name>.yaml``.
+        use_wandb: Attempt W&B logging. Ignored when no real API key is set.
     """
 
-    def __init__(
-        self,
-        config_name: str,
-        use_wandb: bool = True,
-        modality: str | None = None,
-    ):
-        """Initialize trainer.
-
-        Args:
-            config_name: Problem name matching a YAML in ``configs/``.
-            use_wandb: Enable W&B logging when an API key is available.
-            modality: Optional data modality ("synthetic" | "stream" | "mixed").
-                When set, the checkpoint dir becomes
-                ``checkpoints/<problem>_<modality>/`` and the modality is
-                recorded in metadata + MLflow tags. When None, the legacy
-                ``checkpoints/<problem>/`` path is used (backward compatible).
-        """
+    def __init__(self, config_name: str, *, use_wandb: bool = False):
+        setup_logging()
         self.config = load_config(config_name)
-        self.problem = self.config["problem"]
-        self.modality = modality
+        self.problem: str = self.config["problem"]
+        self.seed: int = int(self.config["seed"])
+        self.metrics: dict[str, float] = {}
+        self.mlflow_run_id: str | None = None
+
+        self._seed_everything()
         self.use_wandb = use_wandb and self._init_wandb()
         self.use_mlflow = self._init_mlflow()
-        self.metrics = {}
-        self.model = None
-        self.start_time = None
+
+    # ── determinism ──────────────────────────────────────────────────────────
+
+    def _seed_everything(self) -> None:
+        """Thread the single config seed through every RNG that can affect a run.
+
+        ``PYTHONHASHSEED`` is set for completeness but only takes effect in a
+        fresh interpreter; the value that actually matters here is numpy's, which
+        every estimator in the registry derives from.
+        """
+        import random
+
+        import numpy as np
+
+        os.environ.setdefault("PYTHONHASHSEED", str(self.seed))
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+
+    # ── tracking ─────────────────────────────────────────────────────────────
 
     def _init_wandb(self) -> bool:
-        """Initialize W&B if API key is available."""
         api_key = os.environ.get("WANDB_API_KEY")
-        if not api_key or api_key == "your_key_here":
-            logger.info("W&B API key not set. Using local logging only.")
+        if not api_key or api_key == _WANDB_PLACEHOLDER:
+            logger.info("No W&B API key — MLflow only.")
             return False
-
         try:
             import wandb
 
             wandb.init(
-                project=self.config.get("training", {}).get("wandb_project", "portfolio-ml-system"),
-                name=f"{self.problem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                project=self.config.get("training", {}).get(
+                    "mlflow_experiment", "fintech-ml-system"
+                ),
+                name=self._run_name(),
                 config=self.config,
-                tags=self.config.get("training", {}).get("wandb_tags", []),
+                tags=[self.problem, self.config["model"]["type"]],
             )
-            logger.info("W&B initialized successfully.")
             return True
-        except Exception as e:
-            logger.warning("W&B init failed: %s. Using local logging.", e)
+        except Exception as exc:  # noqa: BLE001 - tracking must never fail a run
+            logger.warning("W&B init failed (%s). Continuing with MLflow only.", exc)
             return False
 
     def _init_mlflow(self) -> bool:
-        """Initialize MLflow tracking. Falls back gracefully if server unreachable."""
         tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "mlruns")
         try:
             mlflow.set_tracking_uri(tracking_uri)
-            experiment_name = self.config.get(
-                "training", {},
-            ).get("wandb_project", "portfolio-ml-system")
-            mlflow.set_experiment(experiment_name)
-
-            suffix = f"_{self.modality}" if self.modality else ""
-            run_name = (
-                f"{self.problem}{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            mlflow.set_experiment(
+                self.config.get("training", {}).get("mlflow_experiment", "fintech-ml-system")
             )
-            # Auto-nest when a parent MLflow run is already active (e.g. under
-            # `--modality all` which creates a comparison parent run in the CLI).
-            is_nested = mlflow.active_run() is not None
-            mlflow.start_run(run_name=run_name, nested=is_nested)
-
-            # Tag the run with modality so MLflow UI can group/filter.
-            if self.modality:
-                mlflow.set_tag("modality", self.modality)
-
-            # Log config as flat params
-            self._log_config_as_params(self.config)
-            logger.info(
-                "MLflow tracking initialized (nested=%s, modality=%s).",
-                is_nested,
-                self.modality,
-            )
+            run = mlflow.start_run(run_name=self._run_name())
+            self.mlflow_run_id = run.info.run_id
+            mlflow.set_tags({"problem": self.problem, "model": self.config["model"]["type"]})
+            mlflow.log_params(_flatten(self.config))
+            logger.info("MLflow run %s at %s", self.mlflow_run_id, tracking_uri)
             return True
-        except Exception as e:
-            logger.warning("MLflow init failed: %s. Continuing without MLflow.", e)
+        except Exception as exc:  # noqa: BLE001 - tracking must never fail a run
+            logger.warning("MLflow init failed (%s). Continuing without tracking.", exc)
             return False
 
-    def _log_config_as_params(self, config: dict, prefix: str = "") -> None:
-        """Flatten nested config dict and log as MLflow params."""
-        params = {}
-        for key, value in config.items():
-            full_key = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
-            if isinstance(value, dict):
-                self._log_config_as_params(value, full_key)
-            elif isinstance(value, list):
-                params[full_key] = str(value)
-            else:
-                params[full_key] = str(value)
-        if params:
-            mlflow.log_params(params)
+    def _run_name(self) -> str:
+        return f"{self.problem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    def log_metric(self, key: str, value: float, step: int | None = None) -> None:
-        """Log a metric to W&B, MLflow, and local storage."""
-        self.metrics[key] = value
-        if self.use_wandb:
-            import wandb
-
-            wandb.log({key: value}, step=step)
-        if self.use_mlflow:
-            mlflow.log_metric(key, value, step=step)
-
-    def log_metrics(self, metrics: dict, step: int | None = None) -> None:
-        """Log multiple metrics."""
+    def log_metrics(self, metrics: dict[str, float]) -> None:
+        """Record metrics locally and in whichever trackers are active."""
         self.metrics.update(metrics)
-        if self.use_wandb:
+        clean = {
+            k: float(v)
+            for k, v in metrics.items()
+            if isinstance(v, (int, float)) and v == v  # drop NaN: MLflow rejects it
+        }
+        if self.use_mlflow and clean:
+            mlflow.log_metrics(clean)
+        if self.use_wandb and clean:
             import wandb
 
-            wandb.log(metrics, step=step)
-        if self.use_mlflow:
-            mlflow.log_metrics(metrics, step=step)
+            wandb.log(clean)
 
-    def get_checkpoint_dir(self) -> Path:
-        """Return the checkpoint directory for this trainer.
-
-        When ``self.modality`` is set, path is
-        ``checkpoints/<problem>_<modality>/`` so three-modality runs don't
-        clobber each other. When None, uses the legacy ``training.checkpoint_dir``
-        config value (or ``checkpoints/<problem>/`` default) for backward
-        compatibility with the original 4 models.
-        """
-        if self.modality:
-            return (
-                get_project_root() / "checkpoints" / f"{self.problem}_{self.modality}"
-            )
-        configured = self.config.get("training", {}).get(
-            "checkpoint_dir",
-            str(get_project_root() / "checkpoints" / self.problem),
-        )
-        path = Path(configured)
-        return path if path.is_absolute() else get_project_root() / path
-
-    def save_checkpoint(self, model_artifacts: dict) -> Path:
-        """Save model checkpoint and metadata.
-
-        Args:
-            model_artifacts: Dict of {filename: save_fn} where save_fn(path) saves the artifact.
+    def register_model(self, artifact_dir: str) -> str | None:
+        """Log the checkpoint to MLflow and create a registry model version.
 
         Returns:
-            Checkpoint directory path.
+            The new model version, or ``None`` when MLflow is unavailable. A
+            tracking failure is logged and swallowed: losing a registry entry is
+            not a reason to lose a trained model.
         """
-        checkpoint_dir = self.get_checkpoint_dir()
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save model artifacts
-        for filename, save_fn in model_artifacts.items():
-            filepath = checkpoint_dir / filename
-            save_fn(filepath)
-            logger.info("Saved artifact: %s", filepath)
-
-        # MLflow: log artifacts and register model
-        mlflow_run_id = None
-        mlflow_model_version = None
-        if self.use_mlflow and mlflow.active_run():
+        if not (self.use_mlflow and mlflow.active_run()):
+            return None
+        try:
+            mlflow.log_artifacts(artifact_dir)
+            client = mlflow.tracking.MlflowClient()
             try:
-                mlflow_run_id = mlflow.active_run().info.run_id
-                mlflow.log_artifacts(str(checkpoint_dir))
-
-                client = mlflow.tracking.MlflowClient()
-                try:
-                    client.create_registered_model(self.problem)
-                except mlflow.exceptions.MlflowException:
-                    pass  # Already exists
-                mv = client.create_model_version(
-                    name=self.problem,
-                    source=f"runs:/{mlflow_run_id}",
-                    run_id=mlflow_run_id,
-                )
-                mlflow_model_version = mv.version
-                logger.info(
-                    "Registered model '%s' v%s in MLflow", self.problem, mlflow_model_version
-                )
-            except Exception as e:
-                logger.warning("MLflow registry failed: %s", e)
-
-        # Save metadata
-        elapsed = time.time() - self.start_time if self.start_time else 0
-        metadata = {
-            "problem": self.problem,
-            "model_type": self.config.get("model", {}).get("type", "unknown"),
-            "modality": self.modality,
-            "timestamp": datetime.now().isoformat(),
-            "metrics": self.metrics,
-            "hyperparameters": self.config.get("model", {}).get("params", {}),
-            "training_time_seconds": round(elapsed, 1),
-            "config_file": f"configs/{self.problem}.yaml",
-            "mlflow_run_id": mlflow_run_id,
-            "mlflow_model_version": mlflow_model_version,
-        }
-
-        metadata_path = checkpoint_dir / "metadata.json"
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2, default=str)
-        logger.info("Saved checkpoint metadata: %s", metadata_path)
-
-        # Phase A.1.8 — dual-write: mirror the synthetic modality to the legacy
-        # checkpoints/<problem>/ path so the existing ModelPredictor keeps
-        # working unchanged. Stream / mixed modalities never touch the legacy
-        # dir. Legacy mirror is retired in Phase A.9 when the predictor moves
-        # to _<modality>/ paths directly.
-        if self.modality == "synthetic":
-            self._mirror_to_legacy_path(checkpoint_dir)
-
-        return checkpoint_dir
-
-    def _mirror_to_legacy_path(self, modality_dir: Path) -> None:
-        """Copy ``checkpoints/<problem>_synthetic/`` to ``checkpoints/<problem>/``.
-
-        Non-destructive ``copytree(..., dirs_exist_ok=True)`` — fully replaces
-        any previously-mirrored artifacts so bytes stay in sync. Logs a
-        deprecation notice pointing at Phase A.9 (predictor migration).
-        """
-        legacy_dir = get_project_root() / "checkpoints" / self.problem
-        shutil.copytree(modality_dir, legacy_dir, dirs_exist_ok=True)
-        logger.info(
-            "Mirrored synthetic checkpoint %s -> legacy %s "
-            "(deprecation: legacy path will be removed in Phase A.9; "
-            "predictor should migrate to _<modality>/ paths)",
-            modality_dir,
-            legacy_dir,
-        )
-
-    def save_results_csv(self) -> Path:
-        """Save evaluation metrics to CSV.
-
-        Path selection (Phase A.1.9):
-        - No modality: ``results/<problem>_metrics.csv`` (legacy, unchanged).
-        - With modality: ``results/modalities/<problem>_<modality>.csv``.
-          Keeps modality files out of the ``*_metrics.csv`` glob used by
-          :func:`save_comparison_summary` so that function stays simple.
-        - When modality == 'synthetic', ALSO mirrors to the legacy
-          ``results/<problem>_metrics.csv`` for backward-compat with
-          dashboards/consumers that glob the legacy pattern. Mirror retired
-          in Phase A.9 alongside the checkpoint mirror.
-        """
-        results_dir = get_project_root() / "results"
-        results_dir.mkdir(parents=True, exist_ok=True)
-
-        rows = [{"metric": k, "value": v} for k, v in self.metrics.items()]
-        df = pd.DataFrame(rows)
-
-        if self.modality:
-            modality_dir = results_dir / "modalities"
-            modality_dir.mkdir(parents=True, exist_ok=True)
-            results_path = modality_dir / f"{self.problem}_{self.modality}.csv"
-        else:
-            results_path = results_dir / f"{self.problem}_metrics.csv"
-
-        df.to_csv(results_path, index=False)
-        logger.info("Saved results CSV: %s", results_path)
-
-        # Mirror synthetic to the legacy path so save_comparison_summary and
-        # any existing consumer keep working unchanged until Phase A.9.
-        if self.modality == "synthetic":
-            legacy_path = results_dir / f"{self.problem}_metrics.csv"
-            df.to_csv(legacy_path, index=False)
-            logger.info(
-                "Mirrored synthetic metrics to legacy %s "
-                "(deprecation: retired in Phase A.9)",
-                legacy_path,
+                client.create_registered_model(self.problem)
+            except mlflow.exceptions.MlflowException:
+                pass  # already registered
+            version = client.create_model_version(
+                name=self.problem,
+                source=f"runs:/{self.mlflow_run_id}",
+                run_id=self.mlflow_run_id,
             )
-
-        return results_path
+            logger.info("Registered %s v%s in MLflow", self.problem, version.version)
+            return str(version.version)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MLflow model registration failed: %s", exc)
+            return None
 
     def finish(self) -> None:
-        """Finalize W&B and MLflow runs."""
+        """Close out the active tracking runs."""
         if self.use_wandb:
             import wandb
 
@@ -305,71 +161,33 @@ class BaseTrainer(ABC):
         if self.use_mlflow and mlflow.active_run():
             mlflow.end_run()
 
-    @abstractmethod
-    def load_data(self) -> pd.DataFrame:
-        """Load raw data."""
-        ...
+    # ── contract ─────────────────────────────────────────────────────────────
 
     @abstractmethod
-    def preprocess(self, df: pd.DataFrame) -> dict:
-        """Feature engineering and data splitting. Returns dict of processed data."""
-        ...
+    def load_data(self) -> Any:
+        """Return the canonical frame for this problem."""
 
     @abstractmethod
-    def train(self, data: dict) -> None:
-        """Train the model. Sets self.model."""
-        ...
+    def train(self, data: dict[str, Any]) -> Any:
+        """Fit and return the model."""
 
     @abstractmethod
-    def evaluate(self, data: dict) -> dict:
-        """Evaluate the model. Returns metrics dict."""
-        ...
+    def evaluate(self, model: Any, data: dict[str, Any]) -> dict[str, float]:
+        """Return the metrics dict for the test split."""
 
     @abstractmethod
-    def get_checkpoint_artifacts(self) -> dict:
-        """Return {filename: save_fn} for checkpoint saving."""
-        ...
+    def run(self) -> dict[str, float]:
+        """Execute the full pipeline and return the measured metrics."""
 
-    def run(self) -> dict:
-        """Execute the full training pipeline."""
-        setup_logging()
-        logger.info("=" * 60)
-        logger.info("Training: %s", self.problem)
-        logger.info("=" * 60)
 
-        self.start_time = time.time()
-
-        # Load data
-        logger.info("1. Loading data...")
-        df = self.load_data()
-        logger.info("   Loaded %d rows", len(df))
-
-        # Preprocess
-        logger.info("2. Preprocessing...")
-        data = self.preprocess(df)
-
-        # Train
-        logger.info("3. Training model...")
-        self.train(data)
-
-        # Evaluate
-        logger.info("4. Evaluating...")
-        metrics = self.evaluate(data)
-        self.log_metrics(metrics)
-
-        # Save
-        logger.info("5. Saving checkpoint and results...")
-        self.save_checkpoint(self.get_checkpoint_artifacts())
-        self.save_results_csv()
-
-        elapsed = time.time() - self.start_time
-        logger.info("Completed %s in %.1fs", self.problem, elapsed)
-        for k, v in metrics.items():
-            logger.info(
-                "   %s: %.4f" if isinstance(v, float) else "   %s: %s",
-                k,
-                v,
-            )
-
-        self.finish()
-        return metrics
+def _flatten(config: dict, prefix: str = "") -> dict[str, str]:
+    """Flatten a nested config into MLflow-loggable string params."""
+    out: dict[str, str] = {}
+    for key, value in config.items():
+        name = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            out.update(_flatten(value, name))
+        else:
+            # MLflow caps param values at 500 chars; a long denylist would 400.
+            out[name] = str(value)[:250]
+    return out

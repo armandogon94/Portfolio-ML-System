@@ -31,10 +31,28 @@ class JsonFormatter(logging.Formatter):
 
         # Include any extra fields attached to the record
         standard_keys = {
-            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-            "created", "msecs", "relativeCreated", "thread", "threadName",
-            "processName", "process", "message", "taskName",
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "message",
+            "taskName",
         }
         for key, value in record.__dict__.items():
             if key not in standard_keys and not key.startswith("_"):
@@ -74,11 +92,11 @@ def setup_logging(
         # Only add a new StreamHandler if root logger has no handlers yet
         root = logging.getLogger()
         if not root.handlers:
-            h = logging.StreamHandler()
-            h.setFormatter(formatter)
-            root.addHandler(h)
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(formatter)
+            root.addHandler(stream_handler)
         else:
-            for h in logging.getLogger().handlers:
-                h.setFormatter(formatter)
+            for existing in root.handlers:
+                existing.setFormatter(formatter)
 
     logging.getLogger().setLevel(log_level)
