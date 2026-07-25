@@ -19,7 +19,7 @@ make serve       # Launch FastAPI inference server (port 8070)
 make test        # Run pytest (excludes network + parity by default)
 make lint        # Run ruff linter
 make all         # Full pipeline: data + train + evaluate
-make web-dev     # Launch Next.js demo UI at http://localhost:3071
+make web-dev     # Launch Next.js demo UI at http://localhost:3070
 make docker-up   # Bring up the 3-service stack (mlflow, ml-api, ml-web)
 ```
 

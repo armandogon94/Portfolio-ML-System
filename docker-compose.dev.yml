@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile.web
       target: builder  # stop before runner — we need the full deps tree for dev
-    command: pnpm dev -p 3071
+    command: pnpm dev -p 3070
     environment:
       - NODE_ENV=development
       - INTERNAL_API_URL=http://ml-api:8000

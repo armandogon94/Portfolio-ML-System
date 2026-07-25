@@ -40,7 +40,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3071 \
+    PORT=3070 \
     HOSTNAME=0.0.0.0
 
 # Non-root user — standard Next.js convention (uid 1001).
@@ -55,11 +55,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/web/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/web/public ./public
 
 USER nextjs
-EXPOSE 3071
+EXPOSE 3070
 
 # Liveness: fetch the landing page. wget is built into busybox on
 # alpine so no extra package needed. --spider discards the body.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD wget --quiet --spider http://localhost:3071/ || exit 1
+  CMD wget --quiet --spider http://localhost:3070/ || exit 1
 
 CMD ["node", "server.js"]

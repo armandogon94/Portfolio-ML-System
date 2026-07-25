@@ -71,12 +71,12 @@ services:
       - INTERNAL_API_URL=http://ml-api:8000
       - NODE_ENV=production
     ports:
-      - "${WEB_PORT:-3071}:3071"
+      - "${WEB_PORT:-3070}:3070"
     networks:
       - ml-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3071/"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3070/"]
       interval: 30s
       timeout: 10s
       retries: 3

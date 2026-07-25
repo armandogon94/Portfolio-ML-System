@@ -18,18 +18,18 @@ Pick the one that matches what you're doing.
 
 ### 1. Native dev (fastest — recommended for day-to-day work)
 
-Starts Next.js with hot-reload on http://localhost:3071 and proxies `/api/*` to FastAPI on `localhost:8070`.
+Starts Next.js with hot-reload on http://localhost:3070 and proxies `/api/*` to FastAPI on `localhost:8070`.
 
 ```bash
 # From repo root (requires the backend running separately):
 make serve         # terminal 1: FastAPI at :8070
-make web-dev       # terminal 2: Next.js at :3071
+make web-dev       # terminal 2: Next.js at :3070
 
 # Or from web/:
 INTERNAL_API_URL=http://localhost:8070 pnpm dev
 ```
 
-Open http://localhost:3071 and you'll see the landing page. Click a tile → industry index → model page.
+Open http://localhost:3070 and you'll see the landing page. Click a tile → industry index → model page.
 
 ### 2. Production Docker (simulates deploy)
 
@@ -40,7 +40,7 @@ Builds every service from scratch, matches the production image exactly, slower 
 make docker-up     # brings up the 3-service stack: mlflow, ml-api, ml-web
 ```
 
-Visit http://localhost:3071 (industry pages + `/dashboard`).
+Visit http://localhost:3070 (industry pages + `/dashboard`).
 
 ### 3. Dockerized dev (offline HMR fallback)
 
@@ -58,7 +58,7 @@ From the repo root:
 
 ```bash
 make web-install   # pnpm install
-make web-dev       # pnpm dev (port 3071)
+make web-dev       # pnpm dev (port 3070)
 make web-build     # pnpm build (production)
 make web-test      # pnpm test (Vitest)
 make web-lint      # pnpm lint + pnpm typecheck
@@ -68,9 +68,9 @@ make web-typecheck # pnpm typecheck only
 From `web/`:
 
 ```bash
-pnpm dev           # dev server at :3071
+pnpm dev           # dev server at :3070
 pnpm build         # production build (output: "standalone")
-pnpm start         # serve the production build at :3071
+pnpm start         # serve the production build at :3070
 pnpm test          # Vitest once
 pnpm test:watch    # Vitest watch mode
 pnpm test:coverage # Vitest with v8 coverage report

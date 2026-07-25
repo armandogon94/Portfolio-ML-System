@@ -10,14 +10,41 @@ Production ML system demonstrating end-to-end machine learning engineering: synt
 
 ---
 
+## A correction, and why it's here
+
+An earlier version of this README reported **AUC-ROC 0.964** for fraud detection, alongside
+credit-risk 0.888, housing R² 0.942 and forecasting MAE 22.2. Those numbers were real — they
+reproduce exactly from the committed CSVs — but they were **meaningless**.
+
+`src/data/generate_fraud.py` did not generate transactions and then label them. It generated two
+different populations from two different distributions and passed `is_fraud` into the generator as
+an **input** (`generate_fraud.py:26,29,37,40`). The classifier's job was therefore to separate
+`lognormal(5.5, 1.5)` from `lognormal(3.5, 1.0)`. It was measuring how separable two of my own
+random number generators were. The credit-risk and housing targets had the same defect: the label
+was a closed-form function of the features that I wrote myself.
+
+**Every one of those numbers is retracted.** They have been removed from this README rather than
+quietly edited. The repository is being rebuilt on real, public, downloadable data with time-based
+splits; the replacement numbers will be lower and honest.
+
+**Current status: no model metric is published, because none has been measured on real data yet.**
+See [`docs/PROGRESS.md`](docs/PROGRESS.md) for what remains and
+[ADR-0003](docs/adr/0003-real-data-over-synthetic.md) for the full reasoning.
+
+---
+
 ## Models
 
-| Problem | Algorithm | Type | Device | Key Metric | Score |
-|---------|-----------|------|--------|------------|-------|
-| Credit Risk Scoring | XGBoost Classifier | Classification | CPU | AUC-ROC | 0.888 |
-| Fraud Detection | PyTorch Autoencoder + Isolation Forest | Anomaly Detection | **MPS** | AUC-ROC | 0.964 |
-| Real Estate Pricing | LightGBM Regressor | Regression | CPU | R2 | 0.942 |
-| Demand Forecasting | PyTorch LSTM | Time Series | **MPS** | Avg MAE | 22.2 |
+| Problem | Dataset | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline |
+|---|---|---|---|---|---|---|
+| Fraud | IEEE-CIS (Vesta) · 590,540 × 394 · 3.5 % | time (`TransactionDT` 80/20) | LightGBM |  |  |  |
+| Credit risk | LendingClub 2007–2018Q4 | time (`issue_d`) | LightGBM |  |  |  |
+| Churn | Credit-card attrition · 10,127 × 23 · ~16 % | 5-fold stratified CV | LightGBM |  |  |  |
+
+<sub>**Cells are empty because these have not yet been measured.** The datasets require a Kaggle
+account and, for IEEE-CIS, a one-click acceptance of the competition rules; that download has not
+been run. No number will appear in this table until it is written by a training run into
+`reports/*_metrics.csv`. See [`docs/PROGRESS.md`](docs/PROGRESS.md).</sub>
 
 ---
 
@@ -37,7 +64,7 @@ Data Generation     Feature Engineering     Training + Tracking     Serving     
                                                                                    │    /logistics/eta
                                                                                    │    /logistics/demand
                                                                                    │    /legal/h1b-approval
-                                                                                   └──> /dashboard  (live status of all 20)
+                                                                                   └──> /dashboard  (live status)
 ```
 
 ---
@@ -51,18 +78,18 @@ Data Generation     Feature Engineering     Training + Tracking     Serving     
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and setup
-git clone https://github.com/YOUR_USERNAME/portfolio-ml-system.git
-cd portfolio-ml-system
+git clone https://github.com/armandogon94/Portfolio-ML-System.git
+cd Portfolio-ML-System
 uv sync
 
 # Run the full pipeline
 make all          # Generate data -> Train models -> Evaluate
 
 # Launch the Next.js demo UI (native, fastest)
-make web-dev      # Opens at http://localhost:3071
+make web-dev      # Opens at http://localhost:3070
 
 # Or run the full Docker stack — 3 services (mlflow, ml-api, ml-web)
-make docker-up    # /dashboard at http://localhost:3071/dashboard
+make docker-up    # /dashboard at http://localhost:3070/dashboard
 ```
 
 Or step-by-step:
@@ -72,7 +99,7 @@ uv run python scripts/generate_data.py --problem all
 uv run python scripts/train.py --model all --no-wandb
 uv run python scripts/evaluate.py
 uv run python scripts/serve.py           # FastAPI inference server (port 8070)
-cd web && pnpm install && pnpm dev       # Next.js demo UI (port 3071)
+cd web && pnpm install && pnpm dev       # Next.js demo UI (port 3070)
 ```
 
 ---
@@ -203,7 +230,7 @@ Without an API key, all metrics are still saved locally to `checkpoints/*/metada
 The Next.js demo UI (`web/`) hosts one page per ready model plus a live dashboard:
 
 - **Landing** (`/`) — 6 industry tiles linking into their model lists
-- **/dashboard** — sortable table of all 20 cataloged models with status badges, key metrics, and MLflow training-history sparklines for the ready ones; auto-refreshes every 30 s via Next.js ISR
+- **/dashboard** — sortable table of the cataloged models with status badges, key metrics, and MLflow training-history sparklines for the ready ones; auto-refreshes every 30 s via Next.js ISR
 - **Per-industry model pages** — one page per ready model, each with a Zod-validated input form on the left and the model's prediction + SHAP/gradient explanation on the right:
   - `/fintech/credit-risk` · `/fintech/fraud` · `/fintech/churn`
   - `/real-estate/price` · `/real-estate/rental-price`
@@ -214,7 +241,7 @@ The Next.js demo UI (`web/`) hosts one page per ready model plus a live dashboar
 
 ```bash
 make web-dev      # Native pnpm dev — fastest iteration, hot reload
-make docker-up    # Full Docker stack (3 services), demo at http://localhost:3071
+make docker-up    # Full Docker stack (3 services), demo at http://localhost:3070
 ```
 
 The original Gradio prototype was retired in Phase A.9 — see `docs/decisions/ADR-001-gradio-to-nextjs.md` for the rationale.
@@ -226,17 +253,17 @@ The original Gradio prototype was retired in Phase A.9 — see `docs/decisions/A
 FastAPI inference server with REST endpoints:
 
 ```bash
-make serve  # Launches at http://localhost:8000
+make serve  # Launches at http://localhost:8070
 
 # Endpoints
-curl -X POST http://localhost:8000/predict/credit-risk -H "Content-Type: application/json" \
+curl -X POST http://localhost:8070/predict/credit-risk -H "Content-Type: application/json" \
   -d '{"age": 35, "annual_income": 65000, "credit_score": 700, "num_open_accounts": 3, "payment_history_pct": 85, "debt_to_income_ratio": 0.3, "employment_years": 8, "loan_amount": 25000}'
 
-curl -X POST http://localhost:8000/predict/fraud -H "Content-Type: application/json" \
+curl -X POST http://localhost:8070/predict/fraud -H "Content-Type: application/json" \
   -d '{"transaction_amount": 500, "merchant_category": "electronics", "hour_of_day": 2, "day_of_week": 3, "distance_from_home": 100, "is_online": 1, "card_age_days": 30, "num_transactions_last_hour": 5, "amount_vs_avg_ratio": 10}'
 
-curl http://localhost:8000/health
-curl http://localhost:8000/models
+curl http://localhost:8070/health
+curl http://localhost:8070/models
 ```
 
 ---

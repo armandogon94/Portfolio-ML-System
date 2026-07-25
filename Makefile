@@ -35,7 +35,7 @@ clean:
 	rm -rf __pycache__ .pytest_cache
 
 all: data train evaluate
-	@echo "Full pipeline complete. Run 'make web-dev' (or 'make docker-up') to launch the Next.js demo UI at http://localhost:3071"
+	@echo "Full pipeline complete. Run 'make web-dev' (or 'make docker-up') to launch the Next.js demo UI at http://localhost:3070"
 
 # ── Docker targets ──────────────────────────────────────────────────
 
