@@ -29,6 +29,17 @@ trap cleanup EXIT INT TERM
 : "${SKIP_WEB:=0}"
 : "${BACKEND_PORT:=8070}"
 
+# Docker Desktop on macOS installs its credential helper here and adds it to
+# PATH only for LOGIN shells. Run this script from a non-login shell (a CI step,
+# a cron job, an editor task) and `docker build` dies with:
+#   error getting credentials - exec: "docker-credential-osxkeychain": not found
+# ...even for anonymous public images. Prepending the directory when it exists
+# fixes that without changing what any check asserts.
+if [ -d "/Applications/Docker.app/Contents/Resources/bin" ]; then
+  PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
+  export PATH
+fi
+
 STAGES_PASSED=()
 STAGES_SKIPPED=()
 
@@ -125,8 +136,18 @@ if [ "$SKIP_DOCKER" = "1" ]; then
 elif ! docker info >/dev/null 2>&1; then
   skip "docker" "no reachable Docker daemon"
 else
-  docker build -f infra/docker/api.Dockerfile -t ml-api:verify . >"$WORK/build.log" 2>&1 \
-    || { tail -30 "$WORK/build.log"; fail "docker build failed" "Most often: uv.lock missing or stale."; }
+  if ! docker build -f infra/docker/api.Dockerfile -t ml-api:verify . >"$WORK/build.log" 2>&1; then
+    tail -30 "$WORK/build.log"
+    HINT="Check the build log above."
+    if grep -q "docker-credential" "$WORK/build.log"; then
+      HINT="Docker's credential helper is not on PATH. This is an environment
+      problem, not a repository problem: run from a login shell, or add
+      /Applications/Docker.app/Contents/Resources/bin to PATH."
+    elif grep -q "uv.lock" "$WORK/build.log"; then
+      HINT="uv.lock is missing from the clone or does not resolve. Run 'uv lock' and commit it."
+    fi
+    fail "docker build failed" "$HINT"
+  fi
   pass "docker build (API image)"
 
   docker compose -f infra/compose/base.yml up -d --wait >"$WORK/compose.log" 2>&1 \

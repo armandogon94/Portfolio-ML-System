@@ -210,6 +210,48 @@ None of these were fixed by weakening a check.
 
 ---
 
+## Owner action items (small, but they are claims)
+
+### C1. The CI badge shows "no status" until you push
+
+`README.md` line 3 links to
+`.../actions/workflows/ci.yml/badge.svg`. That URL currently 404s because the
+workflow has never *run* — this session was forbidden from pushing, so GitHub has
+no run to render. GitHub displays such a badge as a grey "no status", which is
+accurate: there are no runs yet. It goes green on the first push of this branch.
+
+Nothing needs changing. This is noted only so the grey badge is not mistaken for
+a broken link.
+
+### C2. Add your LinkedIn to the Author section
+
+The README's Author section links to GitHub only. An earlier draft of this
+rewrite contained a LinkedIn URL **guessed from the GitHub handle**, which is
+precisely the kind of unverifiable claim this repository exists to eliminate, so
+it was removed rather than left in.
+
+Add the real one yourself:
+
+```markdown
+[LinkedIn](https://www.linkedin.com/in/<your-actual-handle>/) · [GitHub](https://github.com/armandogon94)
+```
+
+### C3. External link check (Appendix A4.3)
+
+Every external URL in `README.md`, checked with `curl -L`:
+
+| Status | URL |
+|---|---|
+| 200 | github.com/armandogon94 · the repo · the workflow page |
+| 200 | all three shields.io badges |
+| 200 | all three Kaggle dataset pages |
+| 404 | the CI badge SVG — see C1, expected until first push |
+| 000 | `localhost:8070/health`, `localhost:3070/dashboard` — these appear inside `curl`/`open` commands in the Quickstart, not as live links |
+
+No claim in the README depends on a URL that is dead and presented as live.
+
+---
+
 ## Assumptions recorded (Appendix A5)
 
 Full text in [`docs/adr/0005-assumptions-log.md`](adr/0005-assumptions-log.md).

@@ -441,4 +441,4 @@ MIT — see [LICENSE](LICENSE).
 
 **Armando Gonzalez** — ex-software engineer at a fintech company, finishing an
 M.S. in Data Science & AI at FIU.
-[LinkedIn](https://www.linkedin.com/in/armandogon94/) · [GitHub](https://github.com/armandogon94)
+[GitHub](https://github.com/armandogon94)
