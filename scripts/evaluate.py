@@ -33,7 +33,15 @@ from rich.table import Table
 from src.config import get_project_root
 
 console = Console()
-RESULT_ROWS = ("fraud", "fraud_autoencoder", "credit_risk", "churn")
+#: One row per *config*, not per problem: fraud has two datasets. Names match
+#: ``configs/<name>.yaml`` and therefore ``reports/<name>_metrics.csv``.
+RESULT_ROWS = (
+    "fraud",
+    "fraud_ulb",
+    "fraud_autoencoder",
+    "credit_risk",
+    "churn",
+)
 
 #: Column order for the rendered table, matching README §Results.
 COLUMNS = [

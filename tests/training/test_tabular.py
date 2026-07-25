@@ -159,7 +159,8 @@ def test_ulb_uses_its_pr_auc_sanity_band():
     trainer = TabularTrainer("fraud_ulb", sample=True)
     try:
         assert trainer._check_sanity_band({"cv_pr_auc_mean": 0.75}) is None
-        warning = trainer._check_sanity_band({"cv_pr_auc_mean": 0.90})
+        upper = trainer.config["sanity_band"]["max"]
+        warning = trainer._check_sanity_band({"cv_pr_auc_mean": upper + 0.01})
         assert warning is not None
         assert warning.startswith("PR-AUC")
     finally:

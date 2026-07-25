@@ -6,17 +6,17 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Three real-money fintech problems — payment fraud, consumer credit risk, and card
-attrition — each trained on a public dataset a stranger can download, tracked in
-MLflow, served behind a FastAPI inference API with SHAP explanations. It was
-rebuilt from a version whose headline metric was real, reproducible, and
-completely meaningless.
+attrition — with two accepted real-data training runs, tracked in MLflow and
+served behind a FastAPI inference API with SHAP explanations. It was rebuilt
+from a version whose headline metric was real, reproducible, and completely
+meaningless.
 
 **Can a fraud model hold up when the labels aren't ones I wrote myself?**
 
 - **Focus** — payment fraud · consumer credit risk · card attrition
 - **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
 - **Stack** — Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
-- **Output** — a results table where every cell traces to a CSV written by a training run
+- **Output** — a results table where every cell traces to a CSV written by a training run. That is now true for the two measured rows, `fraud_ulb` and `churn`; three rows remain empty because IEEE-CIS is credential-blocked, its autoencoder needs the same data, and LendingClub was not run.
 
 📄 **[Read the full methodology & analysis →](reports/RESULTS.md)**
 
@@ -52,7 +52,8 @@ defect: the label was a closed-form function of the features, which I wrote.
 **All four published numbers are retracted** — fraud 0.964, credit risk 0.888,
 housing R² 0.942, forecasting MAE 22.2. Every synthetic generator is deleted, and
 `src/config.py` now raises at load time on any config that does not name a real,
-downloadable dataset. The replacement numbers will be lower and honest.
+downloadable dataset. Replacement results now use the metric appropriate to each
+class balance and disclose what the underlying data can actually support.
 
 Full reasoning, including the enforcement that stops this recurring:
 **[ADR-0003 — Real public data only](docs/adr/0003-real-data-over-synthetic.md)**.
@@ -61,14 +62,12 @@ Full reasoning, including the enforcement that stops this recurring:
 
 ## Current status
 
-**No model metric is published, because none has been measured on real data yet.**
+**Two of five result rows are measured on real data: `fraud_ulb` and `churn`.**
 
-The engineering is complete: data adapters, time-based splits, the trainer, the
-quality gates, the serving path, the tests and CI all work end to end on the
-committed fixtures. The three headline datasets have not been downloaded or
-trained here: each needs a free Kaggle account and IEEE-CIS additionally needs a
-one-click rules acceptance. A second fraud config uses OpenML 1597 and needs no
-account; its exact real-data path is documented below.
+The other three remain empty. IEEE-CIS is blocked because its competition
+download needs a classic `kaggle.json` token rather than the working Kaggle OAuth
+token; `fraud_autoencoder` needs the same data. LendingClub was not run, and its
+648 MB download was not attempted in this session.
 
 [`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
 commands to unblock it.
@@ -80,11 +79,12 @@ commands to unblock it.
 - **The old fraud result was not a model result.** `generate_fraud.py` passed the
   label into the generator as a parameter, so 0.964 measured the separation
   between two hand-chosen lognormals. Retracted rather than quietly deleted.
-- **A model can be right and still look bad, and this repo is built to say so.**
-  Each config declares an expected-range `sanity_band` before training. Crossing
-  it records `sanity_band_warning`, but the band is only a smoke alarm; the
-  enforceable leakage defences are chronological splitting, split-column
-  exclusion, and the tested feature denylists.
+- **The credential-free fraud result beat its logistic baseline on the metric
+  that matters.** ULB/OpenML 1597 measured PR-AUC **0.8569 ± 0.0331** against
+  **0.7300 ± 0.0279** for logistic regression, all out of fold.
+- **The churn score is not prospective.** Its **0.9735 ± 0.0078 PR-AUC**
+  substantially detects an attrition that already happened because current
+  status and trailing-activity features describe the same period.
 - **The old test suite could not have caught any of it.** 360 tests, 90%
   coverage, and `pyproject.toml` hid `-m 'not network and not parity'` inside
   `addopts` — silently deselecting both the Kaggle canary and the pre-ship gate.
@@ -95,19 +95,25 @@ commands to unblock it.
 
 ## Results
 
+```bash
+uv run python scripts/train.py --model fraud_ulb   # no Kaggle account needed
+uv run python scripts/evaluate.py --markdown
+```
+
 | Problem | Dataset (rows × cols, % positive) | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline PR-AUC | Δ vs baseline | Source |
 |---|---|---|---|---|---|---|---|---|
 | Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM |  |  |  |  | `reports/fraud_metrics.csv` |
-| Fraud (unsup. baseline) | same | same | Autoencoder (MPS) |  |  | — | — | `reports/fraud_autoencoder_metrics.csv` |
+| Fraud (`fraud_ulb`, credential-free) | ULB / OpenML 1597 · 284,807 × 30 · 0.1727% | 5-fold stratified CV | LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | [`reports/fraud_ulb_metrics.csv`](reports/fraud_ulb_metrics.csv) |
+| Fraud (unsup. baseline) | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | Autoencoder (MPS) |  |  |  |  | `reports/fraud_autoencoder_metrics.csv` |
 | Credit risk | LendingClub · terminal statuses only | time (`issue_d`) | LightGBM |  |  |  |  | `reports/credit_risk_metrics.csv` |
-| Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM |  |  |  |  | `reports/churn_metrics.csv` |
+| Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | [`reports/churn_metrics.csv`](reports/churn_metrics.csv) |
 
-<sub>**Every cell is empty because nothing has been measured yet, and a placeholder
-number is exactly the failure this rebuild corrects.** `scripts/evaluate.py` reads
-these cells from `reports/*_metrics.csv` — files written only by a training run —
-so no number here can be typed by hand. The expected honest results, recorded in
-`configs/*.yaml` before any run: fraud ≈ 0.90 ROC-AUC, credit risk ≈ 0.70. See
-[`docs/PROGRESS.md`](docs/PROGRESS.md) and [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
+<sub>Two rows are measured; three remain empty. IEEE-CIS is blocked on a classic
+`kaggle.json` competition token, the autoencoder needs that dataset, and the
+LendingClub download was not attempted. `scripts/evaluate.py` reads every filled
+cell from training-written `reports/*_metrics.csv`; it computes nothing. Full
+config, caveats, and provenance:
+[`reports/RESULTS.md`](reports/RESULTS.md).</sub>
 
 <sub>For stratified cross-validation, the displayed and gated result is the CV
 mean ± standard deviation. The serving checkpoint is refit on all rows, and the
@@ -116,12 +122,15 @@ row. The autoencoder uses raw reconstruction error for ranking metrics and its
 training-set 95th-percentile threshold for hard decisions; it reports no Brier
 score because that error is not a calibrated probability.</sub>
 
-> **Figures.** `reports/figures/` will hold the PR curve, ROC curve, calibration
-> plot, confusion matrix at the 1%-review threshold, SHAP summary and gain plot
-> for each problem, all produced by `make figures` from a real checkpoint. It is
-> empty for the same reason the table is: `scripts/make_figures.py` exits
-> non-zero rather than drawing an empty axis. Cross-validation curves use
-> persisted out-of-fold predictions; the all-row refit never grades itself.
+**Read PR-AUC first.** On ULB, ROC-AUC **0.9810 ± 0.0092** is inflated by the
+**0.1727%** positive rate; the prior baseline gets **0.5000 ROC-AUC** but only
+**0.0017 PR-AUC**. The informative comparison is **0.8569 ± 0.0331 PR-AUC**
+against the logistic-regression baseline of **0.7300 ± 0.0279**.
+
+**Do not read churn as forecasting.** `Attrition_Flag` is current status while
+its strongest features summarise the same trailing activity window. With no
+event timestamp, feature cutoff, or future outcome window, the dataset supports
+detection of an attrition that already happened, not prospective prediction.
 
 ---
 
@@ -309,7 +318,7 @@ Credential-free real-data fraud path:
 ```bash
 uv run python scripts/download_data.py --dataset ulb-creditcard
 uv run python scripts/train.py --model fraud_ulb
-cat reports/fraud_ulb_metrics.csv
+uv run python scripts/evaluate.py --markdown
 ```
 
 This fetches OpenML dataset 1597 through
@@ -341,10 +350,12 @@ not anonymously downloadable; the OpenML source is:
 | ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
 IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
-rules that cannot be scripted; `src/data/download.py` converts the resulting 403
-into the exact URL to visit. The ULB/OpenML path needs **no account at all**, so
-a reviewer with zero Kaggle presence can still reproduce a real-data fraud result
-end to end with the three commands above.
+rules that cannot be scripted. On this machine,
+`~/.kaggle/access_token` authenticates Kaggle **datasets** but
+`kagglehub.competition_download('ieee-fraud-detection')` still returns 403; the
+competition path needs a classic `~/.kaggle/kaggle.json` API token. The
+ULB/OpenML path needs **no account at all**, so a reviewer with zero Kaggle
+presence can reproduce a real-data fraud result with the commands above.
 
 Because IEEE-CIS competition data is not redistributable, **no real row from any
 of these datasets is committed here.** The only data in git is `data/sample/` —
@@ -429,17 +440,21 @@ The network exclusion now lives visibly in
 
 ## Limitations & Known Caveats
 
-- **No metric is published yet.** The code is complete; the three headline
-  datasets require credentials this build did not have. The ungated ULB path is
-  wired but was not trained for this documentation pass. See
-  [`docs/PROGRESS.md`](docs/PROGRESS.md).
+- **Only two of five rows are measured.** ULB/OpenML and churn have accepted
+  out-of-fold results. IEEE-CIS remains credential-blocked, its autoencoder needs
+  the same data, and LendingClub was not run.
 - **IEEE-CIS test labels do not exist.** The competition's `test_transaction.csv`
   is unlabelled, so evaluation is a temporal split *within* the training file.
   That is the only honest option, and a random split would inflate AUC by putting
   the same card and device on both sides of the boundary.
-- **Churn is n = 10,127 and easy.** Expect a high number that means little. It is
-  reported as a 5-fold mean ± std, and both the API response and the UI carry
-  that caveat inline.
+- **Churn is not prospective.** `Attrition_Flag` and the trailing-activity
+  features describe the same period. The source has no event timestamp, feature
+  cutoff, or future outcome window, so the score substantially detects attrition
+  that already happened.
+- **The churn checkpoint fails one directional serving gate.** On the existing
+  fixed probe, more inactivity lowers the score. The test remains enabled; the
+  out-of-fold ranking result is published, but the serving score is not a
+  monotonic retention policy.
 - **The credit-risk thresholds are illustrative, not a credit policy.** A real
   approve/decline cut point comes from expected loss at a target approval rate,
   which needs a pricing model this repository does not contain.
@@ -451,8 +466,8 @@ The network exclusion now lives visibly in
 - **No deployment.** Zero cloud budget, and no dead "Live:" link. Docker plus the
   committed screenshot script is the demo.
 - **`docs/images/` is empty.** `scripts/capture_screenshots.py` is committed and
-  regenerable but was not run: with no trained checkpoints it would capture empty
-  states, and faking them is the exact failure this rebuild corrects.
+  regenerable, but screenshots were not generated in this results-publication
+  pass.
 
 ## Tech decisions
 

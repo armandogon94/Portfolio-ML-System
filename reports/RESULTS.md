@@ -1,20 +1,119 @@
 # Results & Methodology
 
-> **Status: no result has been accepted for publication yet.**
+> **Status: two of five rows are measured; three are not.**
 >
-> Every metric table below has empty cells, deliberately. The pipeline that
-> would fill them is complete and tested; the datasets require a Kaggle account
-> this build did not have. See [`docs/PROGRESS.md`](../docs/PROGRESS.md) for the
-> exact commands.
+> `fraud_ulb` and `churn` are accepted real-data, out-of-fold results.
+> `fraud` (IEEE-CIS), `fraud_autoencoder`, and `credit_risk` remain empty and
+> explicitly marked **not yet measured** below.
 >
-> A pre-repair, untracked `reports/fraud_ulb_metrics.csv` and its gitignored
-> legacy checkpoint exist in this workspace. They predate the CV refit/OOF fixes,
-> have no OOF artifact, and are excluded from every table here. Regenerate them
-> with the repaired trainer before reviewing or publishing that run.
+> IEEE-CIS is **BLOCKED**: with only the OAuth token in
+> `~/.kaggle/access_token`,
+> `kagglehub.competition_download('ieee-fraud-detection')` returns
+> `403 ... Please make sure you are authenticated and have accepted the
+> competition rules`. Kaggle datasets authenticate with that token; Kaggle
+> competitions do not. IEEE-CIS needs a classic `~/.kaggle/kaggle.json` API
+> token. LendingClub was not run; its 648 MB download was not attempted in this
+> session. The autoencoder needs the blocked IEEE-CIS data.
 >
-> Filling these tables by hand would reproduce the failure this document exists
-> to correct. Every number here will be read from `reports/*_metrics.csv`, which
-> is written by the tabular or autoencoder training pipeline.
+> Every accepted metric below is read from `reports/*_metrics.csv`, written by
+> training. Empty cells remain empty rather than becoming estimates.
+
+---
+
+## Accepted real-data results
+
+**PR-AUC is the primary metric.** It measures ranking quality where the positive
+class is rare; ROC-AUC is retained only as a familiar secondary diagnostic.
+
+| Run | **PR-AUC ↑ (primary)** | ROC-AUC ↑ | Logistic-regression PR-AUC | Δ PR-AUC | P@1% ↑ | R@1%FPR ↑ | Status |
+|---|---|---|---|---|---|---|---|
+| `fraud` |  |  |  |  |  |  | **not yet measured — BLOCKED:** IEEE-CIS competition download needs a classic `kaggle.json` token |
+| `fraud_ulb` | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 | measured · [`fraud_ulb_metrics.csv`](fraud_ulb_metrics.csv) |
+| `fraud_autoencoder` |  |  |  |  |  |  | **not yet measured — BLOCKED:** needs the same IEEE-CIS data |
+| `credit_risk` |  |  |  |  |  |  | **not yet measured:** the 648 MB LendingClub download was not attempted in this session |
+| `churn` | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 | measured · [`churn_metrics.csv`](churn_metrics.csv) |
+
+### `fraud_ulb`: PR-AUC is the informative result
+
+At a **0.1727% positive rate**, ROC-AUC **0.9810 ± 0.0092** looks spectacular
+and means very little: the prior baseline scores **0.5000 ROC-AUC** while
+achieving only **0.0017 PR-AUC**. The informative comparison is the primary
+metric, **PR-AUC 0.8569 ± 0.0331**, against the logistic-regression baseline of
+**0.7300 ± 0.0279**.
+
+| Run configuration | Recorded value |
+|---|---|
+| Dataset | OpenML 1597, ULB Credit Card Fraud |
+| Rows / positive rate / features | 284,807 / 0.1727% / 29 |
+| Split | Stratified 5-fold cross-validation; every reported score is out of fold |
+| Model / seed | LightGBM / 42 |
+| Training SHA | `05d32cae0d54dee97a70be575097182e9b5f8278` |
+| Hardware | `macOS-26.5.2-arm64-arm-64bit`, arm64; CPU-only LightGBM wheel |
+| Wall-clock | 67.8 s |
+| Config / checkpoint | [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) / `checkpoints/fraud_ulb/metadata.json` |
+
+**Sanity-band adjudication.** The band was set by hand before the run at
+PR-AUC **0.70–0.85**. The measured **0.8569** came in above it, so the checkpoint
+correctly recorded `sanity_band_warning`; the warning was investigated rather
+than ignored. The feature matrix is the 28 PCA components plus `Amount`, while
+the target and source `Class` are denylisted. OpenML 1597 supplies no timestamp
+or entity identifier that a stratified fold could straddle. The
+logistic-regression baseline also reached **0.7300** instead of being left
+behind, which is not the signature of a target leak. After that investigation,
+`configs/fraud_ulb.yaml` was widened to **0.90** with an inline dated comment.
+That was a post-run threshold change from **0.85** on **2026-07-25**, not a
+pre-registered maximum, and the config and this report say so explicitly.
+
+### `churn`: detection of an attrition that already happened
+
+The **0.9735 ± 0.0078 PR-AUC** is not a prospective forecast. `Attrition_Flag`
+is a *current* status while features such as `Total_Trans_Ct`,
+`Total_Ct_Chng_Q4_Q1`, and `Months_Inactive_12_mon` summarise the same trailing
+12 months. The dataset has no event timestamp, feature cutoff, or future outcome
+window. A customer who has already left has collapsed activity in exactly the
+window those features describe, so this score substantially reflects
+**detecting an attrition that already happened**, not forecasting one. The
+dataset cannot support prospective framing at all; that is a property of the
+data, not a pipeline bug.
+
+| Run configuration | Recorded value |
+|---|---|
+| Dataset | Kaggle `sakshigoyal7/credit-card-customers`, `BankChurners.csv` |
+| Rows / positive rate / features | 10,127 / 16.07% / 23 |
+| Split | Stratified 5-fold cross-validation; every reported score is out of fold |
+| Model / seed | LightGBM / 42 |
+| Training SHA | `05d32cae0d54dee97a70be575097182e9b5f8278` |
+| Hardware | `macOS-26.5.2-arm64-arm-64bit`, arm64; CPU-only LightGBM wheel |
+| Wall-clock | 11.1 s |
+| Config / checkpoint | [`configs/churn.yaml`](../configs/churn.yaml) / `checkpoints/churn/metadata.json` |
+
+The two `Naive_Bayes_Classifier_*` posterior columns are absent from the
+23-feature checkpoint list. The configured denylist held.
+
+**A quality gate fired, and the gate turned out to be wrong.** The first real
+churn checkpoint failed `test_more_inactive_months_does_not_lower_churn_risk`,
+which probed 0 against 6 inactive months. Before touching either side, the
+empirical base rates were measured over all 10,127 rows:
+
+| `Months_Inactive_12_mon` | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| attrition rate | 51.7% | 4.5% | 15.4% | 21.5% | 29.9% | 18.0% | 15.3% |
+| n | 29 | 2,233 | 3,282 | 3,846 | 435 | 178 | 124 |
+
+Attrition is **not** monotonic in inactivity in this dataset. The 0-month cell is
+29 customers, and the rate falls again after 4 months. A model scoring 6 months
+above 0 months would be contradicting its own training data, so the gate was
+asserting a bug rather than catching one.
+
+The gate now probes **1 against 4 months** — the segment where the relationship
+is monotone increasing (4.5% → 29.9%) and every cell has hundreds to thousands of
+rows behind it — and the checkpoint passes it. Widening it back to 0..6 needs
+different data, not a different model. The test was corrected, not relaxed: it
+still fails a model wired backwards over the range where "backwards" is defined.
+
+This is also a caution about the serving surface: the score is genuinely
+non-monotonic in inactivity at the extremes, so it ranks well but must not be
+read as a retention *policy*.
 
 ---
 
@@ -94,7 +193,7 @@ comparison. If a tuning budget is spent later, the same budget must be spent on
 both the main model and its baselines.
 
 **PR-AUC is the primary metric, not ROC-AUC.** At 3.5% positives (IEEE-CIS) or
-0.17% (ULB), ROC-AUC is dominated by the enormous true-negative mass and a weak
+0.1727% (ULB), ROC-AUC is dominated by the enormous true-negative mass and a weak
 model still scores above 0.8. Average precision moves when the top of the ranking
 changes, which is the only part a review queue ever sees. ROC-AUC is reported as
 a secondary number because it is what everyone expects to see.
@@ -191,6 +290,26 @@ monotonically with distance from the training period.
 
 ---
 
+## 1b. Payment fraud — ULB / OpenML 1597
+
+OpenML returned **284,807 rows × 30 columns**: `V1`–`V28`, `Amount`, and
+`Class`. It did **not** return `Time`, so this dataset cannot support a temporal
+split. Row order is not substituted for an undocumented timestamp; evaluation
+uses stratified 5-fold cross-validation.
+
+| Model | **PR-AUC ↑ (primary)** | ROC-AUC ↑ | P@1% ↑ | R@1%FPR ↑ |
+|---|---|---|---|---|
+| LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 |
+| Logistic regression (baseline) | 0.7300 ± 0.0279 |  |  |  |
+| Prior (baseline) | 0.0017 | 0.5000 | — | — |
+
+Every headline value is the mean ± standard deviation across held-out folds.
+After cross-validation, the serving estimator was refit on all **284,807** rows;
+it did not grade itself. The adjacent result caveat and sanity-band adjudication
+above are part of this result, not footnotes.
+
+---
+
 ## 2. Consumer credit risk — LendingClub
 
 **Dataset.** Accepted loans 2007-2018Q4, ~2.26M rows × 151 columns, CC0.
@@ -226,8 +345,8 @@ is completely worthless, because at decision time the value is always zero.
 
 | Configuration | ROC-AUC | Interpretation |
 |---|---|---|
-| With denylisted columns included |  | *(to be measured — expect ~0.99)* |
-| Denylist applied (the honest model) |  | *(to be measured — expect ~0.70)* |
+| With denylisted columns included |  | *(not yet measured)* |
+| Denylist applied (the honest model) |  | *(not yet measured)* |
 | Δ |  |  |
 
 That delta is the point. **A correct LendingClub model is not
@@ -250,8 +369,8 @@ body rather than implying a calibrated policy.
 | Logistic regression (FICO + DTI + term + grade) |  |  |  |  |  |
 | Prior (baseline) |  |  | — | — |  |
 
-*Not yet measured.* Expected band: 0.62 ≤ ROC-AUC ≤ 0.80. Above 0.80 means a
-denylisted column got through.
+*Not yet measured.* The 648 MB LendingClub download was not attempted in this
+session.
 
 ---
 
@@ -284,13 +403,14 @@ near-perfect AUC and has learned nothing.
 | Configuration | ROC-AUC (5-fold mean ± std) |
 |---|---|
 | With both `Naive_Bayes_Classifier_*` columns |  |
-| Without them (the honest model) |  |
+| Without them (the honest model) | 0.9940 ± 0.0019 |
 
-*Not yet measured.* The adapter deliberately **keeps** both columns in the
-returned frame so this comparison is possible; `configs/churn.yaml` is what stops
-them reaching the model, and `tests/data/test_leakage_denylist.py` asserts the
-config's 130-character strings match the adapter's constants exactly, so a typo
-cannot silently disable the protection.
+The leaky-column comparison itself is **not yet measured**. The honest model was
+measured with both columns absent. The adapter deliberately **keeps** the source
+columns in the returned frame so a future controlled comparison is possible;
+`configs/churn.yaml` stops them reaching the model, and
+`tests/data/test_leakage_denylist.py` asserts that a typo cannot silently disable
+the protection.
 
 `CLIENTNUM` is denylisted for the same reason: it is a row identifier.
 
@@ -298,32 +418,32 @@ cannot silently disable the protection.
 
 | Model | PR-AUC (mean ± std) | ROC-AUC (mean ± std) | P@1% | R@1%FPR |
 |---|---|---|---|---|
-| LightGBM |  |  |  |  |
-| Logistic regression (baseline) |  |  |  |  |
+| LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 |
+| Logistic regression (baseline) | 0.7800 ± 0.0217 |  |  |  |
 | Prior (baseline) |  |  | — | — |
 
-**Caveat, stated before the number rather than after it:** this dataset is small,
-well separated and easy. A high score here reflects a property of the data, not
-skill. It is not the flagship result and neither the README nor the API presents
-it as one — `src/serving/predictors/churn.py` attaches the caveat to every
-response body, and the UI renders it.
+**Caveat, stated next to the number:** this is substantially detection of a
+current attrition that already happened, not a prospective forecast. The target
+and predictors describe the same trailing activity window; the dataset provides
+no event timestamp, feature cutoff, or future outcome window from which to build
+a prospective task.
 
 ---
 
 ## Reproducing this document
 
 ```bash
-uv run python scripts/download_data.py --dataset all   # needs a Kaggle token
-uv run python scripts/train.py --model all
-uv run python scripts/train.py --model fraud --autoencoder
-uv run python scripts/evaluate.py --markdown           # compact one-row-per-problem metric summary
-uv run python scripts/make_figures.py                  # PR curves, calibration, SHAP
+uv run python scripts/train.py --model fraud_ulb
+uv run python scripts/train.py --model churn
+./.venv/bin/python scripts/evaluate.py --markdown
 ```
 
-> Seed 42. Produced by `make data && make train && make evaluate` on an M-series
-> MacBook Pro (32 GB, 4 performance + 6 efficiency cores). Every row is read from
-> `reports/*_metrics.csv`, which is written by the training run — **no number is
-> typed by hand**, and `scripts/evaluate.py` computes nothing.
+> On 2026-07-25, only `fraud_ulb` and `churn` were run. Both checkpoint metadata
+> files record training SHA `05d32cae0d54dee97a70be575097182e9b5f8278`,
+> seed 42, and `macOS-26.5.2-arm64-arm-64bit` on arm64; LightGBM used its CPU-only
+> macOS wheel. The current repository HEAD used to render this document is
+> `e15842a`. `fraud`, `fraud_autoencoder`, and `credit_risk` were not run.
+> `scripts/evaluate.py` computed nothing; it read the two training-written CSVs.
 
 LightGBM and XGBoost ship CPU-only wheels on macOS arm64; there is no Metal
 backend for either, so the three headline models are CPU-bound regardless of the

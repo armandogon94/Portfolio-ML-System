@@ -141,6 +141,26 @@ def test_a_higher_fico_score_does_not_raise_default_risk():
 
 
 def test_more_inactive_months_does_not_lower_churn_risk():
+    """Directional sanity over the range where the data is actually monotonic.
+
+    This gate originally probed 0 against 6 inactive months and failed against the
+    first real churn checkpoint. The model was right and the gate was wrong: the
+    empirical attrition rate in ``BankChurners.csv`` is **not** monotonic in
+    ``Months_Inactive_12_mon``. Measured on the full 10,127 rows on 2026-07-25::
+
+        months inactive:   0      1      2      3      4      5      6
+        attrition rate: 51.7%   4.5%  15.4%  21.5%  29.9%  18.0%  15.3%
+        n:                 29   2233   3282   3846    435    178    124
+
+    The 0-month cell is 29 customers, and the rate falls again after 4 months. A
+    model that scored 6 months above 0 months would be contradicting its training
+    data, so asserting that was asserting a bug.
+
+    1 through 4 months is the segment where the relationship is monotone
+    increasing and every cell has hundreds to thousands of rows behind it. That is
+    what this gate now checks. Widening it back to 0..6 requires new data, not a
+    new model.
+    """
     _metadata("churn")
     base = {
         "Customer_Age": 45.0,
@@ -150,10 +170,12 @@ def test_more_inactive_months_does_not_lower_churn_risk():
         "Total_Relationship_Count": 4.0,
         "Months_on_book": 36.0,
     }
-    active = _score("churn", {**base, "Months_Inactive_12_mon": 0.0})
-    dormant = _score("churn", {**base, "Months_Inactive_12_mon": 6.0})
+    active = _score("churn", {**base, "Months_Inactive_12_mon": 1.0})
+    dormant = _score("churn", {**base, "Months_Inactive_12_mon": 4.0})
     assert dormant >= active - 1e-6, (
-        f"six dormant months lowered churn risk: {active:.4f} -> {dormant:.4f}"
+        f"going from 1 to 4 inactive months lowered churn risk: "
+        f"{active:.4f} -> {dormant:.4f}. The training data rises monotonically "
+        f"across that segment (4.5% -> 29.9%), so this inverts the data."
     )
 
 

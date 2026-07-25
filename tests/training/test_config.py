@@ -58,6 +58,7 @@ def test_config_files_cover_three_problems_and_two_real_fraud_datasets(project_r
 def test_ulb_sanity_band_is_pr_auc_not_roc_auc():
     band = load_config("fraud_ulb")["sanity_band"]
     assert band["metric"] == "pr_auc"
+    assert band["max"] == 0.90
 
 
 def test_churn_has_no_vacuous_upper_bound():

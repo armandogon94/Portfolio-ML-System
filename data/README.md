@@ -15,7 +15,9 @@ Docker build context.
 No rows from any of these datasets are committed. The only committed data files
 are the PRNG-generated fixtures in `data/sample/`, produced by
 `scripts/make_fixtures.py` with seed 42. Derived and processed artifacts are
-gitignored.
+gitignored. `reports/*_oof_predictions.csv` is also gitignored: those files
+contain one row-level derivative per source record, and the datasets'
+redistribution rights are unresolved or restrictive.
 
 ---
 
@@ -28,10 +30,24 @@ gitignored.
 | Credit Card Customers | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
 | ULB Credit Card Fraud | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
-**IEEE-CIS is public and free, but it is not anonymous-`curl`-able.** It sits
-behind a Kaggle account *and* an explicit rules acceptance that cannot be
-scripted. Anyone claiming otherwise has not tried it. `src/data/download.py`
-turns the resulting 403 into the exact URL to visit.
+**The Kaggle token types are not interchangeable.** On this machine,
+`~/.kaggle/access_token`, the OAuth token written by `kagglehub login`,
+successfully authenticates Kaggle **dataset** downloads. It does not authenticate
+Kaggle **competition** downloads:
+
+```python
+kagglehub.competition_download('ieee-fraud-detection')
+```
+
+returns:
+
+```text
+403 ... Please make sure you are authenticated and have accepted the competition rules
+```
+
+IEEE-CIS therefore needs the classic API token at
+`~/.kaggle/kaggle.json`, even after the competition rules are accepted. This is
+the exact distinction observed on 2026-07-25, not an inferred remediation.
 
 **The ULB path needs no account at all.** It is fetched from OpenML through
 `sklearn.datasets.fetch_openml(data_id=1597)`, so a reviewer with zero Kaggle
@@ -238,23 +254,27 @@ protection.
 |---|---|
 | Source | <https://www.openml.org/d/1597> (also Kaggle `mlg-ulb/creditcardfraud`) |
 | Licence | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
-| Scale | 284,807 transactions × 31 columns (30 features + `Class`) |
-| Positive rate | **0.172%** (492 frauds) |
+| Scale | **284,807 rows × 30 columns** (`V1`–`V28`, `Amount`, `Class`) |
+| Class counts | **`Class=0`: 284,315 · `Class=1`: 492** |
+| Positive rate | **0.1727%** |
 | Access | **No account. No token. No rules acceptance.** |
+| Fetched | **2026-07-25**, from OpenML 1597 with no credentials |
 | Adapter | [`src/data/adapters/ulb_creditcard.py`](../src/data/adapters/ulb_creditcard.py) |
 | Config | [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) |
 | Target | `is_fraud`, derived from source `Class` |
-| Split | Time-based on `Time`; `Time` is excluded from the feature matrix |
+| Split | Stratified 5-fold cross-validation |
 | sha256 | n/a — OpenML returns a frame rather than a primary file |
 
-Features `V1`–`V28` are PCA components; only `Time` and `Amount` are
-interpretable. That is why it is the fallback and not the centrepiece: it cannot
-demonstrate feature engineering, categorical handling, or a SHAP plot whose axis
-labels mean anything to a human. What it *can* do is let a reviewer with no
-Kaggle account verify that the pipeline runs on real data.
+OpenML returned **no `Time` column**. The 29 model features are the PCA
+components `V1`–`V28` plus `Amount`; `Class` is the target and is denylisted from
+the matrix. Without a timestamp, this dataset cannot support a temporal split,
+and row order is not treated as undocumented time. That is why it is the
+credential-free path rather than the centrepiece: it cannot demonstrate
+time-based validation or interpretable SHAP labels. What it *can* do is let a
+reviewer with no Kaggle account verify that the pipeline runs on real data.
 
-At 0.172% positives, ROC-AUC on this dataset is close to meaningless. Average
-precision is the only metric worth quoting.
+At 0.1727% positives, ROC-AUC is close to meaningless. Average precision is the
+primary metric.
 
 ---
 
