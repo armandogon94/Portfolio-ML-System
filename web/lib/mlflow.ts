@@ -120,7 +120,7 @@ async function parseOrThrow<T>(res: Response, schema: z.ZodSchema<T>): Promise<T
 export async function getRunHistory(
   experimentName: string,
   metricKey: string,
-  options?: { limit?: number; baseUrl?: string },
+  options?: { limit?: number; baseUrl?: string; problem?: string; config?: string },
 ): Promise<RunHistoryPoint[]> {
   const baseUrl = resolveBaseUrl(options?.baseUrl);
   const limit = options?.limit ?? 10;
@@ -149,7 +149,15 @@ export async function getRunHistory(
   }
   const experimentId = expParsed.data.experiment.experiment_id;
 
-  // Step 2: search runs for that experiment, ordered newest-first.
+  // Step 2: search only production runs, ordered newest-first. Requiring the
+  // explicit sample=false tag also excludes old untagged fixture runs.
+  const filters = ["tags.sample = 'false'"];
+  if (options?.problem) {
+    filters.push(`tags.problem = '${escapeFilterValue(options.problem)}'`);
+  }
+  if (options?.config) {
+    filters.push(`tags.config = '${escapeFilterValue(options.config)}'`);
+  }
   const searchRes = await fetch(`${baseUrl}/api/2.0/mlflow/runs/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -157,6 +165,7 @@ export async function getRunHistory(
       experiment_ids: [experimentId],
       max_results: limit,
       order_by: ["attributes.end_time DESC"],
+      filter: filters.join(" AND "),
     }),
   });
 
@@ -174,4 +183,8 @@ export async function getRunHistory(
   // Sort oldest-first so a sparkline reads left-to-right.
   points.sort((a, b) => a.endTime - b.endTime);
   return points;
+}
+
+function escapeFilterValue(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 }

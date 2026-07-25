@@ -3,7 +3,7 @@ flowchart LR
     K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
     K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
-    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256 compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
     P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
     T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]

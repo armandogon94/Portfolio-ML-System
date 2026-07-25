@@ -26,7 +26,7 @@ flowchart TB
         EXP["SHAP + gradient<br/>src/explainability/"]
     end
     subgraph store["Artifacts (gitignored)"]
-        CK[("checkpoints/&lt;problem&gt;/<br/>model.joblib · features.joblib<br/>metadata.json")]
+        CK[("checkpoints/&lt;problem&gt;/<br/>model.* · features.joblib<br/>metadata.json")]
     end
     subgraph track["ml-mlflow · :5070"]
         ML[("runs · params · metrics<br/>model registry")]
@@ -109,7 +109,7 @@ flowchart LR
     K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
     K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
-    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256 compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
     P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
     T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]
@@ -128,9 +128,15 @@ frame leaks the test distribution and is worth roughly a point of AUC that
 evaporates in production.
 
 The dotted edge is the other load-bearing detail: the CI fixtures reach the
-trainer but **cannot** reach `checkpoints/` or `reports/`. `TabularTrainer` with
-`sample=True` refuses to write either, so there is no code path from a synthetic
-fixture to a published number.
+trainer but **cannot** reach MLflow, W&B, `checkpoints/` or `reports/`.
+`TabularTrainer` makes the sample flag known before tracking is initialized;
+dashboard history also requires `sample=false` plus matching problem/config
+tags. There is no code path from a synthetic fixture to a published number.
+
+For stratified cross-validation, the model edge has two distinct outputs:
+out-of-fold predictions grade the model and feed performance figures, while a
+separate estimator refit on all rows becomes the serving checkpoint. Keeping
+those roles separate prevents an all-row refit from evaluating itself.
 
 ---
 

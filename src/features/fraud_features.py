@@ -9,6 +9,13 @@ produce identical frames on a fixture batch.
 Every function here is a pure function of the input frame. Nothing reads the
 target and nothing uses a global. Frequency encodings are fitted on TRAIN ONLY and
 passed forward as ``artifacts`` — fitting them on train+test is a subtle leak.
+
+The fitted counts and ``uid_amt_mean`` are **not point-in-time features within the
+training window**: an early training row can benefit from transactions that occur
+later in that same window. This avoids test leakage but still makes the offline
+estimate optimistic relative to a live feature store, where only prior
+transactions would exist. ``reports/RESULTS.md`` records that limitation; a full
+event-time rewrite is intentionally outside this baseline.
 """
 
 from __future__ import annotations

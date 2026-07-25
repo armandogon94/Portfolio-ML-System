@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train one problem, or all three, from its config.
+"""Train one dataset config, or every configured dataset.
 
 There is no ``--modality`` flag. The old three-modality
 (synthetic / stream / mixed) machinery was deleted: real data is now the only
@@ -7,6 +7,7 @@ path. See ``docs/adr/0003-real-data-over-synthetic.md``.
 
 Usage:
     uv run python scripts/train.py --model churn
+    uv run python scripts/train.py --model fraud_ulb
     uv run python scripts/train.py --model fraud --autoencoder
     uv run python scripts/train.py --model all
     uv run python scripts/train.py --model churn --sample     # CI fixture, no checkpoint
@@ -26,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from rich.console import Console
 from rich.table import Table
 
-from src.config import PROBLEMS
+from src.config import available_config_names
 from src.data.download import DatasetAccessError
 
 console = Console()
@@ -63,7 +64,8 @@ def _summary_table(results: dict[str, dict[str, float]]) -> Table:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--model", choices=[*PROBLEMS, "all"], required=True)
+    config_names = available_config_names()
+    parser.add_argument("--model", choices=[*config_names, "all"], required=True)
     parser.add_argument(
         "--autoencoder",
         action="store_true",
@@ -83,12 +85,13 @@ def main() -> int:
     if args.autoencoder and args.model not in ("fraud", "all"):
         parser.error("--autoencoder applies to the fraud problem only.")
 
-    problems = list(PROBLEMS) if args.model == "all" else [args.model]
+    problems = list(config_names) if args.model == "all" else [args.model]
     results: dict[str, dict[str, float]] = {}
     failures: list[str] = []
 
     for problem in problems:
         console.rule(f"[bold cyan]{problem}")
+        trainer = None
         try:
             trainer = _build_trainer(problem, args)
             results[trainer_label(problem, args)] = trainer.run()
@@ -98,6 +101,21 @@ def main() -> int:
         except FileNotFoundError as exc:
             console.print(f"[bold red]{problem}: {exc}[/bold red]")
             failures.append(problem)
+        finally:
+            if trainer is not None:
+                trainer.finish()
+            # A constructor or handler can fail after MLflow starts but before a
+            # trainer object is returned. Close that run here as the final guard.
+            import mlflow
+
+            if mlflow.active_run():
+                try:
+                    mlflow.end_run()
+                except Exception as exc:  # noqa: BLE001 - checkpoint already exists
+                    console.print(
+                        f"[yellow]MLflow cleanup failed after local artifacts were "
+                        f"handled: {exc}[/yellow]"
+                    )
 
     if results:
         console.print()

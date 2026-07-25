@@ -22,12 +22,14 @@ Both are industry-standard. The question was whether to pick one.
 
 ## Decision
 
-**C — MLflow is primary and always on; W&B is optional and off by default.**
+**C — MLflow is primary for real runs; W&B is optional and off by default.**
 
 MLflow needs no account, no API key and no network: the default tracking URI is
 a local `mlruns/` directory, and `docker compose` raises a server on the repo's
 assigned port. That matters more than it sounds — a reviewer cloning this
 repository gets working experiment tracking without signing up for anything.
+Fixture-only sample mode is the deliberate exception: it opens neither tracker,
+so synthetic CI metrics cannot enter the production experiment.
 
 W&B stays wired but inert. `BaseTrainer._init_wandb` treats the literal
 placeholder string shipped in `.env.example` as "unset", so a user who copies the
@@ -36,18 +38,22 @@ for.
 
 The deciding capability is the **model registry**. `BaseTrainer.register_model`
 creates a registered model and a version per run, so a checkpoint has a lifecycle
-(versioned, promotable) rather than just a file on disk. The W&B free tier does
-not offer that.
+(versioned, promotable) rather than just a file on disk. Both concrete trainers
+call it after their local checkpoint has been written. The W&B free tier does not
+offer that.
 
 ## Consequences
 
-- Tracking failures never fail a training run. Every MLflow and W&B call in
-  `BaseTrainer` is wrapped: losing a registry entry is not a reason to lose a
-  trained model. The warning is logged and the run continues.
-- All three problems log into **one** experiment (`fintech-ml-system`, set by
-  `training.mlflow_experiment` in each config) so their runs are directly
-  comparable in the UI. `web/lib/dashboard.ts` hardcodes that same name — if it
-  changes in the configs, it must change there too.
+- Local artifacts are saved **before** any metric logging or registry call. Every
+  MLflow and W&B call in `BaseTrainer` is wrapped: a failure is logged loudly and
+  swallowed, because losing telemetry is not a reason to lose a trained model.
+  The CLI also closes any active MLflow run in a `finally`, including handled data
+  failures.
+- Production configs log into **one** experiment (`fintech-ml-system`, set by
+  `training.mlflow_experiment`) and every run is tagged with `problem`,
+  `config`, and `sample=false`. `web/lib/dashboard.ts` hardcodes that experiment
+  name and requests only the matching production tags; legacy untagged sample
+  runs are excluded.
 - MLflow's SQLite store records artifact URIs as absolute paths. Moving the repo
   directory therefore breaks artifact links in *existing* runs. New runs are
   unaffected. This is a known MLflow limitation, not something to work around.

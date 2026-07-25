@@ -54,6 +54,30 @@ def test_split_sizes_match_the_requested_fractions(timed_frame):
     assert len(split.train) == 700
 
 
+def test_repeated_timestamps_never_span_train_validation_or_test():
+    """Monthly timestamps must move as a group to the earlier partition."""
+    months = np.repeat(pd.period_range("2017-01", periods=12, freq="M"), 30)
+    frame = pd.DataFrame({"issue_d": months.to_timestamp(), "y": np.tile([0, 1], 180)})
+
+    split = time_split(frame, "issue_d", test_size=0.2, val_size=0.1)
+    timestamp_sets = [
+        set(frame.iloc[indices]["issue_d"]) for indices in (split.train, split.val, split.test)
+    ]
+
+    assert timestamp_sets[0].isdisjoint(timestamp_sets[1])
+    assert timestamp_sets[0].isdisjoint(timestamp_sets[2])
+    assert timestamp_sets[1].isdisjoint(timestamp_sets[2])
+    assert frame.iloc[split.train]["issue_d"].max() < frame.iloc[split.val]["issue_d"].min()
+    assert frame.iloc[split.val]["issue_d"].max() < frame.iloc[split.test]["issue_d"].min()
+
+
+def test_tie_safe_boundary_refuses_to_empty_the_later_partition():
+    frame = pd.DataFrame({"t": [1] * 7 + [2] * 3, "y": [0, 1] * 5})
+
+    with pytest.raises(ValueError, match="timestamp ties.*test partition empty"):
+        time_split(frame, "t", test_size=0.2, val_size=0.0)
+
+
 def test_missing_split_column_names_the_columns_it_did_find(timed_frame):
     with pytest.raises(KeyError, match="issue_d"):
         time_split(timed_frame, "issue_d")

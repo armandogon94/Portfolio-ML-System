@@ -1,11 +1,23 @@
 """Kaggle API credentials loader.
 
-Reads credentials from (in order of precedence):
-1. Environment variables KAGGLE_USERNAME and KAGGLE_KEY
-2. File at ~/.kaggle/kaggle.json (standard Kaggle location)
+Three sources, in order of precedence:
 
-Used before any kagglehub operation so that the kagglehub library
-picks up valid credentials via its own env-var lookup.
+1. Environment variables ``KAGGLE_USERNAME`` and ``KAGGLE_KEY``.
+2. ``~/.kaggle/kaggle.json`` — the classic API token.
+3. ``~/.kaggle/access_token`` — the OAuth token written by ``kagglehub login``.
+
+The third case exports nothing: kagglehub reads that file itself. This module
+only has to stop refusing. That refusal was a real bug — measured on this
+machine on 2026-07-25, ``kagglehub.auth.whoami()`` and
+``kagglehub.dataset_download('sakshigoyal7/credit-card-customers')`` both
+succeed with only ``access_token`` present, while this loader raised and the
+download never got the chance.
+
+One caveat, also measured rather than assumed: the OAuth token authenticates
+Kaggle **datasets** but NOT **competitions**.
+``kagglehub.competition_download('ieee-fraud-detection')`` returns
+``403 ... have accepted the competition rules`` with it, even when the rules are
+accepted, so IEEE-CIS still needs a classic ``kaggle.json``.
 """
 
 from __future__ import annotations
@@ -18,11 +30,26 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _MISSING_CREDS_MSG = (
-    "Kaggle credentials not found. Provide them via either:\n"
+    "Kaggle credentials not found. Provide them in any one of three ways:\n"
     "  (1) environment variables: export KAGGLE_USERNAME=... KAGGLE_KEY=...\n"
     "  (2) a kaggle.json file at ~/.kaggle/kaggle.json\n"
-    "Get your API key from https://www.kaggle.com/settings/account → 'Create New Token'."
+    "  (3) run `kagglehub login`, which writes ~/.kaggle/access_token\n"
+    "Get an API key at https://www.kaggle.com/settings/account -> 'Create New Token'.\n"
+    "Note: option (3) authenticates datasets but NOT competitions, so IEEE-CIS\n"
+    "needs option (1) or (2)."
 )
+
+#: Written by ``kagglehub login``. kagglehub reads it directly, so its presence
+#: means credentials exist even though there is nothing to export.
+KAGGLEHUB_TOKEN_PATH = Path.home() / ".kaggle" / "access_token"
+
+
+def has_kagglehub_oauth_token() -> bool:
+    """True when ``kagglehub login`` has left a token kagglehub can use itself."""
+    try:
+        return KAGGLEHUB_TOKEN_PATH.is_file() and KAGGLEHUB_TOKEN_PATH.stat().st_size > 0
+    except OSError:
+        return False
 
 
 def load_kaggle_creds() -> dict[str, str]:
@@ -54,11 +81,21 @@ def load_kaggle_creds() -> dict[str, str]:
 
 
 def ensure_kaggle_env() -> None:
-    """Export credentials into ``os.environ`` so kagglehub can pick them up.
+    """Make sure kagglehub will find *some* credential, or raise with instructions.
 
-    Called before ``kagglehub.dataset_download()`` in ``src/data/stream.py``.
-    Raises RuntimeError if credentials are unavailable.
+    Env vars and ``kaggle.json`` are exported into ``os.environ`` because that is
+    how kagglehub discovers them. An ``access_token`` needs no export — kagglehub
+    reads it itself — so this function simply returns without raising.
+
+    Raises:
+        RuntimeError: No credential of any of the three kinds is available.
     """
-    creds = load_kaggle_creds()
+    try:
+        creds = load_kaggle_creds()
+    except RuntimeError:
+        if has_kagglehub_oauth_token():
+            logger.debug("Using the kagglehub OAuth token at %s", KAGGLEHUB_TOKEN_PATH)
+            return
+        raise
     os.environ["KAGGLE_USERNAME"] = creds["username"]
     os.environ["KAGGLE_KEY"] = creds["key"]

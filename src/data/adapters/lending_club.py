@@ -15,7 +15,8 @@ Every other status (``Current``, ``In Grace Period``, ``Late (...)``,
 ``Current`` and calling it non-default labels an unresolved loan as a success and
 biases the model toward optimism on young vintages.
 
-Licence: CC0 / public domain. Kaggle dataset (account only, no rules gate).
+Licence: the uploader tags CC0, but upstream authority is unverified. Do not
+redistribute rows. Kaggle account required; no rules gate.
 """
 
 from __future__ import annotations
@@ -39,9 +40,12 @@ PROVENANCE: dict[str, Any] = {
     "slug": "wordsforthewise/lending-club",
     "filename": "accepted_2007_to_2018Q4.csv.gz",
     "url": "https://www.kaggle.com/datasets/wordsforthewise/lending-club",
-    "licence": "CC0 1.0 (public domain)",
+    "licence": ("Uploader tags CC0; upstream authority unverified — do not redistribute rows"),
     "access": "Free Kaggle account. No rules gate.",
+    "expected_rows": 2_260_701,
     "expected_rows_raw": 2_260_701,
+    # Unrecorded because the download has not been run on this machine.
+    "expected_sha256": None,
     "note": "Row count after filtering to terminal statuses is recorded in data/README.md",
 }
 

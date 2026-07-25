@@ -65,14 +65,14 @@ metrics:
     - recall_at_1pct_fpr
     - brier
 
-# This is an easy, well-separated dataset. A high score here is not evidence of
-# skill and the README says so. The floor exists to catch a broken pipeline,
-# not to celebrate.
-expected:
-  roc_auc_min: 0.85
-  roc_auc_max: 1.0
+# Expected-range sanity band: a smoke alarm for a broken pipeline. There is no
+# upper bound because 1.0 is vacuous and cannot detect leakage.
+sanity_band:
+  metric: roc_auc
+  min: 0.85
 
 training:
   checkpoint_dir: checkpoints/churn
   reports_dir: reports
   mlflow_experiment: fintech-ml-system
+  refit_full_after_cv: true

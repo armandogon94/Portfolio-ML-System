@@ -23,9 +23,10 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
-#: Adapter module paths, keyed by problem name.
+#: Adapter module paths, keyed by dataset config name.
 ADAPTERS = {
     "fraud": "src.data.adapters.ieee_cis",
+    "fraud_ulb": "src.data.adapters.ulb_creditcard",
     "credit_risk": "src.data.adapters.lending_club",
     "churn": "src.data.adapters.credit_card_churn",
 }

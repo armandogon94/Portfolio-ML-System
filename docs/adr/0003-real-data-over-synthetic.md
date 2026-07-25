@@ -92,11 +92,13 @@ Concretely:
    `results/modality_comparison_*.csv` or a single `*_stream` checkpoint.
 
 2. **`src/config.py` refuses to load a config without a real `data.source`.**
-   Not a warning: a `ConfigError` at load time. A future contributor cannot
-   reintroduce a generator without deleting this validation, which is a visible
-   act rather than an accident.
+   Not a warning: a `ConfigError` at load time. Kinds are limited to Kaggle
+   competition, Kaggle dataset, or OpenML; dataset ids/slugs are required; the
+   adapter module must exist; and generator/simulation markers are forbidden.
+   A future contributor cannot reintroduce a generator without deleting this
+   validation, which is a visible act rather than an accident.
 
-3. **The three datasets are named, licensed and gated honestly:**
+3. **The four dataset paths across three problems are named, licensed and gated honestly:**
 
    | Problem | Dataset | Access |
    |---|---|---|
@@ -108,7 +110,7 @@ Concretely:
    IEEE-CIS is public and free but it is **not anonymous-`curl`-able**, and
    `data/README.md` says so in as many words. The ULB/OpenML path exists so a
    reviewer with zero Kaggle presence can still reproduce a real-data fraud
-   result end to end.
+   result end to end through `configs/fraud_ulb.yaml`.
 
 4. **`scripts/download_data.py` has no fallback branch.** When credentials are
    missing it prints the exact remediation and exits non-zero. Nothing is
@@ -119,10 +121,9 @@ Concretely:
    features. They survive for a licensing reason, not a convenience one: IEEE-CIS
    competition data is not redistributable, so committing 500 real rows would
    violate the rules. Two structural guards keep them out of the metric path:
-   `TabularTrainer` refuses to write a checkpoint or a metrics CSV when
-   `--sample` is set, and `tests/e2e/test_train_to_serve.py` asserts a
-   fixture-trained model scores *near chance* — a good score on the fixture is
-   treated as a bug in the fixture.
+   `TabularTrainer` opens no tracking run and refuses to write a checkpoint or a
+   metrics CSV when `--sample` is set. Dashboard history additionally requires
+   `sample=false` plus matching problem/config tags.
 
 6. **The retraction is published, not quietly deleted.** `README.md` opens with a
    correction section, above the fold, that states the mechanism — that the label
@@ -134,7 +135,7 @@ Concretely:
 
 ### The numbers get worse, and that is the deliverable
 
-Expected honest results, written down in each config's `expected` block *before*
+Expected honest results, written down in each config's `sanity_band` block *before*
 any training run, so there is no room to rationalise a suspiciously good outcome
 after the fact:
 
@@ -146,19 +147,28 @@ after the fact:
 
 0.964 → ~0.90 is a *downgrade in the number and an upgrade in the claim.*
 
-### A ceiling is enforced, not just a floor
+### The expected range is a smoke alarm, not a leakage test
 
-`configs/<problem>.yaml` declares `expected.roc_auc_max`. Exceeding it is treated
-as **suspected leakage** and recorded in `checkpoints/*/metadata.json`;
-`tests/test_quality_gates.py` fails on it. The failure mode this repository is
-correcting was a good-looking number nobody interrogated, so a good-looking
-number now has to justify itself.
+`configs/<problem>.yaml` declares `sanity_band`, with an optional upper bound.
+Crossing it records `sanity_band_warning` and requires investigation. It does not
+prove leakage, and churn has no vacuous 1.0 upper bound. The enforceable leakage
+controls are chronological splitting, exclusion of the configured split column,
+the LendingClub/churn denylists, and the tests that assert those columns never
+reach a feature matrix.
 
-### Some work becomes impossible without credentials
+### Headline training remains impossible without credentials
 
-Training cannot run on a machine with no Kaggle token. That is accepted. The
-alternative — a synthetic fallback so the demo always "works" — is exactly the
-thing being deleted.
+The three headline datasets cannot train on a machine with no Kaggle token. That
+is accepted. The OpenML 1597 fallback can:
+
+```bash
+uv run python scripts/download_data.py --dataset ulb-creditcard
+uv run python scripts/train.py --model fraud_ulb
+cat reports/fraud_ulb_metrics.csv
+```
+
+The alternative — a synthetic fallback so the demo always "works" — is exactly
+the thing being deleted.
 
 ### What was kept
 
@@ -182,15 +192,15 @@ provenance link is strictly more credible and strictly less work.
 
 **Use only the ungated ULB dataset and skip Kaggle entirely.** Rejected as the
 sole path, kept as a fallback. ULB is 284,807 PCA-transformed rows with no
-categorical features, no temporal structure worth splitting on, and no feature
-names — so it cannot demonstrate feature engineering, categorical handling, or
-SHAP explanations that mean anything to a human. It is the right *credential-free
-escape hatch*, not the right centrepiece.
+categorical features and anonymised component names. It does provide `Time` as a
+chronological split key, but it cannot demonstrate categorical handling or SHAP
+explanations whose `V1`–`V28` axes mean anything to a human. It is the right
+*credential-free escape hatch*, not the right centrepiece.
 
 ## References
 
 - Retracted metric: `README.md` §"A correction, and why it's here"
-- Enforcement: `src/config.py::_validate`, `src/training/tabular.py::_check_expected_band`
+- Enforcement: `src/config.py::_validate`, `src/training/tabular.py::_check_sanity_band`
 - Gates: `tests/test_quality_gates.py`, `tests/data/test_leakage_denylist.py`
 - Data provenance: [`data/README.md`](../../data/README.md)
 - Narrowing rationale: [ADR-0004](0004-narrow-to-fintech.md)

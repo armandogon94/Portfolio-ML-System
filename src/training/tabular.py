@@ -8,18 +8,20 @@ a fact about the repository rather than a claim in its README.
 
 What the config controls end to end: the dataset and adapter, the feature module,
 the split strategy and key, the model and its hyperparameters, the baselines, the
-reported metrics, the seed, and the sanity band the result must fall inside.
+reported metrics, the seed, and the expected-range sanity band used as a smoke
+alarm.
 
 Guardrails that are code, not documentation:
 
-* ``--sample`` refuses to write a checkpoint or a metrics CSV. Fixture numbers can
-  never become published numbers by accident.
+* ``--sample`` opens no tracking run and refuses checkpoint/CSV writes. Fixture
+  numbers therefore cannot enter MLflow or become published numbers by accident.
 * Feature-fitting state (frequency maps, group means) is fitted on train only and
   reused verbatim for validation, test and serving.
 * Every denylisted column is dropped before the model sees the frame, and the drop
   is asserted rather than assumed.
-* The measured metric is compared against ``expected.roc_auc_{min,max}`` and a
-  breach is logged as a **suspected leak**, loudly, in the metadata.
+* The measured metric is compared against ``sanity_band``. That heuristic is
+  recorded as a warning, never presented as a leakage test; the denylist and
+  split-column exclusion are the actual leakage controls.
 """
 
 from __future__ import annotations
@@ -50,6 +52,8 @@ from src.training.trainer import BaseTrainer
 
 logger = logging.getLogger(__name__)
 
+_DEGENERATE_SCORE_STD_MAX = 1e-12
+
 
 class TabularTrainer(BaseTrainer):
     """Train, evaluate and checkpoint one problem, entirely from its config.
@@ -58,12 +62,27 @@ class TabularTrainer(BaseTrainer):
         config_name: A problem name resolving to ``configs/<name>.yaml``.
         use_wandb: Enable W&B logging when ``WANDB_API_KEY`` is set.
         sample: Train on the committed CI fixture instead of the real dataset.
-            **Forces checkpointing off** — see :meth:`save_artifacts`.
+            Opens no tracking run and **forces checkpointing off** — see
+            :meth:`save_artifacts`.
     """
 
-    def __init__(self, config_name: str, *, use_wandb: bool = False, sample: bool = False):
-        super().__init__(config_name, use_wandb=use_wandb)
-        self.sample = sample
+    def __init__(
+        self,
+        config_name: str,
+        *,
+        use_wandb: bool = False,
+        sample: bool = False,
+        tracking_model_type: str | None = None,
+        registry_name: str | None = None,
+    ):
+        # BaseTrainer needs sample before it considers opening an MLflow run.
+        super().__init__(
+            config_name,
+            use_wandb=use_wandb,
+            sample=sample,
+            tracking_model_type=tracking_model_type,
+            registry_name=registry_name,
+        )
         self.feature_columns: list[str] = []
         self.feature_artifacts: dict[str, Any] = {}
         #: Exact training category sets, replayed at serving time. See
@@ -71,6 +90,9 @@ class TabularTrainer(BaseTrainer):
         self.category_dtypes: dict[str, list] = {}
         self.baseline_metrics: dict[str, dict[str, float]] = {}
         self._fold_metrics: list[dict[str, float]] = []
+        self._last_scores: dict[str, np.ndarray] = {}
+        self._oof_predictions: list[pd.DataFrame] = []
+        self.checkpoint_fit: dict[str, Any] = {}
 
     # ── pipeline steps ───────────────────────────────────────────────────────
 
@@ -97,6 +119,9 @@ class TabularTrainer(BaseTrainer):
         features = importlib.import_module(self.config["features"]["module"])
         target = self.config["data"]["target"]
         denylist = list(self.config["data"].get("denylist", [])) or [target]
+        split_column = self.config["split"].get("column")
+        if split_column and split_column not in denylist:
+            denylist.append(split_column)
 
         train_raw = frame.iloc[split.train]
         engineered_train, self.feature_artifacts = features.engineer_features(train_raw, fit=True)
@@ -146,17 +171,19 @@ class TabularTrainer(BaseTrainer):
 
     def evaluate(self, model: Any, data: dict[str, Any]) -> dict[str, float]:
         """Score the model on the test split and on every configured baseline."""
-        metrics = compute_classification_metrics(
-            data["y_test"], _positive_scores(model, data["X_test"]), prefix="test"
-        )
+        model_scores = _positive_scores(model, data["X_test"])
+        self._last_scores = {"model": model_scores}
+        metrics = compute_classification_metrics(data["y_test"], model_scores, prefix="test")
 
         for baseline in self.config.get("baselines", []):
             name = baseline["type"]
             estimator = create_model(name, baseline.get("params"), seed=self.seed)
             estimator.fit(data["X_train"], data["y_train"])
+            baseline_scores = _positive_scores(estimator, data["X_test"])
+            self._last_scores[name] = baseline_scores
             scored = compute_classification_metrics(
                 data["y_test"],
-                _positive_scores(estimator, data["X_test"]),
+                baseline_scores,
                 prefix=f"baseline_{name}",
             )
             self.baseline_metrics[name] = scored
@@ -182,6 +209,8 @@ class TabularTrainer(BaseTrainer):
     def run(self) -> dict[str, float]:
         """Execute the whole pipeline and return the metrics that were measured."""
         started = time.time()
+        self._fold_metrics = []
+        self._oof_predictions = []
         logger.info("=" * 68)
         logger.info("Training %s (sample=%s, seed=%d)", self.problem, self.sample, self.seed)
         logger.info("=" * 68)
@@ -198,24 +227,64 @@ class TabularTrainer(BaseTrainer):
             model = self.train(data)
             fold_metrics = self.evaluate(model, data)
             self._fold_metrics.append(fold_metrics)
+            if len(splits) > 1:
+                self._record_oof_predictions(split, data, fold=index + 1)
             metrics = fold_metrics
 
         if len(splits) > 1:
-            # Cross-validated problems report mean +/- std, never one fold.
-            metrics = {**metrics, **aggregate_folds(self._fold_metrics, prefix="cv")}
+            # The CV aggregate is the report. A single fold is deliberately not
+            # retained under test_* names where a caller could mistake it for the
+            # headline result; per-row fold evidence lives in the OOF CSV.
+            metrics = aggregate_folds(self._fold_metrics, prefix="cv")
+            if self.config["training"].get("refit_full_after_cv", True):
+                model = self._refit_on_all_rows(frame)
+                self.checkpoint_fit = {
+                    "scope": "all_rows_refit_after_cross_validation",
+                    "n_rows": len(frame),
+                    "evaluation": "out_of_fold_predictions",
+                }
+            else:
+                assert model is not None
+                n_rows = len(data["X_train"])
+                setattr(model, "training_rows_", n_rows)
+                self.checkpoint_fit = {
+                    "scope": f"final_cross_validation_fold_{len(splits)}",
+                    "n_rows": n_rows,
+                    "evaluation": "cross_validation_mean_and_standard_deviation",
+                    "note": "Refit disabled explicitly in training.refit_full_after_cv.",
+                }
+        else:
+            assert model is not None
+            n_rows = len(data["X_train"])
+            setattr(model, "training_rows_", n_rows)
+            self.checkpoint_fit = {
+                "scope": "training_partition",
+                "n_rows": n_rows,
+                "evaluation": "held_out_test_partition",
+            }
 
         metrics["n_features"] = float(len(self.feature_columns))
         metrics["training_time_seconds"] = round(time.time() - started, 1)
         self.metrics = metrics
-        self.log_metrics({k: v for k, v in metrics.items() if isinstance(v, (int, float))})
 
-        leak_warning = self._check_expected_band(metrics)
-        self.save_artifacts(model, metrics, leak_warning=leak_warning)
+        sanity_band_warning = self._check_sanity_band(metrics)
+        checkpoint_dir = self.save_artifacts(
+            model, metrics, sanity_band_warning=sanity_band_warning
+        )
+        # Local artifacts are durable before any network/file-store tracker is
+        # allowed to fail. This ordering implements ADR-0002.
+        self.log_metrics({k: v for k, v in metrics.items() if isinstance(v, (int, float))})
+        if checkpoint_dir is not None:
+            self.register_model(str(checkpoint_dir))
         self.finish()
         return metrics
 
     def save_artifacts(
-        self, model: Any, metrics: dict[str, float], *, leak_warning: str | None
+        self,
+        model: Any,
+        metrics: dict[str, float],
+        *,
+        sanity_band_warning: str | None,
     ) -> Path | None:
         """Write the checkpoint, metadata and metrics CSV. No-op in sample mode.
 
@@ -251,8 +320,18 @@ class TabularTrainer(BaseTrainer):
             "n_features": len(self.feature_columns),
             "metrics": metrics,
             "hyperparameters": self.config["model"].get("params", {}),
-            "config_file": f"configs/{self.problem}.yaml",
+            "config_file": f"configs/{self.config_name}.yaml",
             "mlflow_run_id": self.mlflow_run_id,
+            "checkpoint_fit": self.checkpoint_fit,
+            "evaluation_predictions": (
+                {
+                    "kind": "out_of_fold",
+                    "path": f"reports/{self.config_name}_oof_predictions.csv",
+                    "note": "Each row was scored only by the fold that held it out.",
+                }
+                if self._oof_predictions
+                else {"kind": "held_out_test_partition"}
+            ),
             "hardware": {
                 "platform": platform.platform(),
                 "machine": platform.machine(),
@@ -261,19 +340,58 @@ class TabularTrainer(BaseTrainer):
                     "backend exists. Only src/models/autoencoder.py uses MPS."
                 ),
             },
-            "suspected_leakage": leak_warning,
+            "leakage_controls": {
+                "denylist_enforced": True,
+                "split_column_excluded": True,
+                "sanity_band_is_smoke_alarm_only": True,
+            },
+            "sanity_band_warning": sanity_band_warning,
         }
         (checkpoint_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str))
 
         reports_dir = Path(self.config["training"]["reports_dir"])
         reports_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = reports_dir / f"{self.problem}_metrics.csv"
+        csv_path = reports_dir / f"{self.config_name}_metrics.csv"
         pd.DataFrame([{"metric": k, "value": v} for k, v in sorted(metrics.items())]).to_csv(
             csv_path, index=False
         )
+        if self._oof_predictions:
+            oof_path = reports_dir / f"{self.config_name}_oof_predictions.csv"
+            pd.concat(self._oof_predictions, ignore_index=True).sort_values("row_index").to_csv(
+                oof_path, index=False
+            )
+            logger.info("Wrote held-out OOF predictions to %s", oof_path)
         logger.info("Wrote %s and %s", checkpoint_dir / "metadata.json", csv_path)
 
         return checkpoint_dir
+
+    def _record_oof_predictions(self, split: Split, data: dict[str, Any], *, fold: int) -> None:
+        """Collect held-out scores for one CV fold, preserving source row ids."""
+        rows: dict[str, Any] = {
+            "row_index": split.test,
+            "fold": fold,
+            "y_true": data["y_test"],
+        }
+        rows.update({f"score_{name}": values for name, values in self._last_scores.items()})
+        self._oof_predictions.append(pd.DataFrame(rows))
+
+    def _refit_on_all_rows(self, frame: pd.DataFrame) -> Any:
+        """Fit the checkpoint estimator on all rows after CV evaluation."""
+        all_rows = np.arange(len(frame), dtype=int)
+        full = Split(
+            train=all_rows,
+            val=np.array([], dtype=int),
+            test=np.array([], dtype=int),
+        )
+        data = self.build_matrix(frame, full)
+        model = self.train(data)
+        setattr(model, "training_rows_", len(data["X_train"]))
+        logger.info(
+            "Refit final %s estimator on all %d rows after cross-validation.",
+            self.config["model"]["type"],
+            len(data["X_train"]),
+        )
+        return model
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -322,46 +440,79 @@ class TabularTrainer(BaseTrainer):
                 f"Check {self.config['features']['module']}.get_feature_columns()."
             )
 
-    def _check_expected_band(self, metrics: dict[str, float]) -> str | None:
-        """Compare the measured ROC-AUC against the config's sanity band.
+    def _check_sanity_band(self, metrics: dict[str, float]) -> str | None:
+        """Run the degenerate-score gate and expected-range smoke alarm.
 
-        Returns a warning string when the result is outside the band. A score
-        *above* the band is the dangerous case: it means leakage, and the whole
-        reason this repository was rebuilt was a metric nobody questioned.
+        The configured band is not a leakage test. It only says that a result is
+        surprising enough to investigate. Leakage is prevented structurally by
+        time-aware splits, the denylist, and split-column exclusion.
         """
-        expected = self.config.get("expected")
-        if not expected:
+        is_cv = self.config["split"]["type"] == "stratified_kfold"
+        score_std = metrics.get("cv_score_std_mean") if is_cv else metrics.get("test_score_std")
+        if score_std is not None and score_std <= _DEGENERATE_SCORE_STD_MAX:
+            warning = (
+                f"DEGENERATE predictions: score standard deviation is {score_std:.4g}. "
+                "The model returned a constant score, so ranking metrics are not "
+                "evidence. Check the fitted estimator and positive-class score path."
+            )
+            logger.error("QUALITY GATE FAILED: %s", warning)
+            return warning
+
+        band = self.config.get("sanity_band")
+        if not band:
             return None
 
-        measured = metrics.get("test_roc_auc") or metrics.get("cv_roc_auc_mean")
+        metric = band["metric"]
+        label = "PR-AUC" if metric == "pr_auc" else "ROC-AUC"
+        measured = metrics.get(f"cv_{metric}_mean") if is_cv else metrics.get(f"test_{metric}")
         if measured is None:
             return None
 
-        low, high = expected.get("roc_auc_min"), expected.get("roc_auc_max")
+        low, high = band.get("min"), band.get("max")
         if high is not None and measured > high:
             warning = (
-                f"ROC-AUC {measured:.4f} EXCEEDS the expected ceiling {high}. "
-                f"Treat this as suspected leakage, not success. Check for a random "
-                f"split, an id column in the features, or a post-outcome field."
+                f"{label} {measured:.4f} is ABOVE the expected-range sanity band "
+                f"maximum {high}. This smoke alarm cannot diagnose leakage; "
+                f"investigate the split, feature set, and target before publishing."
             )
-            logger.error("SUSPECTED LEAKAGE: %s", warning)
+            logger.warning("SANITY BAND WARNING: %s", warning)
             return warning
         if low is not None and measured < low:
             warning = (
-                f"ROC-AUC {measured:.4f} is BELOW the expected floor {low}. "
+                f"{label} {measured:.4f} is BELOW the expected-range sanity band "
+                f"minimum {low}. "
                 f"Check the split, the target construction and the feature count."
             )
-            logger.warning("UNDERPERFORMING: %s", warning)
+            logger.warning("SANITY BAND WARNING: %s", warning)
             return warning
 
-        logger.info("ROC-AUC %.4f is inside the expected band [%s, %s].", measured, low, high)
+        logger.info(
+            "%s %.4f is inside the expected-range sanity band [%s, %s].",
+            label,
+            measured,
+            low,
+            high if high is not None else "unbounded",
+        )
         return None
 
 
 def _positive_scores(model: Any, matrix: pd.DataFrame) -> np.ndarray:
-    """Positive-class probabilities from any estimator in the registry."""
-    proba = model.predict_proba(matrix)
-    return np.asarray(proba)[:, 1]
+    """Positive-class probabilities from any estimator in the registry.
+
+    A one-column ``predict_proba`` means the estimator only ever saw one class,
+    which on a time split means every positive landed outside the training
+    partition. That produces meaningless metrics, so it fails here with the
+    cause named rather than as an ``IndexError`` four frames deeper.
+    """
+    proba = np.asarray(model.predict_proba(matrix))
+    if proba.ndim != 2 or proba.shape[1] < 2:
+        raise ValueError(
+            "The estimator was fitted on a single class, so there is no "
+            "positive-class probability to score. The training partition "
+            "contains no positive rows — check the split boundaries and the "
+            "positive rate of the data this run was given."
+        )
+    return proba[:, 1]
 
 
 def _git_sha() -> str:

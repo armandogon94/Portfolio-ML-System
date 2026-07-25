@@ -65,13 +65,14 @@ metrics:
     - recall_at_1pct_fpr
     - brier
 
-# Sanity band. Outside this range the run is a bug, not a result.
+# Expected-range sanity band. This is a smoke alarm, not a leakage test.
 # IEEE-CIS winning ensembles reached ~0.94-0.95 private-LB ROC-AUC after months
 # of feature engineering and blending. A single honest LightGBM on a temporal
-# split should land near 0.90. >= 0.96 means leakage — investigate, do not ship.
-expected:
-  roc_auc_min: 0.85
-  roc_auc_max: 0.96
+# split should land near 0.90. A result outside the range requires investigation.
+sanity_band:
+  metric: roc_auc
+  min: 0.85
+  max: 0.96
 
 training:
   checkpoint_dir: checkpoints/fraud

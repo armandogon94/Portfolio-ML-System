@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 
 from src.models.autoencoder import FraudAutoencoder
+from src.training.autoencoder_pipeline import AutoencoderTrainer
 
 
 def test_forward_preserves_shape():
@@ -46,3 +47,18 @@ def test_error_shrinks_on_data_the_model_was_fitted_to():
     with torch.no_grad():
         after = float(model.reconstruction_error(data).mean())
     assert after < before, f"training did not reduce reconstruction error: {before} -> {after}"
+
+
+def test_same_config_seed_produces_identical_initial_weights():
+    trainer = AutoencoderTrainer("fraud", sample=True, epochs=0)
+    trainer._seed_everything()
+    first = FraudAutoencoder(input_dim=6, hidden_dims=[4, 2])
+    first_weights = [parameter.detach().clone() for parameter in first.parameters()]
+
+    torch.rand(10)
+    trainer._seed_everything()
+    second = FraudAutoencoder(input_dim=6, hidden_dims=[4, 2])
+
+    for left, right in zip(first_weights, second.parameters()):
+        assert torch.equal(left, right)
+    trainer.finish()

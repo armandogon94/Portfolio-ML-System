@@ -7,8 +7,10 @@ structurally impossible for a number to appear in a table here that was not
 produced by a training run, which is the failure mode this repository was rebuilt
 to fix.
 
-With ``--markdown`` it emits the exact table body for ``README.md`` and
-``reports/RESULTS.md``, so those numbers are copied from a file rather than typed.
+With ``--markdown`` it emits a compact one-row-per-problem metrics summary. The
+README and ``reports/RESULTS.md`` use richer tables with dataset and per-model
+context, so this output is evidence for their metric cells, not a paste-ready
+replacement for either table.
 
 Usage:
     uv run python scripts/evaluate.py
@@ -28,9 +30,10 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from src.config import PROBLEMS, get_project_root
+from src.config import get_project_root
 
 console = Console()
+RESULT_ROWS = ("fraud", "fraud_autoencoder", "credit_risk", "churn")
 
 #: Column order for the rendered table, matching README §Results.
 COLUMNS = [
@@ -66,11 +69,11 @@ def main() -> int:
     parser.add_argument("--markdown", action="store_true", help="Emit a Markdown table body.")
     args = parser.parse_args()
 
-    rows = {problem: _read(problem) for problem in PROBLEMS}
+    rows = {problem: _read(problem) for problem in RESULT_ROWS}
     measured = {p: m for p, m in rows.items() if m}
 
     if args.markdown:
-        for problem in PROBLEMS:
+        for problem in RESULT_ROWS:
             metrics = rows[problem]
             cells = [_pick(metrics, bare) or " " for bare, _ in COLUMNS]
             print(f"| {problem} | " + " | ".join(cells) + " |")
@@ -82,7 +85,7 @@ def main() -> int:
     table.add_column("problem", style="cyan")
     for _, label in COLUMNS:
         table.add_column(label, justify="right")
-    for problem in PROBLEMS:
+    for problem in RESULT_ROWS:
         table.add_row(problem, *[_pick(rows[problem], bare) or "—" for bare, _ in COLUMNS])
     console.print(table)
 
@@ -101,9 +104,9 @@ def main() -> int:
         metadata_path = get_project_root() / "checkpoints" / problem / "metadata.json"
         if not metadata_path.exists():
             continue
-        warning = json.loads(metadata_path.read_text()).get("suspected_leakage")
+        warning = json.loads(metadata_path.read_text()).get("sanity_band_warning")
         if warning:
-            console.print(f"\n[bold red]{problem}: {warning}[/bold red]")
+            console.print(f"\n[bold yellow]{problem}: {warning}[/bold yellow]")
 
     return 0
 

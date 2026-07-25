@@ -31,6 +31,7 @@ class LoadedModel:
     feature_artifacts: dict[str, Any] = field(default_factory=dict)
     #: Training category sets, replayed on every request. See src/features/schema.py.
     category_dtypes: dict[str, list] = field(default_factory=dict)
+    preprocessor: Any = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -102,12 +103,28 @@ class CheckpointRegistry:
 
         metadata = json.loads(metadata_path.read_text())
         bundle = joblib.load(directory / "features.joblib")
+        if metadata.get("model_type") == "autoencoder":
+            import torch
+
+            from src.models.autoencoder import FraudAutoencoder
+
+            payload = torch.load(directory / "model.pt", map_location="cpu", weights_only=True)
+            model = FraudAutoencoder(
+                input_dim=int(payload["input_dim"]),
+                hidden_dims=list(payload["hidden_dims"]),
+                dropout=float(payload.get("dropout", 0.1)),
+            )
+            model.load_state_dict(payload["state_dict"])
+            model.eval()
+        else:
+            model = joblib.load(directory / "model.joblib")
         loaded = LoadedModel(
             problem=problem,
-            model=joblib.load(directory / "model.joblib"),
+            model=model,
             feature_columns=list(bundle["feature_columns"]),
             feature_artifacts=dict(bundle.get("artifacts", {})),
             category_dtypes=dict(bundle.get("category_dtypes", {})),
+            preprocessor=bundle.get("preprocessor"),
             metadata=metadata,
         )
         self._cache[problem] = loaded

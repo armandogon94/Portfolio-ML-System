@@ -78,16 +78,21 @@ def compute_classification_metrics(
     *,
     threshold: float = 0.5,
     prefix: str = "test",
+    calibrated: bool = True,
 ) -> dict[str, float]:
     """Compute the full reported metric set for one split.
 
     Args:
         y_true: Binary ground truth.
-        y_score: Predicted positive-class probabilities.
-        threshold: Decision threshold for the point metrics. 0.5 is reported for
-            comparability only — the operating point that matters is expressed by
-            ``precision_at_1pct`` / ``recall_at_1pct_fpr``.
+        y_score: Predicted positive-class probabilities, or an uncalibrated
+            ranking score when ``calibrated=False``.
+        threshold: Decision threshold for the point metrics. For probability
+            models this defaults to 0.5; anomaly scorers must pass a threshold
+            fitted on training data.
         prefix: Metric-name prefix, e.g. ``"test"`` or ``"val"``.
+        calibrated: Whether ``y_score`` is a genuine probability. Brier score is
+            omitted for uncalibrated ranking scores rather than manufacturing a
+            probability with a test-set-dependent transform.
 
     Returns:
         ``{metric_name: value}``. Metrics that cannot be computed on single-class
@@ -102,12 +107,14 @@ def compute_classification_metrics(
         f"{prefix}_precision": float(precision_score(y_true, y_pred, zero_division=0)),
         f"{prefix}_recall": float(recall_score(y_true, y_pred, zero_division=0)),
         f"{prefix}_f1": float(f1_score(y_true, y_pred, zero_division=0)),
-        f"{prefix}_brier": float(brier_score_loss(y_true, y_score)),
         f"{prefix}_precision_at_1pct": precision_at_k(y_true, y_score, k=0.01),
         f"{prefix}_recall_at_1pct_fpr": recall_at_fpr(y_true, y_score, max_fpr=0.01),
         f"{prefix}_positive_rate": float(y_true.mean()),
+        f"{prefix}_score_std": float(y_score.std()),
         f"{prefix}_n": float(len(y_true)),
     }
+    if calibrated:
+        metrics[f"{prefix}_brier"] = float(brier_score_loss(y_true, y_score))
 
     # roc_auc_score raises on single-class y_true. That happens on tiny fixtures
     # and it is not an error worth aborting a run for.

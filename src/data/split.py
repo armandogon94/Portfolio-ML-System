@@ -3,7 +3,7 @@
 A random split on IEEE-CIS puts the same card and device on both sides of the
 boundary; on LendingClub it mixes 2012 and 2018 vintages. Both inflate the score
 in a way that does not survive deployment. ``tests/training/test_split.py``
-asserts no later timestamp lands in train than the earliest in test.
+asserts no timestamp appears in more than one partition.
 """
 
 from __future__ import annotations
@@ -51,7 +51,8 @@ def time_split(
 
     Raises:
         KeyError: ``column`` is absent.
-        ValueError: The requested fractions leave no training rows.
+        ValueError: The requested fractions, after keeping timestamp ties
+            together, would leave a requested partition empty.
     """
     if column not in frame.columns:
         raise KeyError(
@@ -60,7 +61,15 @@ def time_split(
     if test_size + val_size >= 1.0:
         raise ValueError(f"test_size + val_size must be < 1.0, got {test_size + val_size}")
 
-    order = np.argsort(frame[column].to_numpy(), kind="stable")
+    values = frame[column]
+    if values.isna().any():
+        raise ValueError(
+            f"split column {column!r} contains {int(values.isna().sum())} missing values. "
+            "A row without an ordering key cannot be placed in a chronological split."
+        )
+
+    order = np.argsort(values.to_numpy(), kind="stable")
+    sorted_values = values.to_numpy()[order]
     n = len(order)
     n_test = int(round(n * test_size))
     n_val = int(round(n * val_size))
@@ -68,11 +77,32 @@ def time_split(
     if n_train <= 0:
         raise ValueError(f"No training rows left: n={n}, test={n_test}, val={n_val}")
 
-    return Split(
-        train=order[:n_train],
-        val=order[n_train : n_train + n_val],
-        test=order[n_train + n_val :],
-    )
+    def move_after_ties(cut: int) -> int:
+        """Move a row-count boundary right, assigning ties to the earlier side."""
+        while cut < n and sorted_values[cut - 1] == sorted_values[cut]:
+            cut += 1
+        return cut
+
+    train_end = move_after_ties(n_train)
+    val_end = move_after_ties(n_train + n_val) if n_val else train_end
+
+    empty: list[str] = []
+    if train_end == 0:
+        empty.append("train")
+    if val_size > 0 and val_end <= train_end:
+        empty.append("validation")
+    if test_size > 0 and val_end >= n:
+        empty.append("test")
+    if empty:
+        names = " and ".join(empty)
+        raise ValueError(
+            f"Honouring timestamp ties on {column!r} would leave the {names} "
+            f"partition empty (n={n}, test_size={test_size}, val_size={val_size}). "
+            "The split is impossible at these proportions; change the fractions "
+            "or use a finer-grained ordering key."
+        )
+
+    return Split(train=order[:train_end], val=order[train_end:val_end], test=order[val_end:])
 
 
 def stratified_kfold_indices(

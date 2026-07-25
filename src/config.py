@@ -1,8 +1,8 @@
-"""Configuration loader and validator for the three fintech problem configs.
+"""Configuration loader and validator for three fintech problems.
 
-One config per problem in ``configs/``. A config is the whole specification of a
-training run: where the data comes from, how it is split, which model is built,
-which metrics are reported, and the band outside which the result is a bug.
+Config filenames identify dataset-specific runs, so the fraud problem has both
+``fraud.yaml`` (IEEE-CIS) and ``fraud_ulb.yaml`` (OpenML 1597). A config is the
+whole run specification: source, split, features, model, metrics, and sanity band.
 
 Validation happens at load time. A typo in a config fails immediately rather
 than at fold 3 of a long run.
@@ -10,6 +10,7 @@ than at fold 3 of a long run.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,20 @@ PROBLEMS = ("fraud", "credit_risk", "churn")
 _REQUIRED_TOP_LEVEL = ("problem", "seed", "data", "split", "features", "model")
 _PATH_KEYS = ("sample_path", "processed_path")
 _SPLIT_TYPES = ("time", "stratified_kfold", "random")
+_SOURCE_KINDS = ("kaggle_competition", "kaggle_dataset", "openml")
+
+# ADR-0003: names associated with generated or simulated data are forbidden in
+# both source kinds and adapter paths so synthetic labels cannot re-enter a run.
+FORBIDDEN_SOURCE_MARKERS = (
+    "synthetic",
+    "simulated",
+    "simulate",
+    "generate",
+    "generator",
+    "make_",
+    "fake",
+    "mock",
+)
 
 
 class ConfigError(ValueError):
@@ -35,6 +50,11 @@ def config_path(config_name: str) -> Path:
     if config_name.endswith((".yaml", ".yml")):
         return Path(config_name)
     return PROJECT_ROOT / "configs" / f"{config_name}.yaml"
+
+
+def available_config_names() -> tuple[str, ...]:
+    """Return training config filenames independently of the closed problem set."""
+    return tuple(sorted(path.stem for path in (PROJECT_ROOT / "configs").glob("*.yaml")))
 
 
 def load_config(config_name: str) -> dict[str, Any]:
@@ -52,7 +72,7 @@ def load_config(config_name: str) -> dict[str, Any]:
     """
     path = config_path(config_name)
     if not path.exists():
-        available = sorted(p.stem for p in (PROJECT_ROOT / "configs").glob("*.yaml"))
+        available = list(available_config_names())
         raise FileNotFoundError(f"Config not found: {path}. Available: {available}")
 
     with open(path) as handle:
@@ -79,8 +99,67 @@ def _validate(config: dict[str, Any], path: Path) -> None:
             f"downloadable dataset — synthetic generators were removed in ADR-0003."
         )
     source = data["source"]
+    if not isinstance(source, dict):
+        raise ConfigError(
+            f"{path}: data.source must be a mapping. Add kind, dataset identity, "
+            "and an adapter under data.source."
+        )
     if not source.get("kind") or not source.get("adapter"):
         raise ConfigError(f"{path}: data.source needs both 'kind' and 'adapter'.")
+
+    kind = source["kind"]
+    adapter = source["adapter"]
+    if not isinstance(kind, str) or not isinstance(adapter, str):
+        raise ConfigError(
+            f"{path}: data.source.kind and data.source.adapter must be strings. "
+            "Name a supported download source and its adapter module."
+        )
+
+    for field, value in (("kind", kind), ("adapter", adapter)):
+        lowered = value.casefold()
+        marker = next((term for term in FORBIDDEN_SOURCE_MARKERS if term in lowered), None)
+        if marker is not None:
+            raise ConfigError(
+                f"{path}: data.source.{field}={value!r} is forbidden by ADR-0003 "
+                f"because it contains {marker!r}. Point this config at a real "
+                "Kaggle or OpenML dataset and a canonical src.data.adapters module."
+            )
+
+    if kind not in _SOURCE_KINDS:
+        raise ConfigError(
+            f"{path}: data.source.kind {kind!r} is unsupported. Use one of "
+            f"{_SOURCE_KINDS} and name the dataset's real download identifier."
+        )
+
+    if kind in {"kaggle_competition", "kaggle_dataset"}:
+        slug = source.get("slug")
+        if not isinstance(slug, str) or not slug.strip():
+            raise ConfigError(
+                f"{path}: data.source.slug is required for {kind!r}. Add the "
+                "Kaggle competition slug or owner/dataset slug shown on its source page."
+            )
+    elif not isinstance(source.get("data_id"), int) or isinstance(source.get("data_id"), bool):
+        raise ConfigError(
+            f"{path}: data.source.data_id is required for 'openml' and must be an "
+            "integer. Add the numeric OpenML dataset id from its source page."
+        )
+
+    if not adapter.startswith("src.data.adapters."):
+        raise ConfigError(
+            f"{path}: data.source.adapter {adapter!r} must start with "
+            "'src.data.adapters.'. Move the canonical adapter there or correct "
+            "the dotted module path."
+        )
+    try:
+        adapter_spec = importlib.util.find_spec(adapter)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        adapter_spec = None
+    if adapter_spec is None:
+        raise ConfigError(
+            f"{path}: data.source.adapter {adapter!r} does not resolve to a module. "
+            "Add that adapter module or correct the dotted path before training."
+        )
+
     if "target" not in data:
         raise ConfigError(f"{path}: data.target is required.")
 
@@ -94,6 +173,22 @@ def _validate(config: dict[str, Any], path: Path) -> None:
 
     if not config["model"].get("type"):
         raise ConfigError(f"{path}: model.type is required.")
+
+    band = config.get("sanity_band")
+    if not isinstance(band, dict):
+        raise ConfigError(
+            f"{path}: sanity_band is required and must be a mapping with "
+            "metric, min, and an optional max. It is an expected-range smoke "
+            "alarm, not a leakage test."
+        )
+    if band.get("metric") not in {"pr_auc", "roc_auc"}:
+        raise ConfigError(f"{path}: sanity_band.metric must be 'pr_auc' or 'roc_auc'.")
+    if not isinstance(band.get("min"), (int, float)):
+        raise ConfigError(f"{path}: sanity_band.min must be numeric.")
+    if "max" in band and not isinstance(band["max"], (int, float)):
+        raise ConfigError(f"{path}: sanity_band.max must be numeric when present.")
+    if "max" in band and band["min"] >= band["max"]:
+        raise ConfigError(f"{path}: sanity_band.min must be less than sanity_band.max.")
 
     # A denylist that does not contain the target is a footgun: the target column
     # would otherwise be eligible for selection as a feature.

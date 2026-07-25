@@ -1,15 +1,20 @@
 # Results & Methodology
 
-> **Status: no result has been measured yet.**
+> **Status: no result has been accepted for publication yet.**
 >
 > Every metric table below has empty cells, deliberately. The pipeline that
 > would fill them is complete and tested; the datasets require a Kaggle account
 > this build did not have. See [`docs/PROGRESS.md`](../docs/PROGRESS.md) for the
 > exact commands.
 >
+> A pre-repair, untracked `reports/fraud_ulb_metrics.csv` and its gitignored
+> legacy checkpoint exist in this workspace. They predate the CV refit/OOF fixes,
+> have no OOF artifact, and are excluded from every table here. Regenerate them
+> with the repaired trainer before reviewing or publishing that run.
+>
 > Filling these tables by hand would reproduce the failure this document exists
 > to correct. Every number here will be read from `reports/*_metrics.csv`, which
-> is written by `src/training/tabular.py` and by nothing else.
+> is written by the tabular or autoencoder training pipeline.
 
 ---
 
@@ -70,11 +75,23 @@ and serving as artifacts stored in the checkpoint. Fitting them on the full fram
 leaks the test distribution — a subtle, popular mistake worth roughly a point of
 AUC that does not survive deployment.
 
+**Chronological boundaries are tie-safe.** The row-count cut moves forward to the
+next change in the split key, assigning a tied timestamp to the earlier partition.
+Validation and test therefore contain only strictly later events. If moving a
+boundary would empty a requested partition, training fails with an instruction to
+change the proportions or use a finer-grained time key.
+
 **Baselines are mandatory.** Every run trains a prior-probability baseline and a
 logistic-regression baseline on the same matrix, and reports
-`test_pr_auc_delta` against the stronger of the two. A PR-AUC with no baseline
-beside it is uninterpretable: 0.30 is excellent at 3.5% positives and
-embarrassing at 40%.
+`test_pr_auc_delta` (or its cross-validation mean) against the stronger of the
+two. A PR-AUC with no baseline beside it is uninterpretable: 0.30 is excellent at
+3.5% positives and embarrassing at 40%.
+
+**No hyperparameter search has been run.** Main-model parameters were chosen by
+hand; the baseline estimators use their library defaults except where a config
+states otherwise. The resulting comparison is therefore **not** a fair-tuning
+comparison. If a tuning budget is spent later, the same budget must be spent on
+both the main model and its baselines.
 
 **PR-AUC is the primary metric, not ROC-AUC.** At 3.5% positives (IEEE-CIS) or
 0.17% (ULB), ROC-AUC is dominated by the enormous true-negative mass and a weak
@@ -90,11 +107,17 @@ what a fintech reviewer actually asks about:
 - `recall_at_1pct_fpr` — at a 1% false-positive budget, what fraction of the
   positives do we catch? The loss-prevention number.
 
-**A ceiling is enforced as well as a floor.** Each config declares
-`expected.roc_auc_{min,max}`. A result above the ceiling is written into
-`checkpoints/<problem>/metadata.json` as `suspected_leakage` and fails
-`tests/test_quality_gates.py`. The failure this repository is correcting was a
-good-looking number nobody interrogated.
+**Each config declares an expected-range sanity band.** `sanity_band` is only a
+smoke alarm: a result outside it is recorded as `sanity_band_warning` and must be
+investigated, but the band cannot prove or disprove leakage. The actual leakage
+defence is structural: chronological splitting, split-column exclusion, the
+per-problem denylist, and the tests that assert those controls.
+
+For stratified cross-validation, the headline and sanity-band metric is always
+the **CV mean with its standard deviation**. Fold metrics never retain ambiguous
+`test_*` names. The saved estimator is refit on all rows after evaluation, while
+the PR, ROC, calibration, and confusion-matrix figures use persisted out-of-fold
+predictions—each plotted row was scored by a model that did not train on it.
 
 ---
 
@@ -106,7 +129,8 @@ Provenance and licence: [`data/README.md`](../data/README.md).
 
 **Split: time-based on `TransactionDT`.** First 80% of the time range trains,
 last 20% tests, with a 10% validation fold carved chronologically from the tail
-of train for early stopping.
+of train for early stopping. Equal `TransactionDT` values stay on the earlier
+side of each boundary, so one timestamp can never appear in two partitions.
 
 This is not a stylistic preference. **A random split inflates the score by
 several points**, because the same card, the same device and the same billing
@@ -125,6 +149,13 @@ split within the training file is the only honest evaluation available.
 | `card1_freq`, `addr1_freq`, `P_emaildomain_freq`, … | "How often has this card been seen" generalises past the split date; the raw id memorises. |
 | `uid_amt_mean`, `uid_amt_ratio` | `card1 + addr1` is the closest thing to a stable account key. The ratio asks "how unusual is this amount *for this account*", which stays comparable across accounts with very different typical spend. |
 
+**Point-in-time limitation.** The frequency counts and `uid_amt_mean` are fitted
+on training rows only, so they do not see validation or test data. They are not,
+however, computed as-of each training event: an early row can benefit from later
+rows inside the same training window. This makes the offline estimate
+**optimistic** relative to deployment, where only prior transactions would exist.
+A full event-time feature-store rewrite is deliberately outside this baseline.
+
 **Expected result: ≈ 0.90 ROC-AUC**, written into `configs/fraud.yaml` before any
 run. Kaggle winning *ensembles* reached 0.94–0.95 on the private leaderboard after
 months of feature engineering and blending. A single honest LightGBM on a
@@ -137,13 +168,19 @@ the split. Investigate; do not celebrate.
 | Model | PR-AUC ↑ | ROC-AUC ↑ | P@1% ↑ | R@1%FPR ↑ | Brier ↓ |
 |---|---|---|---|---|---|
 | LightGBM |  |  |  |  |  |
-| Autoencoder (unsupervised, MPS) |  |  |  |  |  |
+| Autoencoder (unsupervised, MPS) |  |  |  |  | not reported — uncalibrated |
 | Logistic regression (baseline) |  |  |  |  |  |
 | Prior (baseline) |  |  | — | — |  |
 
 *Not yet measured.* The autoencoder row is included because the gap between it
 and the supervised model is the interesting number: it quantifies what
 supervision buys over pure anomaly detection on this problem.
+
+The autoencoder reports ROC-AUC, PR-AUC, precision@1%, and recall@1%FPR on **raw
+reconstruction error**. Raw error supplies an ordering but is not a probability,
+so no Brier or calibration metric is reported. Precision, recall, and F1 use the
+95th-percentile reconstruction-error threshold fitted on legitimate training
+rows; the test set never fits a transform or threshold.
 
 ### Error analysis
 
@@ -226,7 +263,9 @@ denylisted column got through.
 wearing a decimal point. Evaluation is **5-fold stratified cross-validation** and
 every metric is reported as mean ± standard deviation. Reporting only the mean
 would be half the story; the std is what tells you whether a 0.02 difference
-between two configurations means anything.
+between two configurations means anything. The checkpoint is a separate final
+estimator refit on all 10,127 rows after cross-validation; performance figures
+come from `reports/churn_oof_predictions.csv`, never from that in-sample refit.
 
 ### The Naive-Bayes leakage demonstration
 
@@ -277,7 +316,7 @@ response body, and the UI renders it.
 uv run python scripts/download_data.py --dataset all   # needs a Kaggle token
 uv run python scripts/train.py --model all
 uv run python scripts/train.py --model fraud --autoencoder
-uv run python scripts/evaluate.py --markdown           # emits the table bodies above
+uv run python scripts/evaluate.py --markdown           # compact one-row-per-problem metric summary
 uv run python scripts/make_figures.py                  # PR curves, calibration, SHAP
 ```
 
@@ -289,3 +328,7 @@ uv run python scripts/make_figures.py                  # PR curves, calibration,
 LightGBM and XGBoost ship CPU-only wheels on macOS arm64; there is no Metal
 backend for either, so the three headline models are CPU-bound regardless of the
 MPS availability the autoencoder enjoys.
+
+For cross-validated models, figure captions state that curves and hard-decision
+plots use out-of-fold predictions. The all-row refit is used for serving and
+feature attribution, not to grade itself.

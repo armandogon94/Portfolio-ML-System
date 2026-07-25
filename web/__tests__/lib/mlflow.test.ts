@@ -69,7 +69,11 @@ describe("getRunHistory — happy path", () => {
       }),
     );
 
-    const points = await getRunHistory("credit_risk", "auc", { baseUrl: BASE_URL });
+    const points = await getRunHistory("fintech-ml-system", "auc", {
+      baseUrl: BASE_URL,
+      problem: "credit_risk",
+      config: "credit_risk",
+    });
 
     expect(points).toEqual([
       { endTime: 1000, metric: 0.88 },
@@ -81,7 +85,7 @@ describe("getRunHistory — happy path", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     const [expUrl] = fetchSpy.mock.calls[0];
     expect(String(expUrl)).toBe(
-      `${BASE_URL}/api/2.0/mlflow/experiments/get-by-name?experiment_name=credit_risk`,
+      `${BASE_URL}/api/2.0/mlflow/experiments/get-by-name?experiment_name=fintech-ml-system`,
     );
 
     const [searchUrl, searchInit] = fetchSpy.mock.calls[1];
@@ -91,6 +95,9 @@ describe("getRunHistory — happy path", () => {
     expect(sentBody.experiment_ids).toEqual(["42"]);
     expect(sentBody.order_by).toEqual(["attributes.end_time DESC"]);
     expect(sentBody.max_results).toBe(10); // default limit
+    expect(sentBody.filter).toBe(
+      "tags.sample = 'false' AND tags.problem = 'credit_risk' AND tags.config = 'credit_risk'",
+    );
   });
 
   it("respects the limit option in max_results", async () => {
@@ -103,6 +110,7 @@ describe("getRunHistory — happy path", () => {
 
     const sentBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string);
     expect(sentBody.max_results).toBe(25);
+    expect(sentBody.filter).toBe("tags.sample = 'false'");
   });
 });
 

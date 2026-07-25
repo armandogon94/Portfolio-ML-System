@@ -5,9 +5,16 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.data.adapters import ADAPTERS, credit_card_churn, get_adapter, ieee_cis, lending_club
+from src.data.adapters import (
+    ADAPTERS,
+    credit_card_churn,
+    get_adapter,
+    ieee_cis,
+    lending_club,
+    ulb_creditcard,
+)
 
-ALL_ADAPTERS = [ieee_cis, lending_club, credit_card_churn]
+ALL_ADAPTERS = [ieee_cis, lending_club, credit_card_churn, ulb_creditcard]
 
 
 @pytest.mark.parametrize("adapter", ALL_ADAPTERS, ids=lambda m: m.__name__.rsplit(".", 1)[-1])
@@ -67,6 +74,29 @@ def test_churn_rejects_unknown_attrition_values():
     frame.loc[0, "Attrition_Flag"] = "Maybe Customer"
     with pytest.raises(ValueError, match="Unexpected Attrition_Flag"):
         credit_card_churn._finalise(frame)
+
+
+def test_ulb_adapter_uses_openml_1597_for_the_real_path(monkeypatch):
+    # The repository fixture also exercises the Kaggle mirror's optional Time
+    # column. OpenML 1597 does not provide it, so the real-path mock must not
+    # smuggle that different schema into this test.
+    raw = (
+        ulb_creditcard.load(sample=True)
+        .drop(columns=[ulb_creditcard.TIME_COLUMN])
+        .rename(columns={"is_fraud": "Class"})
+    )
+    called: list[int] = []
+
+    def fake_openml_cached(data_id: int):
+        called.append(data_id)
+        return raw
+
+    monkeypatch.setattr("src.data.download.openml_cached", fake_openml_cached)
+    loaded = ulb_creditcard.load()
+
+    assert called == [1597]
+    assert list(loaded.columns) == list(ulb_creditcard.CANONICAL_COLUMNS)
+    assert loaded.shape == (500, 30)
 
 
 def test_get_adapter_resolves_every_registered_path():

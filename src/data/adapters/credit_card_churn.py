@@ -34,10 +34,12 @@ PROVENANCE: dict[str, Any] = {
     "slug": "sakshigoyal7/credit-card-customers",
     "filename": "BankChurners.csv",
     "url": "https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers",
-    "licence": "CC0 1.0 (public domain) per the Kaggle dataset page",
+    "licence": ("Uploader tags CC0; upstream authority unverified — do not redistribute rows"),
     "access": "Free Kaggle account. No rules gate.",
     "expected_rows": 10_127,
     "expected_positive_rate": 0.1607,
+    # Unrecorded because the download has not been run on this machine.
+    "expected_sha256": None,
 }
 
 #: The two pre-computed posterior columns. Present in the frame, excluded by the

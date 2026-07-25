@@ -96,12 +96,13 @@ metrics:
     - recall_at_1pct_fpr
     - brier
 
-# A correct LendingClub model is NOT impressive-looking. ~0.70 ROC-AUC is the
-# honest ceiling once post-origination fields are removed. Anything >= 0.80
-# means a denylisted column got through.
-expected:
-  roc_auc_min: 0.62
-  roc_auc_max: 0.80
+# Expected-range sanity band: a smoke alarm, not a leakage test. A correct
+# LendingClub model is not impressive-looking; a result outside this range
+# requires investigation of the split, target, and denylist.
+sanity_band:
+  metric: roc_auc
+  min: 0.62
+  max: 0.80
 
 training:
   checkpoint_dir: checkpoints/credit_risk

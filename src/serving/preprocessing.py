@@ -81,12 +81,22 @@ def build_features(loaded: LoadedModel, payload: dict[str, Any]) -> pd.DataFrame
     Returns:
         A one-row DataFrame whose columns are ``loaded.feature_columns``, in order.
     """
-    config = problem_config(loaded.problem)
+    config_name = str(loaded.metadata.get("config_name", loaded.problem))
+    config = problem_config(config_name)
     features = importlib.import_module(config["features"]["module"])
 
-    frame = canonical_frame(loaded.problem, payload)
+    frame = canonical_frame(config_name, payload)
     engineered, _ = features.engineer_features(frame, loaded.feature_artifacts, fit=False)
     matrix = engineered.reindex(columns=loaded.feature_columns)
+
+    if loaded.metadata.get("model_type") == "autoencoder":
+        if loaded.preprocessor is None:
+            raise ValueError(
+                f"Autoencoder checkpoint {loaded.problem!r} has no saved preprocessor. "
+                "Retrain it with src/training/autoencoder_pipeline.py."
+            )
+        transformed = loaded.preprocessor.transform(matrix)
+        return pd.DataFrame(transformed, columns=loaded.feature_columns, index=matrix.index)
 
     for column in matrix.columns:
         if str(matrix[column].dtype) == "object":

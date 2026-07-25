@@ -7,6 +7,14 @@ import yaml
 
 from src.config import PROBLEMS, ConfigError, load_config
 
+REAL_SOURCE_KINDS = {"kaggle_competition", "kaggle_dataset", "openml"}
+CONFIG_PROBLEMS = {
+    "fraud": "fraud",
+    "fraud_ulb": "fraud",
+    "credit_risk": "credit_risk",
+    "churn": "churn",
+}
+
 
 @pytest.mark.parametrize("problem", PROBLEMS)
 def test_every_problem_config_loads(problem):
@@ -15,27 +23,45 @@ def test_every_problem_config_loads(problem):
     assert isinstance(config["seed"], int)
 
 
+@pytest.mark.parametrize(("config_name", "problem"), CONFIG_PROBLEMS.items())
+def test_every_training_config_loads(config_name, problem):
+    config = load_config(config_name)
+    assert config["problem"] == problem
+    assert config["seed"] == 42
+
+
 @pytest.mark.parametrize("problem", PROBLEMS)
 def test_every_config_names_a_real_downloadable_dataset(problem):
     """No config may point at a generator. That is the whole rebuild in one test."""
     source = load_config(problem)["data"]["source"]
-    assert source["kind"] in {"kaggle_competition", "kaggle_dataset", "openml"}
+    assert source["kind"] in REAL_SOURCE_KINDS
     assert source["adapter"].startswith("src.data.adapters.")
     assert "generate" not in source["adapter"]
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
-def test_every_config_declares_a_seed_and_an_expected_band(problem):
-    config = load_config(problem)
+@pytest.mark.parametrize("config_name", CONFIG_PROBLEMS)
+def test_every_config_declares_a_seed_and_a_sanity_band(config_name):
+    config = load_config(config_name)
     assert config["seed"] == 42
-    assert "roc_auc_min" in config["expected"]
-    assert "roc_auc_max" in config["expected"]
+    assert "expected" not in config
+    assert config["sanity_band"]["metric"] in {"pr_auc", "roc_auc"}
+    assert "min" in config["sanity_band"]
 
 
-def test_there_are_exactly_three_configs(project_root):
-    """Ten unrelated industries was the tell. Three fintech problems is the point."""
+def test_config_files_cover_three_problems_and_two_real_fraud_datasets(project_root):
+    """The business scope stays at three problems; fraud has a credential-free path."""
     configs = sorted(p.stem for p in (project_root / "configs").glob("*.yaml"))
-    assert configs == ["churn", "credit_risk", "fraud"]
+    assert configs == ["churn", "credit_risk", "fraud", "fraud_ulb"]
+    assert PROBLEMS == ("fraud", "credit_risk", "churn")
+
+
+def test_ulb_sanity_band_is_pr_auc_not_roc_auc():
+    band = load_config("fraud_ulb")["sanity_band"]
+    assert band["metric"] == "pr_auc"
+
+
+def test_churn_has_no_vacuous_upper_bound():
+    assert "max" not in load_config("churn")["sanity_band"]
 
 
 def test_missing_config_lists_what_is_available():
@@ -47,6 +73,81 @@ def _write(tmp_path, config: dict):
     path = tmp_path / "broken.yaml"
     path.write_text(yaml.safe_dump(config))
     return str(path)
+
+
+def _minimal_config(source: dict) -> dict:
+    return {
+        "problem": "fraud",
+        "seed": 42,
+        "data": {"target": "is_fraud", "source": source},
+        "split": {"type": "random"},
+        "features": {"module": "src.features.fraud_features"},
+        "model": {"type": "lightgbm"},
+        "sanity_band": {"metric": "roc_auc", "min": 0.5},
+    }
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {
+            "kind": "synthetic_generator",
+            "adapter": "src.data.generate_fraud",
+        },
+        {
+            "kind": "openml",
+            "data_id": 1597,
+            "adapter": "src.synthetic.make_fraud",
+        },
+    ],
+)
+def test_synthetic_or_generator_sources_are_refused(tmp_path, source):
+    path = _write(tmp_path, _minimal_config(source))
+    with pytest.raises(ConfigError, match="ADR-0003"):
+        load_config(path)
+
+
+def test_kaggle_competition_without_slug_is_refused(tmp_path):
+    path = _write(
+        tmp_path,
+        _minimal_config(
+            {
+                "kind": "kaggle_competition",
+                "adapter": "src.data.adapters.ieee_cis",
+            }
+        ),
+    )
+    with pytest.raises(ConfigError, match=r"data\.source\.slug"):
+        load_config(path)
+
+
+def test_openml_without_data_id_is_refused(tmp_path):
+    path = _write(
+        tmp_path,
+        _minimal_config(
+            {
+                "kind": "openml",
+                "adapter": "src.data.adapters.ieee_cis",
+            }
+        ),
+    )
+    with pytest.raises(ConfigError, match=r"data\.source\.data_id"):
+        load_config(path)
+
+
+def test_adapter_must_resolve_to_a_real_module(tmp_path):
+    path = _write(
+        tmp_path,
+        _minimal_config(
+            {
+                "kind": "openml",
+                "data_id": 1597,
+                "adapter": "src.data.adapters.does_not_exist",
+            }
+        ),
+    )
+    with pytest.raises(ConfigError, match="does not resolve"):
+        load_config(path)
 
 
 def test_a_config_without_a_data_source_is_refused(tmp_path):
@@ -66,53 +167,43 @@ def test_a_config_without_a_data_source_is_refused(tmp_path):
 
 
 def test_a_time_split_without_a_column_is_refused(tmp_path):
-    path = _write(
-        tmp_path,
+    config = _minimal_config(
         {
-            "problem": "x",
-            "seed": 1,
-            "data": {"target": "y", "source": {"kind": "openml", "adapter": "a"}},
-            "split": {"type": "time"},
-            "features": {"module": "m"},
-            "model": {"type": "lightgbm"},
-        },
+            "kind": "openml",
+            "data_id": 1597,
+            "adapter": "src.data.adapters.ieee_cis",
+        }
     )
+    config["split"] = {"type": "time"}
+    path = _write(tmp_path, config)
     with pytest.raises(ConfigError, match="requires split.column"):
         load_config(path)
 
 
 def test_a_denylist_that_omits_the_target_is_refused(tmp_path):
     """Otherwise the target is eligible for selection as a feature."""
-    path = _write(
-        tmp_path,
+    config = _minimal_config(
         {
-            "problem": "x",
-            "seed": 1,
-            "data": {
-                "target": "y",
-                "source": {"kind": "openml", "adapter": "a"},
-                "denylist": ["something_else"],
-            },
-            "split": {"type": "random"},
-            "features": {"module": "m"},
-            "model": {"type": "lightgbm"},
-        },
+            "kind": "openml",
+            "data_id": 1597,
+            "adapter": "src.data.adapters.ieee_cis",
+        }
     )
+    config["data"]["denylist"] = ["something_else"]
+    path = _write(tmp_path, config)
     with pytest.raises(ConfigError, match="must appear in data.denylist"):
         load_config(path)
 
 
 def test_an_unknown_split_type_is_refused(tmp_path):
-    path = _write(
-        tmp_path,
+    config = _minimal_config(
         {
-            "problem": "x",
-            "seed": 1,
-            "data": {"target": "y", "source": {"kind": "openml", "adapter": "a"}},
-            "split": {"type": "bootstrap"},
-            "features": {"module": "m"},
-            "model": {"type": "lightgbm"},
-        },
+            "kind": "openml",
+            "data_id": 1597,
+            "adapter": "src.data.adapters.ieee_cis",
+        }
     )
+    config["split"] = {"type": "bootstrap"}
+    path = _write(tmp_path, config)
     with pytest.raises(ConfigError, match="unknown split.type"):
         load_config(path)

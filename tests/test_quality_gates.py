@@ -4,12 +4,10 @@ Everything in this file reads a **real** ``checkpoints/<problem>/metadata.json``
 skips with a clear reason when one is absent. Skipping is correct: a fresh clone has
 no checkpoints, and a gate that passes vacuously is worse than no gate.
 
-Two directions are asserted, and the second one is the point:
+The expected-range sanity band is a smoke alarm, not a leakage test:
 
-* a **floor** — the model must beat its baseline and clear a minimum;
-* a **ceiling** — a score above the configured band means leakage, and the whole
-  reason this repository was rebuilt is that nobody questioned a suspiciously good
-  number.
+* a floor catches a broken pipeline;
+* a configured upper bound prompts investigation, but cannot prove leakage.
 
 Monotonicity tests assert *direction*, never magnitude. They are the reason a
 predictor hardcoded to a constant fails this suite.
@@ -19,12 +17,14 @@ from __future__ import annotations
 
 import json
 
-import pandas as pd
+import numpy as np
 import pytest
 
 from src.config import PROBLEMS, load_config
+from src.evaluation.classification_metrics import compute_classification_metrics
 from src.serving.preprocessing import build_features
 from src.serving.registry import CheckpointRegistry
+from src.training.tabular import TabularTrainer
 
 registry = CheckpointRegistry()
 
@@ -44,22 +44,33 @@ def _metadata(problem: str) -> dict:
 @pytest.mark.parametrize("problem", PROBLEMS)
 def test_metric_clears_the_configured_floor(problem):
     metrics = _metadata(problem)["metrics"]
-    floor = load_config(problem)["expected"]["roc_auc_min"]
-    measured = metrics.get("test_roc_auc") or metrics.get("cv_roc_auc_mean")
+    config = load_config(problem)
+    floor = config["sanity_band"]["min"]
+    measured = (
+        metrics.get("cv_roc_auc_mean")
+        if config["split"]["type"] == "stratified_kfold"
+        else metrics.get("test_roc_auc")
+    )
     assert measured is not None, "no ROC-AUC recorded in metadata.json"
     assert measured >= floor, f"{problem}: ROC-AUC {measured:.4f} below floor {floor}"
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
-def test_metric_does_not_exceed_the_leakage_ceiling(problem):
-    """A score above the band is a bug report, not an achievement."""
+@pytest.mark.parametrize(
+    "problem",
+    [problem for problem in PROBLEMS if "max" in load_config(problem).get("sanity_band", {})],
+)
+def test_metric_stays_inside_the_configured_sanity_band(problem):
     metrics = _metadata(problem)["metrics"]
-    ceiling = load_config(problem)["expected"]["roc_auc_max"]
-    measured = metrics.get("test_roc_auc") or metrics.get("cv_roc_auc_mean")
-    assert measured <= ceiling, (
-        f"{problem}: ROC-AUC {measured:.4f} EXCEEDS {ceiling}. Suspect leakage: "
-        f"a random split, an id column in the features, or a post-outcome field. "
-        f"Investigate before publishing."
+    config = load_config(problem)
+    upper = config["sanity_band"]["max"]
+    measured = (
+        metrics.get("cv_roc_auc_mean")
+        if config["split"]["type"] == "stratified_kfold"
+        else metrics.get("test_roc_auc")
+    )
+    assert measured <= upper, (
+        f"{problem}: ROC-AUC {measured:.4f} is above the expected-range sanity "
+        f"band {upper}. Investigate the split, features, and target before publishing."
     )
 
 
@@ -67,8 +78,13 @@ def test_metric_does_not_exceed_the_leakage_ceiling(problem):
 def test_model_beats_its_own_baseline(problem):
     """Without this, a PR-AUC number means nothing at all."""
     metrics = _metadata(problem)["metrics"]
-    model_pr = metrics.get("test_pr_auc") or metrics.get("cv_pr_auc_mean")
-    baseline_pr = metrics.get("test_pr_auc_baseline")
+    config = load_config(problem)
+    if config["split"]["type"] == "stratified_kfold":
+        model_pr = metrics.get("cv_pr_auc_mean")
+        baseline_pr = metrics.get("cv_pr_auc_baseline_mean")
+    else:
+        model_pr = metrics.get("test_pr_auc")
+        baseline_pr = metrics.get("test_pr_auc_baseline")
     if baseline_pr is None:
         pytest.skip(f"{problem}: no baseline recorded")
     assert model_pr > baseline_pr, f"{problem}: model {model_pr} <= baseline {baseline_pr}"
@@ -85,8 +101,8 @@ def test_metadata_carries_full_provenance(problem):
 
 
 @pytest.mark.parametrize("problem", PROBLEMS)
-def test_no_leak_warning_was_recorded(problem):
-    warning = _metadata(problem).get("suspected_leakage")
+def test_no_sanity_band_warning_was_recorded(problem):
+    warning = _metadata(problem).get("sanity_band_warning")
     assert warning is None, f"{problem}: the trainer flagged a problem: {warning}"
 
 
@@ -141,15 +157,24 @@ def test_more_inactive_months_does_not_lower_churn_risk():
     )
 
 
-def test_a_constant_predictor_would_fail_these_gates():
-    """Proof the gates have teeth, and it runs without any checkpoint.
+def test_a_constant_predictor_fails_the_actual_quality_gate():
+    """A real scorer flows through metrics and the same gate training calls."""
 
-    The old suite asserted only key presence and 0 <= score <= 1, which a
-    predictor hardcoded to 0.5 passes. This asserts the opposite: a constant
-    scorer cannot satisfy a strict inequality against its own baseline.
-    """
-    constant = pd.Series([0.5] * 100)
-    baseline = pd.Series([0.5] * 100)
-    assert not (constant.mean() > baseline.mean()), (
-        "a constant predictor must not be able to beat a constant baseline"
-    )
+    class ConstantPredictor:
+        def predict_proba(self, matrix):
+            positive = np.zeros(len(matrix), dtype=float)
+            return np.column_stack([1.0 - positive, positive])
+
+    labels = np.array([0, 1, 0, 0, 1, 0, 0, 0], dtype=np.int8)
+    fixture = np.arange(len(labels), dtype=float).reshape(-1, 1)
+    scores = ConstantPredictor().predict_proba(fixture)[:, 1]
+    metrics = compute_classification_metrics(labels, scores)
+
+    trainer = TabularTrainer("fraud", sample=True)
+    try:
+        failure = trainer._check_sanity_band(metrics)
+    finally:
+        trainer.finish()
+
+    assert failure is not None
+    assert "degenerate" in failure.casefold()

@@ -43,6 +43,8 @@ PROVENANCE: dict[str, Any] = {
     ),
     "expected_rows": 590_540,
     "expected_positive_rate": 0.035,
+    # Unrecorded because the download has not been run on this machine.
+    "expected_sha256": None,
 }
 
 #: The columns the transaction table is read with. The 339 anonymised V* columns

@@ -1,7 +1,7 @@
 # Fintech ML System — Fraud, Credit Risk, and Attrition on Real Public Data
 
 [![CI](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml/badge.svg)](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -65,10 +65,10 @@ Full reasoning, including the enforcement that stops this recurring:
 
 The engineering is complete: data adapters, time-based splits, the trainer, the
 quality gates, the serving path, the tests and CI all work end to end on the
-committed fixtures. What has not run is the download and the training, because
-all three datasets need a free Kaggle account and IEEE-CIS additionally needs a
-one-click acceptance of the competition rules — a credential this build did not
-have and would not fabricate.
+committed fixtures. The three headline datasets have not been downloaded or
+trained here: each needs a free Kaggle account and IEEE-CIS additionally needs a
+one-click rules acceptance. A second fraud config uses OpenML 1597 and needs no
+account; its exact real-data path is documented below.
 
 [`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
 commands to unblock it.
@@ -81,23 +81,24 @@ commands to unblock it.
   label into the generator as a parameter, so 0.964 measured the separation
   between two hand-chosen lognormals. Retracted rather than quietly deleted.
 - **A model can be right and still look bad, and this repo is built to say so.**
-  Each config declares the ROC-AUC band the result must fall in *before* training
-  — fraud ≈ 0.90, credit risk ≈ 0.70. Exceeding the ceiling is recorded as
-  **suspected leakage** in `metadata.json` and fails `tests/test_quality_gates.py`.
-  A suspiciously good number now has to justify itself.
+  Each config declares an expected-range `sanity_band` before training. Crossing
+  it records `sanity_band_warning`, but the band is only a smoke alarm; the
+  enforceable leakage defences are chronological splitting, split-column
+  exclusion, and the tested feature denylists.
 - **The old test suite could not have caught any of it.** 360 tests, 90%
   coverage, and `pyproject.toml` hid `-m 'not network and not parity'` inside
   `addopts` — silently deselecting both the Kaggle canary and the pre-ship gate.
   `tests/test_serving.py` asserted only key presence and `0 <= score <= 1`, which
   a predictor hardcoded to `0.5` passes. That exclusion is gone and the gates now
-  assert a floor, a ceiling, and monotonic direction.
+  assert the expected-range smoke alarm, baseline improvement, and monotonic
+  direction.
 
 ## Results
 
 | Problem | Dataset (rows × cols, % positive) | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline PR-AUC | Δ vs baseline | Source |
 |---|---|---|---|---|---|---|---|---|
 | Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM |  |  |  |  | `reports/fraud_metrics.csv` |
-| Fraud (unsup. baseline) | same | same | Autoencoder (MPS) |  |  | — | — | same |
+| Fraud (unsup. baseline) | same | same | Autoencoder (MPS) |  |  | — | — | `reports/fraud_autoencoder_metrics.csv` |
 | Credit risk | LendingClub · terminal statuses only | time (`issue_d`) | LightGBM |  |  |  |  | `reports/credit_risk_metrics.csv` |
 | Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM |  |  |  |  | `reports/churn_metrics.csv` |
 
@@ -108,11 +109,19 @@ so no number here can be typed by hand. The expected honest results, recorded in
 `configs/*.yaml` before any run: fraud ≈ 0.90 ROC-AUC, credit risk ≈ 0.70. See
 [`docs/PROGRESS.md`](docs/PROGRESS.md) and [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
 
+<sub>For stratified cross-validation, the displayed and gated result is the CV
+mean ± standard deviation. The serving checkpoint is refit on all rows, and the
+curves/calibration/confusion matrix come from one persisted out-of-fold score per
+row. The autoencoder uses raw reconstruction error for ranking metrics and its
+training-set 95th-percentile threshold for hard decisions; it reports no Brier
+score because that error is not a calibrated probability.</sub>
+
 > **Figures.** `reports/figures/` will hold the PR curve, ROC curve, calibration
 > plot, confusion matrix at the 1%-review threshold, SHAP summary and gain plot
 > for each problem, all produced by `make figures` from a real checkpoint. It is
 > empty for the same reason the table is: `scripts/make_figures.py` exits
-> non-zero rather than drawing an empty axis.
+> non-zero rather than drawing an empty axis. Cross-validation curves use
+> persisted out-of-fold predictions; the all-row refit never grades itself.
 
 ---
 
@@ -135,7 +144,7 @@ flowchart TB
         EXP["SHAP + gradient<br/>src/explainability/"]
     end
     subgraph store["Artifacts (gitignored)"]
-        CK[("checkpoints/&lt;problem&gt;/<br/>model.joblib · features.joblib<br/>metadata.json")]
+        CK[("checkpoints/&lt;problem&gt;/<br/>model.* · features.joblib<br/>metadata.json")]
     end
     subgraph track["ml-mlflow · :5070"]
         ML[("runs · params · metrics<br/>model registry")]
@@ -197,7 +206,7 @@ flowchart LR
     K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · rights unresolved")]
     K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
-    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>sha256 verified"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256 compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
     P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
     T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]
@@ -213,7 +222,8 @@ The split happens **before** feature engineering. Frequency encodings and group
 aggregates are fitted on the training rows only; fitting them on the full frame
 leaks the test distribution and is worth roughly a point of AUC that evaporates
 in production. The dotted edge is the other load-bearing detail: fixtures reach
-the trainer but cannot reach `checkpoints/` or `reports/`.
+the trainer but open no tracking run and cannot reach `checkpoints/` or
+`reports/`.
 [SVG](docs/diagrams/pipeline-dag.svg)
 
 There is **no ERD** here on purpose: this project has no application database.
@@ -227,9 +237,10 @@ one line rather than drawing a fictional one.
 
 ```bash
 07-Portfolio-ML-System/
-├── configs/                    # EXACTLY 3 files. Each names a real dataset, a seed,
-│   │                           #   a split strategy, and the band the result must fall in.
+├── configs/                    # 4 dataset configs across the closed 3-problem scope.
+│   │                           #   Each names a real source, split, seed, and sanity band.
 │   ├── fraud.yaml              #   IEEE-CIS · time split on TransactionDT
+│   ├── fraud_ulb.yaml          #   OpenML 1597 · credential-free · time split on Time
 │   ├── credit_risk.yaml        #   LendingClub · time split on issue_d · 28-column denylist
 │   └── churn.yaml              #   Card attrition · 5-fold stratified CV
 ├── src/
@@ -238,7 +249,7 @@ one line rather than drawing a fictional one.
 │   │   ├── download.py         #   kaggle_dataset / kaggle_competition / openml. No fallback.
 │   │   ├── split.py            #   Time-based by default; val sits between train and test.
 │   │   └── adapters/           #   raw vendor columns -> canonical schema, one per dataset
-│   ├── features/               # 3 modules + schema.py. Imported by training AND serving.
+│   ├── features/               # 4 dataset modules + schema.py. Training and serving share them.
 │   ├── models/registry.py      # @register("lightgbm"). Unknown name -> KeyError listing valid ones.
 │   ├── training/
 │   │   ├── trainer.py          #   BaseTrainer: config, MLflow, W&B, model registry
@@ -253,10 +264,10 @@ one line rather than drawing a fictional one.
 ├── data/
 │   ├── README.md               # Provenance, licence, access gate, and the leakage traps per dataset
 │   └── sample/                 # COMMITTED 500-row synthetic CI fixtures. Labels are pure noise.
-├── tests/                      # Mirrors src/ package-for-package. 181 tests, 85% coverage.
+├── tests/                      # Mirrors src/ package-for-package. 221 pass, 88% coverage.
 │   ├── data/test_leakage_denylist.py   # the highest-value test in the repo
 │   ├── serving/test_skew.py            # training features == serving features
-│   ├── test_quality_gates.py           # metric floor AND leakage ceiling AND monotonicity
+│   ├── test_quality_gates.py           # sanity band, baseline improvement, monotonicity
 │   └── e2e/test_train_to_serve.py      # fixtures -> train -> checkpoint -> HTTP, under 30s
 ├── web/                        # Next.js 14. Three routes + /dashboard. Zero placeholder copy.
 ├── infra/                      # docker/ multi-stage non-root images · compose/ 3-service stack
@@ -276,8 +287,8 @@ cd Portfolio-ML-System
 cp .env.example .env
 
 make setup           # uv sync --frozen --extra dev
-make test            # 181 tests on the committed fixtures — no credentials, no network
-make train-sample    # smoke-train all three problems on fixtures (writes NO checkpoint)
+make test            # test suite on committed fixtures — no credentials, no network
+make train-sample    # smoke-train all 4 configs (opens no tracker; writes no artifacts)
 ```
 
 **Everything above works with no Kaggle account and no network.** The fixture
@@ -293,6 +304,18 @@ make evaluate        # reads reports/*_metrics.csv
 make figures         # PR curves, calibration, SHAP -> reports/figures/
 ```
 
+Credential-free real-data fraud path:
+
+```bash
+uv run python scripts/download_data.py --dataset ulb-creditcard
+uv run python scripts/train.py --model fraud_ulb
+cat reports/fraud_ulb_metrics.csv
+```
+
+This fetches OpenML dataset 1597 through
+`sklearn.datasets.fetch_openml(data_id=1597, as_frame=True)` and needs no Kaggle
+account, token, or rules acceptance.
+
 To run the stack:
 
 ```bash
@@ -307,9 +330,8 @@ open http://localhost:3070/dashboard
 
 ## Data & access
 
-All three datasets are public and free, and **one of them is not
-anonymously downloadable** — a distinction worth stating plainly rather than
-glossing:
+Four real datasets cover three business problems. The three Kaggle sources are
+not anonymously downloadable; the OpenML source is:
 
 | Dataset | Account | Extra gate | Redistributable |
 |---|---|---|---|
@@ -322,7 +344,7 @@ IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
 rules that cannot be scripted; `src/data/download.py` converts the resulting 403
 into the exact URL to visit. The ULB/OpenML path needs **no account at all**, so
 a reviewer with zero Kaggle presence can still reproduce a real-data fraud result
-end to end.
+end to end with the three commands above.
 
 Because IEEE-CIS competition data is not redistributable, **no real row from any
 of these datasets is committed here.** The only data in git is `data/sample/` —
@@ -337,7 +359,10 @@ Full provenance, per-dataset column notes and both leakage traps:
 ## Reproducibility
 
 - **Seed 42**, declared once per config and threaded into the split,
-  preprocessing and every estimator by `BaseTrainer._seed_everything`.
+  preprocessing and every estimator by `BaseTrainer._seed_everything`, including
+  PyTorch weight initialisation, dropout and shuffling. Seeded MPS kernels are not
+  guaranteed bit-deterministic, and the code says so rather than claiming exact
+  reproducibility.
 - **`uv.lock` is committed** (758 KB). Before this, `.gitignore` hid it while
   `api.Dockerfile` ran `COPY pyproject.toml uv.lock ./` and `uv sync --frozen` —
   the advertised quickstart was physically unbuildable from a fresh clone.
@@ -345,12 +370,16 @@ Full provenance, per-dataset column notes and both leakage traps:
 - **Every checkpoint carries its own provenance.**
   `checkpoints/<problem>/metadata.json` records the git SHA that trained it, the
   seed, the dataset source, the split config, the full feature column list, every
-  metric, and a `suspected_leakage` field.
+  metric, the checkpoint fit scope and row count, and the enforced leakage
+  controls. Autoencoder checkpoints write the same fields and the same metrics
+  CSV path as tabular checkpoints.
 - **`/predict` returns `model_version`** — the short git SHA from that metadata —
   on every response. A score with no provenance is unreviewable.
 - **No number is typed by hand.** `scripts/evaluate.py` reads
   `reports/*_metrics.csv`; it computes nothing. There is no code path from a
-  fixture to a published table.
+  fixture to a published table: sample mode opens no MLflow/W&B run and writes
+  no checkpoint or metrics CSV, while dashboard history requires
+  `sample=false` plus matching problem/config tags.
 
 ## Explainability
 
@@ -372,13 +401,13 @@ from, so the explanation always describes the number beside it.
 ## Testing
 
 ```bash
-make test       # 181 tests, excludes the live-Kaggle canary
+make test       # 221 pass, excludes the live-Kaggle canary
 make test-all   # includes it (needs credentials)
 make lint typecheck
 make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
-**181 tests · 18 skipped · 85% coverage on `src/`.** The 18 skips are the quality
+**221 passed · 17 skipped · 88% coverage on `src/`.** The 17 skips are the quality
 gates, which need a real checkpoint and skip with the command that creates one —
 skipping is correct; a vacuously passing gate is not.
 
@@ -387,9 +416,9 @@ What the gates assert, beyond plumbing:
 | Test | Assertion |
 |---|---|
 | [`tests/data/test_leakage_denylist.py`](tests/data/test_leakage_denylist.py) | No post-origination LendingClub column and neither `Naive_Bayes_Classifier_*` column reaches a model matrix |
-| [`tests/training/test_split.py`](tests/training/test_split.py) | No training timestamp is later than the earliest test timestamp; validation sits between them |
+| [`tests/training/test_split.py`](tests/training/test_split.py) | Equal timestamps stay in the earlier partition; train, validation, and test timestamp sets are disjoint |
 | [`tests/serving/test_skew.py`](tests/serving/test_skew.py) | Serving features == training features, row for row, on a fixture batch |
-| [`tests/test_quality_gates.py`](tests/test_quality_gates.py) | Metric floor, **leakage ceiling**, model beats its own baseline, monotonic direction |
+| [`tests/test_quality_gates.py`](tests/test_quality_gates.py) | Expected-range smoke alarm, model beats its own baseline, monotonic direction |
 | [`tests/e2e/test_train_to_serve.py`](tests/e2e/test_train_to_serve.py) | Fixtures → train → checkpoint → HTTP predict in under 30s, and asserts the fixture result is **near chance** |
 
 `pyproject.toml` no longer hides `-m 'not network and not parity'` in `addopts`.
@@ -400,8 +429,10 @@ The network exclusion now lives visibly in
 
 ## Limitations & Known Caveats
 
-- **No metric is published yet.** The code is complete; the datasets require
-  credentials this build did not have. See [`docs/PROGRESS.md`](docs/PROGRESS.md).
+- **No metric is published yet.** The code is complete; the three headline
+  datasets require credentials this build did not have. The ungated ULB path is
+  wired but was not trained for this documentation pass. See
+  [`docs/PROGRESS.md`](docs/PROGRESS.md).
 - **IEEE-CIS test labels do not exist.** The competition's `test_transaction.csv`
   is unlabelled, so evaluation is a temporal split *within* the training file.
   That is the only honest option, and a random split would inflate AUC by putting
@@ -428,7 +459,7 @@ The network exclusion now lives visibly in
 | ADR | Decision |
 |---|---|
 | [0001](docs/adr/0001-gradio-to-nextjs.md) | Gradio → Next.js + shadcn/ui. Gradio could not do per-model deep links or bespoke result cards, and every Gradio app looks like a research prototype. |
-| [0002](docs/adr/0002-experiment-tracking.md) | MLflow primary and always-on, W&B optional. MLflow is self-hosted with zero config and gives a model registry; the W&B free tier does not. |
+| [0002](docs/adr/0002-experiment-tracking.md) | MLflow is primary for real runs; sample runs are deliberately untracked. W&B remains optional. |
 | [0003](docs/adr/0003-real-data-over-synthetic.md) | **Real public data only.** Every generator deleted, the config loader enforces it, and the old 0.964 is publicly retracted with its mechanism stated. |
 | [0004](docs/adr/0004-narrow-to-fintech.md) | Ten industries → three fintech problems. Twenty-one catalogued models over four checkpoints was breadth as a tell, not as range. |
 | [0005](docs/adr/0005-assumptions-log.md) | Assumptions taken during the autonomous rebuild, each reversible in one commit. |

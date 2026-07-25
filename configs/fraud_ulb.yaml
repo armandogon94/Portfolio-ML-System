@@ -1,0 +1,82 @@
+# Payment fraud — ULB Credit Card Fraud from OpenML dataset 1597.
+#
+# This is the credential-free real-data path: no Kaggle account, no rules gate.
+#
+# The split is STRATIFIED 5-FOLD, not temporal, and that is a limitation of the
+# source rather than a preference. Measured on 2026-07-25, OpenML 1597 returns
+# 284,807 rows x 30 columns — V1..V28, Amount, Class — and ships NO `Time`
+# column, so there is no timestamp to order on. Row position is not substituted
+# for a timestamp: OpenML does not document its ordering as chronological and an
+# unverified assumption is exactly what this repository stopped doing.
+# The temporal-split demonstration is on the IEEE-CIS path in configs/fraud.yaml.
+#
+# 492 positives in 284,807 rows (0.1727%) is why the reported metric is PR-AUC
+# and why five folds are reported as mean ± sd rather than one hold-out number.
+problem: fraud
+seed: 42
+
+data:
+  source:
+    kind: openml
+    data_id: 1597
+    adapter: src.data.adapters.ulb_creditcard
+  sample_path: data/sample/ulb_creditcard_sample.csv
+  processed_path: data/processed/fraud_ulb.parquet
+  target: is_fraud
+  denylist:
+    - is_fraud
+    - Class
+
+split:
+  type: stratified_kfold
+  n_splits: 5
+
+features:
+  module: src.features.ulb_features
+
+model:
+  type: lightgbm
+  params:
+    objective: binary
+    metric: average_precision
+    learning_rate: 0.03
+    num_leaves: 31
+    min_child_samples: 50
+    feature_fraction: 0.9
+    bagging_fraction: 0.9
+    bagging_freq: 1
+    n_estimators: 1000
+    early_stopping_rounds: 75
+    n_jobs: 8
+    verbose: -1
+
+baselines:
+  - type: prior
+  - type: logreg
+    params:
+      max_iter: 1000
+      class_weight: balanced
+
+metrics:
+  primary: pr_auc
+  report:
+    - pr_auc
+    - roc_auc
+    - precision_at_1pct
+    - recall_at_1pct_fpr
+    - brier
+
+# This expected-range sanity band is on PR-AUC, not ROC-AUC. It is a smoke alarm,
+# not a leakage test. ULB is much easier than
+# IEEE-CIS and a high-0.90s ROC-AUC is normal; PR-AUC around 0.70-0.85 is the
+# informative result. These are expectations to interrogate, not measured claims.
+sanity_band:
+  metric: pr_auc
+  min: 0.70
+  max: 0.85
+
+training:
+  checkpoint_dir: checkpoints/fraud_ulb
+  reports_dir: reports
+  mlflow_experiment: fintech-ml-system
+  refit_full_after_cv: true

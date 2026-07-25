@@ -26,7 +26,9 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import platform
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -63,10 +65,18 @@ class AutoencoderTrainer(TabularTrainer):
         sample: bool = False,
         epochs: int = 20,
     ):
-        super().__init__(config_name, use_wandb=use_wandb, sample=sample)
+        super().__init__(
+            config_name,
+            use_wandb=use_wandb,
+            sample=sample,
+            tracking_model_type="autoencoder",
+            registry_name=f"{config_name}_autoencoder",
+        )
         self.epochs = epochs
         self.scaler: Any = None
         self.threshold: float = float("nan")
+        self.estimator_training_rows: int | None = None
+        self.model: FraudAutoencoder | None = None
 
     def train(self, data: dict[str, Any]) -> FraudAutoencoder:
         """Fit on legitimate rows only, then set the anomaly threshold.
@@ -82,6 +92,12 @@ class AutoencoderTrainer(TabularTrainer):
 
         from src.device import get_device
 
+        # BaseTrainer.__init__ ran before torch existed in this process, so its
+        # torch RNGs are still unseeded. Seed them now, before any weight is
+        # initialised. See BaseTrainer.seed_torch for why the import is here and
+        # not in the base class.
+        self.seed_torch()
+
         device = get_device()
         logger.info("Autoencoder device: %s", device)
 
@@ -93,6 +109,7 @@ class AutoencoderTrainer(TabularTrainer):
 
         legitimate = numeric[data["y_train"] == 0]
         matrix = self.scaler.fit_transform(legitimate).astype(np.float32)
+        self.estimator_training_rows = len(matrix)
 
         model = FraudAutoencoder(
             input_dim=matrix.shape[1],
@@ -132,7 +149,7 @@ class AutoencoderTrainer(TabularTrainer):
         return model
 
     def evaluate(self, model: FraudAutoencoder, data: dict[str, Any]) -> dict[str, float]:
-        """Score the test split by reconstruction error, ranked as a probability."""
+        """Score with raw reconstruction error and the train-fitted threshold."""
         import torch
 
         from src.device import get_device
@@ -143,14 +160,18 @@ class AutoencoderTrainer(TabularTrainer):
         with torch.no_grad():
             errors = model.reconstruction_error(torch.from_numpy(matrix).to(device)).cpu().numpy()
 
-        # Reconstruction error is unbounded; the metrics want something in [0, 1].
-        # Rank-normalising preserves the ordering exactly, so PR-AUC and ROC-AUC
-        # are unaffected, while Brier score becomes interpretable.
-        scores = pd.Series(errors).rank(pct=True).to_numpy()
-
-        metrics = compute_classification_metrics(data["y_test"], scores, prefix="test")
+        # Raw error is an honest ranking score for ROC-AUC, PR-AUC and the
+        # operational rank metrics. It is not a probability, so calibration
+        # metrics such as Brier are intentionally omitted. Hard classifications
+        # use the threshold fitted on training reconstruction error.
+        metrics = compute_classification_metrics(
+            data["y_test"],
+            errors,
+            threshold=self.threshold,
+            prefix="test",
+            calibrated=False,
+        )
         metrics["anomaly_threshold"] = self.threshold
-        metrics["model_family"] = 0.0  # marker: unsupervised, see reports/RESULTS.md
         return metrics
 
     def run(self) -> dict[str, float]:
@@ -164,12 +185,15 @@ class AutoencoderTrainer(TabularTrainer):
         ]
         data = self.build_matrix(frame, split)
         model = self.train(data)
+        self.model = model
         metrics = self.evaluate(model, data)
         metrics["training_time_seconds"] = round(time.time() - started, 1)
 
         self.metrics = metrics
+        checkpoint_dir = self._save(model, metrics)
         self.log_metrics({k: v for k, v in metrics.items() if isinstance(v, (int, float))})
-        self._save(model, metrics)
+        if checkpoint_dir is not None:
+            self.register_model(str(checkpoint_dir))
         self.finish()
         return metrics
 
@@ -182,34 +206,91 @@ class AutoencoderTrainer(TabularTrainer):
         import joblib
         import torch
 
-        directory = Path(self.config["training"]["checkpoint_dir"] + "_autoencoder")
+        base_directory = Path(self.config["training"]["checkpoint_dir"])
+        directory = base_directory.with_name(f"{base_directory.name}_autoencoder")
         directory.mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), directory / "autoencoder.pt")
+        hidden_dims = self.config["model"]["params"].get("hidden_dims", [64, 32, 16])
+        torch.save(
+            {
+                "state_dict": model.state_dict(),
+                "input_dim": len(self.numeric_columns),
+                "hidden_dims": hidden_dims,
+                "dropout": 0.1,
+            },
+            directory / "model.pt",
+        )
         joblib.dump(
-            {"scaler": self.scaler, "numeric_columns": self.numeric_columns},
+            {
+                "feature_columns": self.numeric_columns,
+                "artifacts": self.feature_artifacts,
+                "category_dtypes": {},
+                "preprocessor": self.scaler,
+            },
             directory / "features.joblib",
         )
-        (directory / "metadata.json").write_text(
-            json.dumps(
-                {
-                    "problem": f"{self.problem}_autoencoder",
-                    "model_type": "autoencoder",
-                    "family": "unsupervised",
-                    "seed": self.seed,
-                    "git_sha": _git_sha(),
-                    "epochs": self.epochs,
-                    "metrics": metrics,
-                    "note": (
-                        "Unsupervised baseline trained on legitimate rows only. "
-                        "Reported to show what the supervised model adds, not as "
-                        "the headline result."
-                    ),
-                },
-                indent=2,
-                default=str,
-            )
+
+        metadata = {
+            "problem": f"{self.problem}_autoencoder",
+            "base_problem": self.problem,
+            "config_name": self.config_name,
+            "model_type": "autoencoder",
+            "family": "unsupervised",
+            "seed": self.seed,
+            "git_sha": _git_sha(),
+            "trained_at": datetime.now(timezone.utc).isoformat(),
+            "dataset": self.config["data"]["source"],
+            "split": self.config["split"],
+            "feature_columns": self.numeric_columns,
+            "n_features": len(self.numeric_columns),
+            "metrics": metrics,
+            "hyperparameters": {
+                "epochs": self.epochs,
+                "hidden_dims": hidden_dims,
+                "threshold_percentile": self.config["model"]["params"].get(
+                    "threshold_percentile", 95
+                ),
+            },
+            "config_file": f"configs/{self.config_name}.yaml",
+            "mlflow_run_id": self.mlflow_run_id,
+            "checkpoint_fit": {
+                "scope": "legitimate_rows_in_training_partition",
+                "n_rows": self.estimator_training_rows,
+                "evaluation": "held_out_test_partition",
+            },
+            "evaluation_predictions": {
+                "kind": "held_out_test_partition",
+                "score": "raw_reconstruction_error",
+                "hard_decision_threshold": "95th_percentile_training_reconstruction_error",
+            },
+            "leakage_controls": {
+                "denylist_enforced": True,
+                "split_column_excluded": True,
+                "threshold_fitted_on_training_data": True,
+            },
+            "sanity_band_warning": None,
+            "hardware": {
+                "platform": platform.platform(),
+                "machine": platform.machine(),
+                "note": (
+                    "The autoencoder may use MPS for training. MPS kernels are "
+                    "not guaranteed bit-deterministic even with seeded generators."
+                ),
+            },
+            "note": (
+                "Unsupervised baseline trained on legitimate rows only. Raw "
+                "reconstruction error supports ranking metrics but is not a "
+                "calibrated probability, so no Brier score is reported."
+            ),
+        }
+        (directory / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str))
+
+        reports_dir = Path(self.config["training"]["reports_dir"])
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = reports_dir / f"{self.config_name}_autoencoder_metrics.csv"
+        pd.DataFrame([{"metric": k, "value": v} for k, v in sorted(metrics.items())]).to_csv(
+            csv_path, index=False
         )
-        logger.info("Wrote %s", directory)
+        logger.info("Wrote %s and %s", directory, csv_path)
         return directory
 
 

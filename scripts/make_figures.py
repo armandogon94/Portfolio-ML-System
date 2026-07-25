@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from pathlib import Path
 
@@ -36,6 +37,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from rich.console import Console
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
@@ -47,11 +49,11 @@ from sklearn.metrics import (
     roc_curve,
 )
 
-from src.config import PROBLEMS, get_project_root, load_config
+from src.config import available_config_names, get_project_root, load_config
 from src.data.adapters import get_adapter
 from src.data.split import make_splits
+from src.features.schema import apply_category_dtypes
 from src.serving.registry import CheckpointRegistry
-from src.training.tabular import TabularTrainer
 
 console = Console()
 
@@ -60,20 +62,55 @@ IMAGE_DIR = get_project_root() / "docs" / "images"
 DPI = 160
 
 
-def _rebuild_test_split(problem: str):
-    """Reconstruct the exact test split the checkpoint was scored on.
-
-    The split is deterministic given the config and the seed, so this reproduces
-    it rather than storing a copy of the test set on disk.
-    """
+def _rebuild_model_matrix(problem: str, loaded):
+    """Rebuild feature matrices with the exact state saved in the checkpoint."""
     config = load_config(problem)
     adapter = get_adapter(config["data"]["source"]["adapter"])
     frame = adapter.load()
-    trainer = TabularTrainer(problem)
-    split = make_splits(frame, config["split"], config["data"]["target"], config["seed"])[0]
-    data = trainer.build_matrix(frame, split)
-    trainer.finish()
-    return data
+    features = importlib.import_module(config["features"]["module"])
+    engineered, _ = features.engineer_features(frame, loaded.feature_artifacts, fit=False)
+    matrix = engineered.reindex(columns=loaded.feature_columns)
+    for column in matrix.columns:
+        if str(matrix[column].dtype) == "object":
+            matrix[column] = matrix[column].astype("category")
+    matrix = apply_category_dtypes(matrix, loaded.category_dtypes)
+    return frame, matrix
+
+
+def _load_oof_predictions(
+    problem: str, *, reports_dir: Path | None = None
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Load held-out predictions for honest cross-validation performance plots."""
+    root = reports_dir or get_project_root() / "reports"
+    path = root / f"{problem}_oof_predictions.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Cross-validation figures require {path}. Retrain {problem!r}; "
+            "the trainer writes one held-out prediction for every row."
+        )
+    frame = pd.read_csv(path).sort_values("row_index")
+    required = {"row_index", "fold", "y_true", "score_model"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"{path} is missing required OOF columns: {sorted(missing)}")
+    if frame["row_index"].duplicated().any():
+        raise ValueError(f"{path} contains duplicate OOF row_index values.")
+
+    model_type = load_config(problem)["model"]["type"]
+    labels = {
+        "lightgbm": "LightGBM",
+        "xgboost": "XGBoost",
+        "logreg": "Logistic regression",
+        "prior": "prior",
+    }
+    scores: dict[str, np.ndarray] = {
+        labels.get(model_type, model_type): frame["score_model"].to_numpy()
+    }
+    for column in frame.columns:
+        if column.startswith("score_") and column != "score_model":
+            name = column.removeprefix("score_")
+            scores[labels.get(name, name)] = frame[column].to_numpy()
+    return frame["y_true"].to_numpy(), scores
 
 
 def _save(fig, name: str) -> Path:
@@ -85,7 +122,9 @@ def _save(fig, name: str) -> Path:
     return path
 
 
-def pr_curve(problem: str, y_true, scores: dict[str, np.ndarray]) -> Path:
+def pr_curve(
+    problem: str, y_true, scores: dict[str, np.ndarray], *, evidence_note: str = ""
+) -> Path:
     """Precision-recall curve. THE plot for an imbalanced problem.
 
     The horizontal line is the base rate, which is what a random ranker achieves.
@@ -109,12 +148,16 @@ def pr_curve(problem: str, y_true, scores: dict[str, np.ndarray]) -> Path:
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
     ax.set_title(f"{problem}: precision-recall")
+    if evidence_note:
+        fig.text(0.5, 0.01, evidence_note, ha="center", fontsize=8, color="#555555")
     ax.legend(loc="upper right", fontsize=8)
     ax.grid(alpha=0.25)
     return _save(fig, f"{problem}_pr_curve")
 
 
-def roc_plot(problem: str, y_true, scores: dict[str, np.ndarray]) -> Path:
+def roc_plot(
+    problem: str, y_true, scores: dict[str, np.ndarray], *, evidence_note: str = ""
+) -> Path:
     fig, ax = plt.subplots(figsize=(6, 4.5))
     for label, y_score in scores.items():
         fpr, tpr, _ = roc_curve(y_true, y_score)
@@ -125,12 +168,14 @@ def roc_plot(problem: str, y_true, scores: dict[str, np.ndarray]) -> Path:
     ax.set_xlabel("False positive rate")
     ax.set_ylabel("True positive rate")
     ax.set_title(f"{problem}: ROC (secondary — see the PR curve first)")
+    if evidence_note:
+        fig.text(0.5, 0.01, evidence_note, ha="center", fontsize=8, color="#555555")
     ax.legend(loc="lower right", fontsize=8)
     ax.grid(alpha=0.25)
     return _save(fig, f"{problem}_roc_curve")
 
 
-def calibration(problem: str, y_true, y_score: np.ndarray) -> Path:
+def calibration(problem: str, y_true, y_score: np.ndarray, *, evidence_note: str = "") -> Path:
     """Are the probabilities honest, not just well-ordered?
 
     AUC only cares about ranking. A model can rank perfectly and still say "90%"
@@ -144,12 +189,16 @@ def calibration(problem: str, y_true, y_score: np.ndarray) -> Path:
     ax.set_xlabel("Mean predicted probability")
     ax.set_ylabel("Observed frequency")
     ax.set_title(f"{problem}: calibration (10 quantile bins)")
+    if evidence_note:
+        fig.text(0.5, 0.01, evidence_note, ha="center", fontsize=8, color="#555555")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.25)
     return _save(fig, f"{problem}_calibration")
 
 
-def confusion_at_review_budget(problem: str, y_true, y_score: np.ndarray) -> Path:
+def confusion_at_review_budget(
+    problem: str, y_true, y_score: np.ndarray, *, evidence_note: str = ""
+) -> Path:
     """Confusion matrix at the top-1% operating point, not at 0.5.
 
     A 0.5 threshold on a 3.5%-positive problem predicts almost nothing positive
@@ -165,6 +214,8 @@ def confusion_at_review_budget(problem: str, y_true, y_score: np.ndarray) -> Pat
         confusion_matrix(y_true, y_pred), display_labels=["negative", "positive"]
     ).plot(ax=ax, colorbar=False, cmap="Blues")
     ax.set_title(f"{problem}: top 1% reviewed\n(threshold = {threshold:.4f})", fontsize=10)
+    if evidence_note:
+        fig.text(0.5, 0.01, evidence_note, ha="center", fontsize=8, color="#555555")
     return _save(fig, f"{problem}_confusion_matrix")
 
 
@@ -228,34 +279,53 @@ def figures_for(problem: str, registry: CheckpointRegistry) -> int:
         console.print(f"[yellow]skipped: {exc}[/yellow]")
         return 0
 
-    data = _rebuild_test_split(problem)
-    y_true = data["y_test"]
-    matrix = data["X_test"]
+    config = load_config(problem)
+    frame, full_matrix = _rebuild_model_matrix(problem, loaded)
+    model_label = {
+        "lightgbm": "LightGBM",
+        "xgboost": "XGBoost",
+        "logreg": "Logistic regression",
+        "prior": "prior",
+    }.get(config["model"]["type"], config["model"]["type"])
 
-    scores = {"LightGBM": loaded.model.predict_proba(matrix)[:, 1]}
-    for baseline in load_config(problem).get("baselines", []):
-        from src.models.registry import create_model
+    if config["split"]["type"] == "stratified_kfold":
+        y_true, scores = _load_oof_predictions(problem)
+        evidence_note = (
+            "Out-of-fold predictions: every row was scored by a fold that did not train on it."
+        )
+    else:
+        split = make_splits(frame, config["split"], config["data"]["target"], config["seed"])[0]
+        y_true = frame.iloc[split.test][config["data"]["target"]].to_numpy()
+        matrix = full_matrix.iloc[split.test]
+        scores = {model_label: loaded.model.predict_proba(matrix)[:, 1]}
+        for baseline in config.get("baselines", []):
+            from src.models.registry import create_model
 
-        estimator = create_model(baseline["type"], baseline.get("params"))
-        estimator.fit(data["X_train"], data["y_train"])
-        scores[baseline["type"]] = estimator.predict_proba(matrix)[:, 1]
+            estimator = create_model(baseline["type"], baseline.get("params"))
+            estimator.fit(
+                full_matrix.iloc[split.train],
+                frame.iloc[split.train][config["data"]["target"]].to_numpy(),
+            )
+            scores[baseline["type"]] = estimator.predict_proba(matrix)[:, 1]
+        evidence_note = "Held-out temporal test partition; no training row contributes a score."
 
-    pr_curve(problem, y_true, scores)
-    roc_plot(problem, y_true, scores)
-    calibration(problem, y_true, scores["LightGBM"])
-    confusion_at_review_budget(problem, y_true, scores["LightGBM"])
-    shap_summary(problem, loaded.model, matrix)
-    feature_importance(problem, loaded.model, list(matrix.columns))
+    pr_curve(problem, y_true, scores, evidence_note=evidence_note)
+    roc_plot(problem, y_true, scores, evidence_note=evidence_note)
+    calibration(problem, y_true, scores[model_label], evidence_note=evidence_note)
+    confusion_at_review_budget(problem, y_true, scores[model_label], evidence_note=evidence_note)
+    shap_summary(problem, loaded.model, full_matrix)
+    feature_importance(problem, loaded.model, list(full_matrix.columns))
     return 1
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--problem", choices=[*PROBLEMS, "all"], default="all")
+    config_names = available_config_names()
+    parser.add_argument("--problem", choices=[*config_names, "all"], default="all")
     args = parser.parse_args()
 
     registry = CheckpointRegistry()
-    problems = list(PROBLEMS) if args.problem == "all" else [args.problem]
+    problems = list(config_names) if args.problem == "all" else [args.problem]
     produced = sum(figures_for(problem, registry) for problem in problems)
 
     if produced == 0:

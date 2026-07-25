@@ -1,8 +1,9 @@
 # Data
 
-Three real, public datasets. No generator, no simulation, no synthetic
-augmentation. See [ADR-0003](../docs/adr/0003-real-data-over-synthetic.md) for
-why the previous synthetic pipeline was deleted rather than improved.
+Four real, public datasets across three fintech problems. No generator, no
+simulation, no synthetic augmentation. See
+[ADR-0003](../docs/adr/0003-real-data-over-synthetic.md) for why the previous
+synthetic pipeline was deleted rather than improved.
 
 Downloads land in `~/.cache/kagglehub/`, outside the repository and outside the
 Docker build context.
@@ -38,7 +39,15 @@ presence can still reproduce a real-data fraud result end to end:
 
 ```bash
 uv run python scripts/download_data.py --dataset ulb-creditcard
+uv run python scripts/train.py --model fraud_ulb
+cat reports/fraud_ulb_metrics.csv
 ```
+
+The adapter is
+[`src/data/adapters/ulb_creditcard.py`](../src/data/adapters/ulb_creditcard.py),
+and [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) keeps the business
+problem as `fraud` while giving this second dataset its own checkpoint and
+metrics paths.
 
 ---
 
@@ -64,6 +73,12 @@ uv run python scripts/download_data.py --dataset lending-club   # ~648 MB gzippe
 Without credentials the script prints the remediation and exits non-zero. **There
 is no synthetic fallback.** If the data cannot be obtained, nothing is trained
 and no number is published.
+
+For file-backed Kaggle downloads, the script always records SHA-256. When
+`PROVENANCE["expected_sha256"]` is pinned it compares and rejects a mismatch;
+until then it prints `RECORD THIS` with the exact assignment to add. Primary CSV
+row counts are compared when `expected_rows` is present, with a loud non-fatal
+warning because vendors can re-upload a dataset.
 
 ---
 
@@ -223,9 +238,14 @@ protection.
 |---|---|
 | Source | <https://www.openml.org/d/1597> (also Kaggle `mlg-ulb/creditcardfraud`) |
 | Licence | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
-| Scale | 284,807 transactions × 30 |
+| Scale | 284,807 transactions × 31 columns (30 features + `Class`) |
 | Positive rate | **0.172%** (492 frauds) |
 | Access | **No account. No token. No rules acceptance.** |
+| Adapter | [`src/data/adapters/ulb_creditcard.py`](../src/data/adapters/ulb_creditcard.py) |
+| Config | [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) |
+| Target | `is_fraud`, derived from source `Class` |
+| Split | Time-based on `Time`; `Time` is excluded from the feature matrix |
+| sha256 | n/a — OpenML returns a frame rather than a primary file |
 
 Features `V1`–`V28` are PCA components; only `Time` and `Amount` are
 interpretable. That is why it is the fallback and not the centrepiece: it cannot
@@ -245,6 +265,7 @@ precision is the only metric worth quoting.
 | `ieee_cis_sample.csv` | 500 | IEEE-CIS (95 columns: base + C/D/M + 40 V columns) |
 | `lending_club_sample.csv` | 500 | LendingClub (a third are `Current`, so the terminal-status filter is exercised) |
 | `churn_sample.csv` | 500 | Credit-card attrition (includes both `Naive_Bayes_Classifier_*` columns) |
+| `ulb_creditcard_sample.csv` | 500 | OpenML-1597 shape (`Time`, V1–V28, `Amount`, `Class`) |
 
 > **These are synthetic and they are CI fixtures only. No number computed from
 > them is ever published.**
@@ -263,9 +284,12 @@ the fixture, not a result.
 
 Two structural guards keep fixture numbers out of the metric path:
 
-1. `TabularTrainer` with `sample=True` writes **no checkpoint and no metrics
-   CSV**. There is no code path from a fixture to `reports/`.
-2. `tests/test_quality_gates.py` **skips** when no real checkpoint exists rather
+1. `TabularTrainer` with `sample=True` opens **no MLflow or W&B run** and writes
+   **no checkpoint and no metrics CSV**. There is no code path from a fixture to
+   a tracker or `reports/`.
+2. Dashboard MLflow queries require `sample=false` and matching problem/config
+   tags, so legacy untagged fixture runs cannot enter a sparkline.
+3. `tests/test_quality_gates.py` **skips** when no real checkpoint exists rather
    than passing vacuously.
 
 Regenerate them with:
@@ -280,11 +304,12 @@ uv run python scripts/make_fixtures.py
 
 ```
 data/
-├── README.md          # this file
-├── sample/            # COMMITTED — synthetic CI fixtures, ~400 KB total
+├── README.md                    # this file
+├── sample/                      # COMMITTED — synthetic CI fixtures
 │   ├── ieee_cis_sample.csv
 │   ├── lending_club_sample.csv
-│   └── churn_sample.csv
-├── raw/               # GITIGNORED — nothing real is committed
-└── processed/         # GITIGNORED — parquet intermediates
+│   ├── churn_sample.csv
+│   └── ulb_creditcard_sample.csv
+├── raw/                         # GITIGNORED — nothing real is committed
+└── processed/                   # GITIGNORED — parquet intermediates
 ```

@@ -22,10 +22,10 @@ help:  ## Show this help
 setup:  ## Install Python deps from the committed lockfile
 	uv sync --frozen --extra dev
 
-data:  ## Download the real datasets (needs a Kaggle token — see data/README.md)
+data:  ## Download all real datasets (3 need Kaggle; ULB/OpenML does not)
 	uv run python scripts/download_data.py --dataset all
 
-train:  ## Train all three models on real data
+train:  ## Train every dataset config on real data (4 configs, 3 problems)
 	uv run python scripts/train.py --model all
 
 train-sample:  ## Smoke-train on the committed CI fixtures (writes NO checkpoint)

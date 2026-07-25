@@ -2,8 +2,8 @@
 """The single documented entrypoint for obtaining real data.
 
 Downloads to ``~/.cache/kagglehub`` (outside the repository and outside the Docker
-build context), verifies row counts and SHA-256, and prints a provenance block you
-can paste into ``data/README.md``.
+build context), records row counts and SHA-256, compares them when provenance is
+pinned, and prints a block you can paste into ``data/README.md``.
 
 On failure it prints the exact remediation — the URL to accept competition rules,
 or where to put ``kaggle.json`` — and exits non-zero. **There is no synthetic
@@ -22,6 +22,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -31,12 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from rich.console import Console
 from rich.table import Table
 
-from src.data.adapters import credit_card_churn, ieee_cis, lending_club
+from src.data.adapters import credit_card_churn, ieee_cis, lending_club, ulb_creditcard
 from src.data.download import (
     DatasetAccessError,
     kaggle_competition_cached,
     kaggle_dataset_cached,
-    openml_cached,
     sha256_of,
 )
 
@@ -64,19 +65,7 @@ DATASETS = {
         "primary_file": credit_card_churn.PROVENANCE["filename"],
     },
     "ulb-creditcard": {
-        "provenance": {
-            "name": "ULB Credit Card Fraud (OpenML id 1597)",
-            "kind": "openml",
-            "data_id": 1597,
-            "url": "https://www.openml.org/d/1597",
-            "licence": (
-                'Unresolved — OpenML records only "Public"; the Kaggle mirror indicates '
-                "ODbL-style terms. Treat as NOT cleared for redistribution."
-            ),
-            "access": "NO ACCOUNT REQUIRED. Fetched via sklearn.datasets.fetch_openml.",
-            "expected_rows": 284_807,
-            "expected_positive_rate": 0.001727,
-        },
+        "provenance": ulb_creditcard.PROVENANCE,
         "approx_mb": 150,
         "expanded_mb": 150,
         "primary_file": None,
@@ -98,14 +87,27 @@ def _fetch(name: str) -> dict:
     console.print(f"    size:    ~{spec['approx_mb']} MB download")
 
     if kind == "openml":
-        frame = openml_cached(provenance["data_id"])
-        return {
+        frame = ulb_creditcard.load()
+        record = {
             "dataset": name,
             **{k: provenance[k] for k in ("name", "url", "licence")},
             "rows": int(frame.shape[0]),
             "cols": int(frame.shape[1]),
-            "sha256": "n/a (fetched as a frame, not a file)",
+            "positive_rate": float(frame[ulb_creditcard.TARGET].mean()),
+            "sha256": "n/a",
         }
+        expected_rows = provenance.get("expected_rows")
+        if expected_rows is not None and len(frame) != expected_rows:
+            console.print(
+                "[bold yellow]    WARNING: ROW COUNT MISMATCH — "
+                f"expected {expected_rows}, observed {len(frame)}. The vendor may "
+                "have re-uploaded the frame; inspect it before training.[/bold yellow]"
+            )
+        console.print(
+            f"[green]    verified {record['rows']} rows x {record['cols']} cols; "
+            f"positive rate {record['positive_rate']:.6f}; sha256: n/a[/green]"
+        )
+        return record
 
     if kind == "kaggle_competition":
         location = Path(kaggle_competition_cached(provenance["slug"]))
@@ -133,10 +135,44 @@ def _fetch(name: str) -> dict:
         record["file"] = target.name
         record["size_mb"] = round(target.stat().st_size / 1e6, 1)
         console.print("    hashing (streamed, this takes a moment on large files)...")
-        record["sha256"] = sha256_of(target)
+        digest = sha256_of(target)
+        record["sha256"] = digest
+
+        expected_digest = provenance.get("expected_sha256")
+        if expected_digest:
+            if digest.casefold() != str(expected_digest).casefold():
+                raise DatasetAccessError(
+                    f"SHA-256 mismatch for {target.name}: expected {expected_digest}, "
+                    f"observed {digest}. Delete the cache at {location} and retry; "
+                    "do not train from a file whose provenance check failed."
+                )
+            console.print(f"[green]    SHA-256 matches pinned digest {expected_digest}[/green]")
+        else:
+            console.print(
+                "[bold yellow]    RECORD THIS:[/bold yellow] "
+                f'PROVENANCE["expected_sha256"] = "{digest}"'
+            )
+
+        rows = _count_csv_rows(target)
+        record["rows"] = rows
+        expected_rows = provenance.get("expected_rows")
+        if expected_rows is not None and rows != expected_rows:
+            console.print(
+                "[bold yellow]    WARNING: ROW COUNT MISMATCH — "
+                f"expected {expected_rows}, observed {rows}. The vendor may have "
+                "re-uploaded the file; inspect it before training.[/bold yellow]"
+            )
 
     console.print(f"[green]    cached at {location}[/green]")
     return record
+
+
+def _count_csv_rows(path: Path) -> int:
+    """Count data records in a CSV or CSV.gz without loading it into memory."""
+    opener = gzip.open if path.suffix.casefold() == ".gz" else open
+    with opener(path, mode="rt", encoding="utf-8", errors="replace", newline="") as handle:
+        count = sum(1 for _ in csv.reader(handle))
+    return max(0, count - 1)
 
 
 def _check_only() -> int:

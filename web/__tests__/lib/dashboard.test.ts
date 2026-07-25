@@ -73,6 +73,11 @@ describe("getDashboardRows", () => {
     expect(row?.keyMetric?.value).toBe(0.31);
     expect(row?.lastTrained).toBe("2026-07-24T13:40:00+00:00");
     expect(row?.history).toEqual([0.28, 0.31]);
+    expect(getRunHistory).toHaveBeenCalledWith("fintech-ml-system", "test_pr_auc", {
+      limit: 10,
+      problem: "credit_risk",
+      config: "credit_risk",
+    });
   });
 
   it("surfaces PR-AUC, not ROC-AUC, as the key metric", async () => {

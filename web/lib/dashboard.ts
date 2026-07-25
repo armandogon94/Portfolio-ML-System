@@ -130,11 +130,20 @@ async function fetchModelInfo(): Promise<ModelInfoMap> {
   }
 }
 
-async function safeGetRunHistory(experimentName: string, metricKey: string): Promise<number[]> {
+async function safeGetRunHistory(
+  experimentName: string,
+  metricKey: string,
+  problem: string,
+  config: string,
+): Promise<number[]> {
   // The dashboard sparklines are decorative — never let an MLflow
   // outage take down the whole page. Fall back to empty history.
   try {
-    const points = await getRunHistory(experimentName, metricKey, { limit: 10 });
+    const points = await getRunHistory(experimentName, metricKey, {
+      limit: 10,
+      problem,
+      config,
+    });
     return points.map((p) => p.metric);
   } catch {
     return [];
@@ -197,7 +206,7 @@ export async function getDashboardRows(): Promise<DashboardRow[]> {
       // All three problems log into ONE MLflow experiment so their runs are
       // directly comparable in the UI. See training.mlflow_experiment in
       // configs/<problem>.yaml — if that value changes, change this constant.
-      return safeGetRunHistory(MLFLOW_EXPERIMENT, spec.metricName);
+      return safeGetRunHistory(MLFLOW_EXPERIMENT, spec.metricName, spec.problem, spec.problem);
     }),
   );
 

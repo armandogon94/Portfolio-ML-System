@@ -1,10 +1,128 @@
 # PROGRESS — rebuild to fintech + real data
 
 This file is the standalone handoff and status tracker for the fintech rebuild.
-Branch: `rebuild/fintech-real-data`. Every slice below is a separate commit.
+Current branch: `main`. Baseline for the trust-audit repair: `05d32ca`.
+The repair below is intentionally uncommitted because the owner explicitly
+forbade commits; the older rebuild slices remain historical committed work.
 
-**Legend:** `[x]` done and committed · `[~]` partially done, see notes ·
-`[BLOCKED]` cannot proceed without something the owner must supply.
+**Historical-slice legend:** `[x]` done and committed · `[~]` partially done,
+see notes · `[BLOCKED]` cannot proceed without something the owner must supply.
+The trust-audit section states its separate uncommitted status explicitly.
+
+---
+
+## Methodology repair — 2026-07-25 (verified, uncommitted)
+
+Baseline remains `05d32ca`; this work is layered over the existing uncommitted
+trust-audit repair. The owner explicitly forbade commits and pushes.
+
+- [x] Tie-safe chronological splits assign equal timestamps to the earlier
+      partition and reject proportions that would empty a requested partition.
+- [x] Split columns are excluded by the config-driven matrix builder for every
+      problem.
+- [x] Cross-validation reports/gates only the aggregate mean and standard
+      deviation, persists one held-out OOF prediction per row, and refits the
+      checkpoint estimator on all rows.
+- [x] Autoencoder evaluation uses raw reconstruction error for ranking, the
+      train-fitted 95th-percentile threshold for hard decisions, and no Brier
+      score. Its checkpoint now has tabular-equivalent provenance/metrics and
+      round-trips through `CheckpointRegistry`.
+- [x] Python, NumPy, CUDA (when present), MPS (when exposed), and PyTorch CPU RNGs
+      receive the config seed; MPS kernel nondeterminism remains documented.
+- [x] `sanity_band` replaces the misleading leakage-ceiling terminology. It is
+      documented as a smoke alarm; denylists, split-column exclusion, and their
+      tests are the leakage defence. Churn's vacuous 1.0 maximum is gone.
+- [x] Local artifacts are written before tracker calls; every tracker call is
+      guarded; CLI cleanup runs in `finally`; successful local checkpoints are
+      registered when MLflow is active.
+- [x] Fraud's train-only aggregate features are documented as not point-in-time
+      correct and therefore optimistically biased.
+- [x] Results disclose that no automated tuning ran and that the comparison is
+      not a fair-tuning comparison.
+
+### RED / GREEN evidence
+
+- Baseline focused suite: **55 passed, 18 skipped**.
+- RED after methodology regressions: **22 failed** for the audited defects.
+- Focused GREEN: **80 passed, 17 skipped**.
+- Full non-network suite: **221 passed, 17 skipped, 1 deselected**.
+- Coverage: **88% on `src`**, measured separately with the normal pytest
+  coverage addopts.
+- Ruff: check and format-check clean across **85 files**.
+- All four configs load: `fraud`, `credit_risk`, `churn`, `fraud_ulb`.
+
+No real-data training or network canary ran, so no result metric was added.
+No commit and no push were made.
+
+### Known limit
+
+- A pre-existing untracked `reports/fraud_ulb_metrics.csv` and gitignored
+  `checkpoints/fraud_ulb/` were generated before this methodology repair. The
+  checkpoint metadata identifies the old fold-estimator path and there is no OOF
+  predictions artifact. They are invalidated, not published, and were preserved
+  rather than deleted because they predate this task.
+
+**NEXT ACTION:** review the full uncommitted diff, then regenerate the invalidated
+ULB run with `uv run python scripts/train.py --model fraud_ulb`.
+
+---
+
+## Trust-audit repair — 2026-07-25 (verified, uncommitted)
+
+- [x] **Config enforcement is real.** Kinds are closed to Kaggle
+      competition/dataset or OpenML; source ids are required; adapter modules
+      must exist; ADR-0003 generator/simulation markers are rejected.
+- [x] **Download integrity is truthful.** File digests are recorded and compared
+      only when pinned; mismatches are fatal; unpinned digests print the exact
+      `PROVENANCE["expected_sha256"]` assignment; primary CSV rows are streamed
+      and compared non-fatally. No digest was invented.
+- [x] **Fixture tracking is isolated.** Sample mode opens no MLflow/W&B run and
+      writes no checkpoint/metrics CSV. Production runs carry `problem`,
+      `sample=false`, and `config`; dashboard history requires all relevant tags.
+- [x] **Constant scores fail the actual gate.** The reported metric set includes
+      score standard deviation and the trainer rejects a zero-variance scorer as
+      `DEGENERATE predictions`.
+- [x] **OpenML 1597 is a complete second fraud config.**
+      `configs/fraud_ulb.yaml` → `src.data.adapters.ulb_creditcard` →
+      `src.features.ulb_features`; `Time` is the split key and never a feature.
+      The 500-row repository fixture was generated with seed 42 and contains no
+      real rows.
+- [x] **False prose corrected.** SHA wording, MLflow/sample claims, evaluator
+      output, credential-free commands, and uploader licence strings now match
+      code.
+
+### RED / GREEN evidence
+
+| Slice | RED | GREEN |
+|---|---|---|
+| Config loader | 5 focused failures | 20 passed |
+| Digest + row checks | 2 focused failures | 24 downloader/adapter tests passed |
+| MLflow + dashboard | 2 Python + 3 web failures | 24 Python + 15 web tests passed |
+| Constant predictor | 1 focused failure (only generic low-AUC warning) | 32 gate/metrics/trainer tests passed |
+| OpenML ULB | 2 collection errors (adapter/features absent) | 78 focused tests passed |
+
+### Current verification
+
+- Python non-network suite: **205 passed, 18 skipped, 1 deselected**.
+- Coverage: **85% on `src`**, measured with the normal pytest coverage addopts.
+- Web: **98 passed** across 18 files; TypeScript clean.
+- Ruff: check and format-check clean across 84 files.
+- All four configs load: `fraud`, `credit_risk`, `churn`, `fraud_ulb`.
+
+### Known limits / deliberately not done
+
+- The live OpenML/Kaggle network path and real model training were not run in
+  this repair; the requested network canary was excluded. No result metric or
+  digest was published.
+- `docs/diagrams/pipeline-dag.svg` is a generated, single-line SVG containing the
+  old `sha256 verified` label four times. It was not safely hand-edited and was
+  not regenerated because the task explicitly said to regenerate nothing. The
+  Mermaid source, README, and architecture document are corrected.
+- No commit and no push were made.
+
+**NEXT ACTION:** review the uncommitted repair with `git diff --check && git diff`;
+after a real file-backed download, copy the script's `RECORD THIS` digest into
+the matching adapter provenance and rerun the download to exercise comparison.
 
 ---
 
@@ -87,6 +205,8 @@ dataset is on OpenML and needs no account at all:
 
 ```bash
 uv run python scripts/download_data.py --dataset ulb-creditcard   # ~150 MB, zero credentials
+uv run python scripts/train.py --model fraud_ulb
+cat reports/fraud_ulb_metrics.csv
 ```
 
 `scripts/download_data.py` prints exactly this remediation when credentials are
@@ -134,18 +254,19 @@ uv run python scripts/make_figures.py               # PR curves, calibration, SH
 Then fill the results tables in `README.md` and `reports/RESULTS.md`
 **from `scripts/evaluate.py --markdown`** — do not type numbers by hand.
 
-`tests/test_quality_gates.py` asserts the expected bands and will fail loudly on
-a leaked model:
+`tests/test_quality_gates.py` asserts the expected-range sanity bands. They are
+smoke alarms that trigger investigation, not leakage tests:
 
-| Problem | Expected honest ROC-AUC | Above this means leakage |
+| Problem | Expected range | Interpretation |
 |---|---|---|
-| Fraud (IEEE-CIS, temporal split) | ≈ 0.90 | ≥ 0.96 |
-| Credit risk (LendingClub, denylist applied) | ≈ 0.70 | ≥ 0.80 |
-| Churn (5-fold CV) | high — easy dataset | report mean ± std, never one fold |
+| Fraud (IEEE-CIS, temporal split) | configured before training | outside the band requires investigation |
+| Credit risk (LendingClub, denylist applied) | configured before training | outside the band requires investigation |
+| Churn (5-fold CV) | lower bound only | report mean ± std; no vacuous 1.0 maximum |
 
-The trainer also writes a `suspected_leakage` string into
-`checkpoints/<problem>/metadata.json` whenever the ceiling is exceeded, and
-`scripts/evaluate.py` prints it in red.
+The trainer writes `sanity_band_warning` into
+`checkpoints/<problem>/metadata.json` when the smoke alarm fires, and
+`scripts/evaluate.py` prints it. The metadata separately records the structural
+leakage controls.
 
 ### B3. Screenshots of a running UI (Appendix A2)
 

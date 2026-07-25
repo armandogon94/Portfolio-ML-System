@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import get_project_root
-from src.data.adapters import credit_card_churn, ieee_cis, lending_club
+from src.data.adapters import credit_card_churn, ieee_cis, lending_club, ulb_creditcard
 
 SEED = 42
 N_ROWS = 500
@@ -204,10 +204,42 @@ def make_churn_fixture() -> pd.DataFrame:
     return frame
 
 
+#: Positives placed in the ULB fixture. The real dataset's rate is 0.172%, which
+#: over 500 rows is a single positive — and a chronological split then leaves the
+#: training partition single-class, so LightGBM emits a one-column ``predict_proba``
+#: and the run dies. The fixture therefore carries a deliberately inflated,
+#: evenly-spaced set of positives so every partition of a 70/10/20 time split has
+#: some. This is a CI fixture, not a description of the dataset: nothing measured
+#: on it is ever published, and ``data/README.md`` states the real rate.
+ULB_FIXTURE_POSITIVES = 25
+
+
+def make_ulb_creditcard_fixture() -> pd.DataFrame:
+    """A 500-row OpenML-1597-shaped frame containing no real ULB rows.
+
+    Every column is drawn from a PRNG; ``Class`` is assigned to evenly spaced row
+    positions rather than sampled, so a chronological split cannot strand every
+    positive on one side of the boundary. See ``ULB_FIXTURE_POSITIVES``.
+    """
+    rng = _rng()
+    labels = np.zeros(N_ROWS, dtype=np.int8)
+    labels[np.linspace(0, N_ROWS - 1, ULB_FIXTURE_POSITIVES, dtype=int)] = 1
+    frame = pd.DataFrame(
+        {
+            "Class": labels,
+            "Time": np.sort(rng.uniform(0, 172_792, N_ROWS)).astype(np.float32),
+            **{f"V{i}": rng.normal(0, 1, N_ROWS).astype(np.float32) for i in range(1, 29)},
+            "Amount": rng.lognormal(3.0, 1.2, N_ROWS).astype(np.float32),
+        }
+    )
+    return frame[["Time", *[f"V{i}" for i in range(1, 29)], "Amount", "Class"]]
+
+
 BUILDERS = {
     "ieee_cis_sample.csv": (make_ieee_cis_fixture, ieee_cis),
     "lending_club_sample.csv": (make_lending_club_fixture, lending_club),
     "churn_sample.csv": (make_churn_fixture, credit_card_churn),
+    "ulb_creditcard_sample.csv": (make_ulb_creditcard_fixture, ulb_creditcard),
 }
 
 
