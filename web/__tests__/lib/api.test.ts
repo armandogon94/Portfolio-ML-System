@@ -1,139 +1,118 @@
-/** A.2.4 — typed API client tests. External fetch is mocked. */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+/**
+ * The typed API client. Zod validation at the boundary is the point: a backend
+ * shape change must surface here, not as `undefined` inside a chart.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, predictCreditRisk, explainCreditRisk } from "@/lib/api";
+import {
+  ApiError,
+  apiErrorMessage,
+  isUntrainedModelError,
+  predictChurn,
+  predictCreditRisk,
+  predictFraud,
+} from "@/lib/api";
+import { CHURN_DEFAULTS, CREDIT_RISK_DEFAULTS, FRAUD_DEFAULTS } from "@/lib/schemas";
 
-describe("ApiError", () => {
-  it("preserves status and body", () => {
-    const err = new ApiError(422, { detail: "bad input" });
-    expect(err).toBeInstanceOf(Error);
-    expect(err.status).toBe(422);
-    expect(err.body).toEqual({ detail: "bad input" });
-    expect(err.message).toContain("422");
+const FRAUD_RESPONSE = {
+  fraud_probability: 0.42,
+  risk_band: "MEDIUM",
+  recommended_action: "MONITOR",
+  model_version: "abc12345",
+  trained_on: "ieee-fraud-detection",
+};
+
+function mockFetch(body: unknown, status = 200) {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("predict endpoints", () => {
+  it("posts to the fraud route and parses the response", async () => {
+    const fetchMock = mockFetch(FRAUD_RESPONSE);
+    const result = await predictFraud(FRAUD_DEFAULTS);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/predict/fraud",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result.risk_band).toBe("MEDIUM");
+    expect(result.model_version).toBe("abc12345");
+  });
+
+  it("posts to the credit-risk route", async () => {
+    const fetchMock = mockFetch({
+      default_probability: 0.08,
+      decision: "APPROVE",
+      threshold_basis: "Illustrative cut points.",
+      model_version: "abc12345",
+      trained_on: "wordsforthewise/lending-club",
+    });
+    await predictCreditRisk(CREDIT_RISK_DEFAULTS);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/predict/credit-risk");
+  });
+
+  it("posts to the churn route and keeps the small-n caveat", async () => {
+    mockFetch({
+      attrition_probability: 0.7,
+      retention_action: "URGENT_OUTREACH",
+      caveat: "n = 10,127 and the dataset is easy.",
+      model_version: "abc12345",
+      trained_on: "sakshigoyal7/credit-card-customers",
+    });
+    const result = await predictChurn(CHURN_DEFAULTS);
+    expect(result.caveat).toContain("10,127");
   });
 });
 
-describe("API client — relative proxy path", () => {
-  const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-  beforeEach(() => {
-    fetchSpy.mockReset();
-  });
-  afterEach(() => {
-    fetchSpy.mockReset();
+describe("response validation", () => {
+  it("rejects a probability outside [0, 1]", async () => {
+    mockFetch({ ...FRAUD_RESPONSE, fraud_probability: 1.4 });
+    await expect(predictFraud(FRAUD_DEFAULTS)).rejects.toThrow();
   });
 
-  it("predictCreditRisk POSTs to /api/predict/credit-risk (relative, not absolute)", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          risk_score: 0.42,
-          recommendation: "REVIEW",
-          confidence: 0.58,
-          default_probability: 0.42,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    await predictCreditRisk({
-      age: 35,
-      annual_income: 65000,
-      credit_score: 700,
-      num_open_accounts: 3,
-      payment_history_pct: 85,
-      debt_to_income_ratio: 0.3,
-      employment_years: 8,
-      loan_amount: 25000,
-    });
-
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe("/api/predict/credit-risk");
-    // Relative path, not absolute — the browser never crosses origins
-    expect(String(url).startsWith("http")).toBe(false);
-    expect(init?.method).toBe("POST");
-    expect(init?.headers).toEqual({ "Content-Type": "application/json" });
-    expect(JSON.parse(init?.body as string).credit_score).toBe(700);
+  it("rejects an unknown risk band", async () => {
+    mockFetch({ ...FRAUD_RESPONSE, risk_band: "APOCALYPTIC" });
+    await expect(predictFraud(FRAUD_DEFAULTS)).rejects.toThrow();
   });
 
-  it("explainCreditRisk POSTs to /api/explain/credit-risk", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          feature_importances: { credit_score: -0.3, debt_to_income_ratio: 0.2 },
-          top_features: [
-            { feature: "credit_score", importance: -0.3 },
-            { feature: "debt_to_income_ratio", importance: 0.2 },
-          ],
-          explanation_type: "shap",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    const result = await explainCreditRisk({
-      age: 35,
-      annual_income: 65000,
-      credit_score: 700,
-      num_open_accounts: 3,
-      payment_history_pct: 85,
-      debt_to_income_ratio: 0.3,
-      employment_years: 8,
-      loan_amount: 25000,
-    });
-
-    const url = fetchSpy.mock.calls[0][0];
-    expect(url).toBe("/api/explain/credit-risk");
-    expect(result.explanation_type).toBe("shap");
-    expect(result.feature_importances.credit_score).toBe(-0.3);
+  it("rejects a response missing provenance", async () => {
+    // A score with no model_version is unreviewable — that is the whole point.
+    const { model_version: _omitted, ...withoutProvenance } = FRAUD_RESPONSE;
+    mockFetch(withoutProvenance);
+    await expect(predictFraud(FRAUD_DEFAULTS)).rejects.toThrow();
   });
 });
 
-describe("API client — error handling", () => {
-  const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-  beforeEach(() => {
-    fetchSpy.mockReset();
+describe("error handling", () => {
+  it("throws ApiError carrying the status and body", async () => {
+    mockFetch({ detail: "boom" }, 500);
+    await expect(predictFraud(FRAUD_DEFAULTS)).rejects.toBeInstanceOf(ApiError);
   });
 
-  it("throws ApiError with status + body on 4xx", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ detail: "validation failed" }), {
-        status: 422,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    try {
-      await predictCreditRisk({} as never);
-      expect.fail("should have thrown ApiError");
-    } catch (err) {
-      expect(err).toBeInstanceOf(ApiError);
-      expect((err as ApiError).status).toBe(422);
-      expect((err as ApiError).body).toEqual({ detail: "validation failed" });
-    }
+  it("recognises 503 as the untrained-model case", () => {
+    expect(isUntrainedModelError(new ApiError(503, { detail: "no checkpoint" }))).toBe(true);
+    expect(isUntrainedModelError(new ApiError(422, {}))).toBe(false);
+    expect(isUntrainedModelError(new Error("network"))).toBe(false);
   });
 
-  it("throws ApiError on 5xx too", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ detail: "internal error" }), {
-        status: 500,
-      }),
-    );
-
-    await expect(predictCreditRisk({} as never)).rejects.toBeInstanceOf(ApiError);
+  it("surfaces the API's own detail text verbatim", () => {
+    // The 503 detail contains the exact commands that fix the problem.
+    const detail = "No checkpoint for 'fraud'. Run: uv run python scripts/train.py --model fraud";
+    expect(apiErrorMessage(new ApiError(503, { detail }))).toBe(detail);
   });
 
-  it("throws on malformed response body (Zod parse failure)", async () => {
-    // Response is 200 OK but missing required fields — Zod should reject
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ foo: "bar" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    await expect(predictCreditRisk({} as never)).rejects.toThrow();
+  it("falls back gracefully for a non-ApiError", () => {
+    expect(apiErrorMessage(new Error("offline"))).toBe("offline");
+    expect(apiErrorMessage("weird")).toBe("weird");
   });
 });

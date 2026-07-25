@@ -58,8 +58,13 @@ export type DashboardRow = {
 };
 
 // ─── Mappings: industry/model slug → backend "problem" name + key metric ───
-// Mirrors scripts/train.py (TRAINERS, CONFIG_NAMES, RECOMMENDATION_KEY) so
-// the dashboard surfaces the same key metric the trainer ranks modalities by.
+// The `problem` values are checkpoint directory names, i.e. the keys of the
+// FastAPI /models response. `metricName` must exist in that checkpoint's
+// metadata.json metrics block, which is written by src/training/tabular.py.
+
+/** Single MLflow experiment shared by all three problems. Mirrors
+ *  `training.mlflow_experiment` in every configs/<problem>.yaml. */
+const MLFLOW_EXPERIMENT = "fintech-ml-system";
 
 type ProblemSpec = {
   /** Backend checkpoint directory + /models key. */
@@ -73,64 +78,26 @@ type ProblemSpec = {
 };
 
 const PROBLEM_BY_INDUSTRY_MODEL: Record<string, ProblemSpec> = {
-  "fintech/credit-risk": {
-    problem: "credit_risk",
-    metricName: "test_auc_roc",
-    metricLabel: "AUC-ROC",
+  "fintech/fraud": {
+    problem: "fraud",
+    // PR-AUC, not ROC-AUC. At 3.5% positives ROC-AUC is dominated by the
+    // true-negative mass and a weak model still scores 0.8+.
+    metricName: "test_pr_auc",
+    metricLabel: "PR-AUC",
     higherIsBetter: true,
   },
-  "fintech/fraud": {
-    problem: "fraud_detection",
-    metricName: "test_autoencoder_auc_roc",
-    metricLabel: "AUC-ROC",
+  "fintech/credit-risk": {
+    problem: "credit_risk",
+    metricName: "test_pr_auc",
+    metricLabel: "PR-AUC",
     higherIsBetter: true,
   },
   "fintech/churn": {
-    problem: "customer_churn",
-    metricName: "test_auc_roc",
-    metricLabel: "AUC-ROC",
-    higherIsBetter: true,
-  },
-  "real-estate/price": {
-    problem: "price_prediction",
-    metricName: "test_r2",
-    metricLabel: "R²",
-    higherIsBetter: true,
-  },
-  "real-estate/rental-price": {
-    problem: "rental_price",
-    metricName: "test_r2",
-    metricLabel: "R²",
-    higherIsBetter: true,
-  },
-  "dental/no-show": {
-    problem: "dental_noshow",
-    metricName: "test_auc_roc",
-    metricLabel: "AUC-ROC",
-    higherIsBetter: true,
-  },
-  "healthcare/heart-disease": {
-    problem: "heart_disease",
-    metricName: "test_auc_roc",
-    metricLabel: "AUC-ROC",
-    higherIsBetter: true,
-  },
-  "logistics/demand": {
-    problem: "demand_forecasting",
-    metricName: "test_avg_mae",
-    metricLabel: "MAE",
-    higherIsBetter: false,
-  },
-  "logistics/eta": {
-    problem: "delivery_eta",
-    metricName: "test_rmse",
-    metricLabel: "RMSE",
-    higherIsBetter: false,
-  },
-  "legal/h1b-approval": {
-    problem: "h1b_approval",
-    metricName: "test_auc_roc",
-    metricLabel: "AUC-ROC",
+    problem: "churn",
+    // Churn is scored by 5-fold CV, so the dashboard shows the fold mean.
+    // The standard deviation is in reports/churn_metrics.csv.
+    metricName: "cv_pr_auc_mean",
+    metricLabel: "PR-AUC (5-fold mean)",
     higherIsBetter: true,
   },
 };
@@ -140,7 +107,7 @@ const PROBLEM_BY_INDUSTRY_MODEL: Record<string, ProblemSpec> = {
 type ModelInfo = {
   problem?: string;
   metrics?: Record<string, number>;
-  timestamp?: string;
+  trained_at?: string;
   [k: string]: unknown;
 };
 type ModelInfoMap = Record<string, ModelInfo>;
@@ -213,7 +180,7 @@ export async function getDashboardRows(): Promise<DashboardRow[]> {
                 higherIsBetter: spec.higherIsBetter,
               }
             : null,
-        lastTrained: isReady ? (info?.timestamp ?? null) : null,
+        lastTrained: isReady ? (info?.trained_at ?? null) : null,
         // History fetched in the second pass.
         history: [] as number[],
       } satisfies DashboardRow;
@@ -227,9 +194,10 @@ export async function getDashboardRows(): Promise<DashboardRow[]> {
       const key = `${row.industrySlug}/${row.modelSlug}`;
       const spec = PROBLEM_BY_INDUSTRY_MODEL[key];
       if (row.status !== "ready" || !spec) return Promise.resolve([] as number[]);
-      // Experiment name follows the trainer's convention: <problem>.
-      // (BaseTrainer._init_mlflow uses the problem name as experiment.)
-      return safeGetRunHistory(spec.problem, spec.metricName);
+      // All three problems log into ONE MLflow experiment so their runs are
+      // directly comparable in the UI. See training.mlflow_experiment in
+      // configs/<problem>.yaml — if that value changes, change this constant.
+      return safeGetRunHistory(MLFLOW_EXPERIMENT, spec.metricName);
     }),
   );
 

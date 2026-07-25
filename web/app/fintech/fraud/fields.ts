@@ -1,78 +1,74 @@
 /**
- * Field configuration for the fraud-detection form (A.9.4).
+ * Form fields for the payment-fraud model.
  *
- * Sibling of page.tsx per the per-industry pattern. Types line up
- * with FraudInput from lib/schemas.ts. The merchant_category field
- * is the first categorical select rendered by ModelForm — its
- * options come from the same list used to generate synthetic fraud
- * data in src/data/generate_fraud.py so the model sees them
- * verbatim.
+ * These are IEEE-CIS's own column names, kept verbatim so a reviewer can look
+ * any of them up in the competition's data description. Most are anonymised by
+ * Vesta — `card1` is a card identifier whose meaning is not published, `C1`/`C13`
+ * are counting features, `D1`/`D15` are day-deltas. The descriptions say so
+ * rather than inventing a friendlier meaning.
+ *
+ * This is a deliberate 18-field subset of 394. Everything not supplied reaches
+ * the model as NaN, which LightGBM handles natively as "unknown".
  */
 import type { FieldConfig } from "@/components/ModelForm";
 import type { FraudInput } from "@/lib/schemas";
-import { FRAUD_MERCHANT_CATEGORIES } from "@/lib/schemas";
 
 export const FRAUD_FIELDS: FieldConfig<FraudInput>[] = [
   {
-    name: "transaction_amount",
-    label: "Transaction Amount ($)",
+    name: "TransactionAmt",
+    label: "Transaction amount ($)",
     type: "number",
-    min: 0,
+    min: 0.01,
     step: 0.01,
+    description: "The cents portion is itself a signal — bots produce round amounts.",
   },
   {
-    name: "merchant_category",
-    label: "Merchant Category",
+    name: "TransactionDT",
+    label: "Transaction time offset (s)",
+    type: "number",
+    min: 0,
+    description: "Seconds from the dataset's reference point. Not a Unix timestamp.",
+  },
+  {
+    name: "ProductCD",
+    label: "Product code",
     type: "select",
-    options: [...FRAUD_MERCHANT_CATEGORIES],
-    description: "Categorical input fed into the autoencoder via label encoding.",
+    options: ["W", "C", "R", "H", "S"],
+    description: "Vesta's anonymised product category.",
   },
   {
-    name: "hour_of_day",
-    label: "Hour of Day (0–23)",
+    name: "card1",
+    label: "card1",
     type: "number",
-    min: 0,
-    max: 23,
+    description: "Anonymised card identifier. Used as a frequency encoding, never raw.",
   },
+  { name: "card2", label: "card2", type: "number", description: "Anonymised card attribute." },
+  { name: "card3", label: "card3", type: "number", description: "Anonymised card attribute." },
   {
-    name: "day_of_week",
-    label: "Day of Week (0=Mon, 6=Sun)",
+    name: "card4",
+    label: "Card network",
+    type: "select",
+    options: ["visa", "mastercard", "discover", "american express"],
+  },
+  { name: "card5", label: "card5", type: "number", description: "Anonymised card attribute." },
+  { name: "card6", label: "Card type", type: "select", options: ["debit", "credit"] },
+  { name: "addr1", label: "addr1", type: "number", description: "Anonymised billing region." },
+  { name: "addr2", label: "addr2", type: "number", description: "Anonymised billing country." },
+  { name: "dist1", label: "dist1", type: "number", description: "Anonymised distance measure." },
+  {
+    name: "P_emaildomain",
+    label: "Purchaser email domain",
+    type: "text",
+    description: "e.g. gmail.com. anonymous.com is a distinct, meaningful value.",
+  },
+  { name: "C1", label: "C1", type: "number", min: 0, description: "Counting feature." },
+  { name: "C13", label: "C13", type: "number", min: 0, description: "Counting feature." },
+  { name: "C14", label: "C14", type: "number", min: 0, description: "Counting feature." },
+  {
+    name: "D1",
+    label: "D1",
     type: "number",
-    min: 0,
-    max: 6,
+    description: "Day-delta feature. De-trended against transaction day before use.",
   },
-  {
-    name: "distance_from_home",
-    label: "Distance From Home (km)",
-    type: "number",
-    min: 0,
-  },
-  {
-    name: "is_online",
-    label: "Online Transaction (1=yes, 0=no)",
-    type: "number",
-    min: 0,
-    max: 1,
-  },
-  {
-    name: "card_age_days",
-    label: "Card Age (days)",
-    type: "number",
-    min: 0,
-  },
-  {
-    name: "num_transactions_last_hour",
-    label: "Transactions in Last Hour",
-    type: "number",
-    min: 0,
-  },
-  {
-    name: "amount_vs_avg_ratio",
-    label: "Amount / Avg-Transaction Ratio",
-    type: "slider",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    description: "Spike vs the cardholder's typical spend — a strong fraud signal.",
-  },
+  { name: "D15", label: "D15", type: "number", description: "Day-delta feature." },
 ];

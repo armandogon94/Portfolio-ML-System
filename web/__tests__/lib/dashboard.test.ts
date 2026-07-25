@@ -1,29 +1,42 @@
-/** A.9.9 — getDashboardRows join logic tests.
+/**
+ * getDashboardRows joins the industry registry, the FastAPI `/models` response
+ * and MLflow run history into the rows the dashboard renders.
  *
- * Verifies the INDUSTRIES × FastAPI /models × MLflow history join
- * produces the right shape. We mock global.fetch (FastAPI) and the
- * mlflow.getRunHistory module export so the unit test is hermetic.
- *
- * The route-handler approach in SPEC §A.9.9 was abandoned because
- * next.config.mjs already wholesale rewrites /api/* to FastAPI;
- * route handlers under that path would never receive requests.
- * Instead getDashboardRows() fetches directly from
- * `${INTERNAL_API_URL}/models` server-side and calls getRunHistory
- * from lib/mlflow.ts directly. Both are documented in
- * lib/dashboard.ts.
+ * The dependencies are mocked so the test is hermetic. What it actually asserts
+ * is degradation behaviour: with no checkpoints, or with MLflow down, the
+ * dashboard must still render rather than 500. On a fresh clone — which is the
+ * current state of this repository — every row is `not_built`, and that is the
+ * honest display, not a bug.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock the mlflow module BEFORE importing dashboard.ts so the import
-// graph picks up the mock binding.
-vi.mock("@/lib/mlflow", () => ({
-  getRunHistory: vi.fn(),
-}));
+// Mocked BEFORE importing dashboard.ts so the import graph binds the mock.
+vi.mock("@/lib/mlflow", () => ({ getRunHistory: vi.fn() }));
 
 import { getDashboardRows } from "@/lib/dashboard";
 import { getRunHistory } from "@/lib/mlflow";
 
 const ORIGINAL_FETCH = globalThis.fetch;
+
+/** One trained checkpoint, shaped like a real metadata.json. */
+const MODELS_RESPONSE = {
+  credit_risk: {
+    problem: "credit_risk",
+    model_type: "lightgbm",
+    git_sha: "a1b2c3d4",
+    metrics: { test_pr_auc: 0.31, test_roc_auc: 0.71 },
+    trained_at: "2026-07-24T13:40:00+00:00",
+  },
+};
+
+function mockModelsEndpoint(body: unknown) {
+  globalThis.fetch = vi.fn().mockResolvedValueOnce(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  ) as unknown as typeof fetch;
+}
 
 beforeEach(() => {
   vi.mocked(getRunHistory).mockReset();
@@ -33,100 +46,101 @@ afterEach(() => {
   globalThis.fetch = ORIGINAL_FETCH;
 });
 
-import { afterEach } from "vitest";
-
 describe("getDashboardRows", () => {
-  it("joins INDUSTRIES with FastAPI /models metadata + MLflow history", async () => {
-    // FastAPI returns metadata keyed by problem name. We give it a
-    // subset (3 of 10) to keep the assertions tight; the rest of
-    // the catalog will surface as not_built rows.
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          credit_risk: {
-            problem: "credit_risk",
-            metrics: { test_auc_roc: 0.85 },
-            timestamp: "2026-04-12T13:40:00",
-          },
-          fraud_detection: {
-            problem: "fraud_detection",
-            metrics: { test_autoencoder_auc_roc: 0.91 },
-            timestamp: "2026-04-23T05:00:00",
-          },
-          h1b_approval: {
-            problem: "h1b_approval",
-            metrics: { test_auc_roc: 0.79 },
-            timestamp: "2026-04-23T04:30:00",
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    ) as unknown as typeof fetch;
+  it("returns exactly one row per catalogued model", async () => {
+    mockModelsEndpoint({});
+    vi.mocked(getRunHistory).mockResolvedValue([]);
 
+    const rows = await getDashboardRows();
+    expect(rows.map((r) => r.modelSlug).sort()).toEqual([
+      "churn",
+      "credit-risk",
+      "fraud",
+    ]);
+  });
+
+  it("joins checkpoint metadata into the matching row", async () => {
+    mockModelsEndpoint(MODELS_RESPONSE);
     vi.mocked(getRunHistory).mockResolvedValue([
-      { endTime: 1, metric: 0.81 },
-      { endTime: 2, metric: 0.85 },
+      { endTime: 1, metric: 0.28 },
+      { endTime: 2, metric: 0.31 },
     ]);
 
-    const rows = await getDashboardRows();
-    // 6 industries × ~3-4 models = 20 entries (registry source-of-truth).
-    expect(rows.length).toBeGreaterThanOrEqual(20);
-
-    // Find the credit-risk row and verify its shape.
-    const cr = rows.find((r) => r.modelSlug === "credit-risk");
-    expect(cr).toBeDefined();
-    expect(cr?.industrySlug).toBe("fintech");
-    expect(cr?.industryTitle).toBe("Fintech");
-    expect(cr?.status).toBe("ready");
-    expect(cr?.href).toBe("/fintech/credit-risk");
-    expect(cr?.keyMetric?.value).toBe(0.85);
-    expect(cr?.keyMetric?.label).toMatch(/auc/i);
-    expect(cr?.lastTrained).toBe("2026-04-12T13:40:00");
-    expect(cr?.history).toEqual([0.81, 0.85]);
-
-    // A model with no checkpoint in /models still shows up but as
-    // not_built (when industries.ts also has it as ready: false) or
-    // ready (when industries.ts says ready but checkpoint absent — we
-    // treat as not_built since /models is the runtime truth).
-    const treatmentPlan = rows.find((r) => r.modelSlug === "treatment-plan");
-    expect(treatmentPlan?.status).toBe("not_built");
-    expect(treatmentPlan?.keyMetric).toBeNull();
-    expect(treatmentPlan?.history).toEqual([]);
+    const row = (await getDashboardRows()).find((r) => r.modelSlug === "credit-risk");
+    expect(row?.industrySlug).toBe("fintech");
+    expect(row?.status).toBe("ready");
+    expect(row?.href).toBe("/fintech/credit-risk");
+    expect(row?.keyMetric?.value).toBe(0.31);
+    expect(row?.lastTrained).toBe("2026-07-24T13:40:00+00:00");
+    expect(row?.history).toEqual([0.28, 0.31]);
   });
 
-  it("returns rows with empty history when MLflow getRunHistory throws", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          credit_risk: {
-            problem: "credit_risk",
-            metrics: { test_auc_roc: 0.85 },
-            timestamp: "2026-04-12T13:40:00",
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    ) as unknown as typeof fetch;
+  it("surfaces PR-AUC, not ROC-AUC, as the key metric", async () => {
+    // At 3.5% positives ROC-AUC is dominated by the true-negative mass; a weak
+    // model still scores 0.8+. Showing it as the headline would repeat the
+    // mistake this repository was rebuilt to correct.
+    mockModelsEndpoint(MODELS_RESPONSE);
+    vi.mocked(getRunHistory).mockResolvedValue([]);
 
-    vi.mocked(getRunHistory).mockRejectedValue(new Error("MLflow down"));
-
-    const rows = await getDashboardRows();
-    const cr = rows.find((r) => r.modelSlug === "credit-risk");
-    // Sparkline degrades gracefully — no crash, just an empty array.
-    expect(cr?.history).toEqual([]);
-    // Other fields still populate from FastAPI.
-    expect(cr?.status).toBe("ready");
-    expect(cr?.keyMetric?.value).toBe(0.85);
+    const row = (await getDashboardRows()).find((r) => r.modelSlug === "credit-risk");
+    expect(row?.keyMetric?.label).toMatch(/PR-AUC/);
+    expect(row?.keyMetric?.value).toBe(0.31);
   });
 
-  it("returns all-not_built rows when FastAPI /models is unreachable", async () => {
+  it("reads the churn metric from the cross-validated mean", async () => {
+    // Churn is scored by 5-fold CV; there is no single test_ value to read.
+    mockModelsEndpoint({
+      churn: {
+        problem: "churn",
+        metrics: { cv_pr_auc_mean: 0.66, cv_pr_auc_std: 0.03 },
+        trained_at: "2026-07-24T14:00:00+00:00",
+      },
+    });
+    vi.mocked(getRunHistory).mockResolvedValue([]);
+
+    const row = (await getDashboardRows()).find((r) => r.modelSlug === "churn");
+    expect(row?.keyMetric?.value).toBe(0.66);
+    expect(row?.keyMetric?.label).toContain("5-fold");
+  });
+
+  it("marks a model with no checkpoint as not_built", async () => {
+    mockModelsEndpoint(MODELS_RESPONSE);
+    vi.mocked(getRunHistory).mockResolvedValue([]);
+
+    const row = (await getDashboardRows()).find((r) => r.modelSlug === "fraud");
+    expect(row?.status).toBe("not_built");
+    expect(row?.keyMetric).toBeNull();
+    expect(row?.history).toEqual([]);
+  });
+
+  it("keeps rendering when MLflow is down", async () => {
+    mockModelsEndpoint(MODELS_RESPONSE);
+    vi.mocked(getRunHistory).mockRejectedValue(new Error("MLflow unreachable"));
+
+    const row = (await getDashboardRows()).find((r) => r.modelSlug === "credit-risk");
+    // The sparkline is decorative; an outage must not take the page down.
+    expect(row?.history).toEqual([]);
+    expect(row?.status).toBe("ready");
+    expect(row?.keyMetric?.value).toBe(0.31);
+  });
+
+  it("keeps rendering when FastAPI is unreachable", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Connection refused"));
     vi.mocked(getRunHistory).mockResolvedValue([]);
 
     const rows = await getDashboardRows();
-    expect(rows.length).toBeGreaterThanOrEqual(20);
-    // Without any /models data, no row can be ready — every row falls
-    // back to not_built so the dashboard still renders.
+    expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.status === "not_built")).toBe(true);
+  });
+
+  it("shows every row as not_built on a fresh clone", async () => {
+    // This is the repository's actual current state: the code is complete but
+    // no model has been trained, because the datasets need Kaggle credentials.
+    mockModelsEndpoint({});
+    vi.mocked(getRunHistory).mockResolvedValue([]);
+
+    const rows = await getDashboardRows();
+    expect(rows.every((r) => r.status === "not_built")).toBe(true);
+    expect(rows.every((r) => r.keyMetric === null)).toBe(true);
   });
 });

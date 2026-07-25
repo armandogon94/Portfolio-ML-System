@@ -1,36 +1,23 @@
 /**
- * Typed FastAPI client.
+ * Typed FastAPI client. Six endpoints, one shared error type.
  *
- * All calls target relative `/api/*` paths which Next.js rewrites
- * (see next.config.mjs) to the FastAPI server (`INTERNAL_API_URL`).
- * That keeps the browser on a single origin (the Next.js app), so
- * there are no CORS preflights and no backend-side middleware to
- * maintain. Response bodies are validated with Zod at the boundary —
- * type-safe even if FastAPI returns an unexpected shape.
+ * All calls target relative `/api/*` paths which Next.js rewrites (see
+ * `next.config.mjs`) to the FastAPI server at `INTERNAL_API_URL`. That keeps the
+ * browser on a single origin, so there are no CORS preflights and no backend
+ * middleware to maintain. Response bodies are validated with Zod at the boundary,
+ * so a backend shape change surfaces here rather than as `undefined` in a chart.
  *
- * Industry sections are grouped so Phase A.3–A.8 agents can append to
- * their own industry without touching others.
+ * The 503 case is first-class. A fresh clone has no trained checkpoints, and the
+ * API says so explicitly with the command that fixes it. The UI surfaces that
+ * message verbatim instead of rendering a generic failure.
  */
 import { z } from "zod";
 
-import type {
-  CreditRiskInput,
-  CustomerChurnInput,
-  DeliveryEtaInput,
-  DemandRequest,
-  DentalNoShowInput,
-  FraudInput,
-  H1BApprovalInput,
-  HeartDiseaseInput,
-  PricePredictionInput,
-  RentalPriceInput,
-} from "@/lib/schemas";
-
-// ─── Shared infrastructure ─────────────────────────────────────────────────
+import type { ChurnInput, CreditRiskInput, FraudInput } from "@/lib/schemas";
 
 const API_BASE = "/api";
 
-/** Thrown for any non-2xx HTTP response. Carries status + parsed body. */
+/** Thrown for any non-2xx response. Carries the status and the parsed body. */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -41,44 +28,89 @@ export class ApiError extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown, responseSchema: z.ZodSchema<T>): Promise<T> {
+/** True when the failure is "this model has not been trained yet". */
+export function isUntrainedModelError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 503;
+}
+
+/** Human-readable message for any error thrown by this module. */
+export function apiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body as { detail?: unknown } | null;
+    if (body && typeof body.detail === "string") return body.detail;
+    return `API ${error.status}`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function post<T>(path: string, body: unknown, schema: z.ZodSchema<T>): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const errBody = await res.json().catch(() => null);
-    throw new ApiError(res.status, errBody);
+    const errorBody = await res.json().catch(() => null);
+    throw new ApiError(res.status, errorBody);
   }
-  const json = await res.json();
-  return responseSchema.parse(json);
+  return schema.parse(await res.json());
 }
 
-// ─── Industry: Fintech ─────────────────────────────────────────────────────
-
-export const RecommendationSchema = z.enum(["APPROVE", "REVIEW", "DECLINE"]);
-export type Recommendation = z.infer<typeof RecommendationSchema>;
-
-export const CreditRiskPredictionSchema = z.object({
-  risk_score: z.number().min(0).max(1),
-  recommendation: RecommendationSchema,
-  confidence: z.number().min(0).max(1),
-  default_probability: z.number().min(0).max(1),
-});
-export type CreditRiskPrediction = z.infer<typeof CreditRiskPredictionSchema>;
+// ─── Shared response shapes ────────────────────────────────────────────────
 
 export const ExplanationSchema = z.object({
   feature_importances: z.record(z.string(), z.number()),
-  top_features: z.array(
-    z.object({
-      feature: z.string(),
-      importance: z.number(),
-    }),
-  ),
+  top_features: z.array(z.object({ feature: z.string(), importance: z.number() })),
   explanation_type: z.string(),
 });
 export type Explanation = z.infer<typeof ExplanationSchema>;
+
+/** Provenance every prediction carries: which commit trained the model, on what. */
+const ProvenanceFields = {
+  model_version: z.string(),
+  trained_on: z.string(),
+};
+
+// ─── Payment fraud ─────────────────────────────────────────────────────────
+
+export const FraudRiskBandSchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+export type FraudRiskBand = z.infer<typeof FraudRiskBandSchema>;
+
+export const FraudActionSchema = z.enum([
+  "AUTO_APPROVE",
+  "MONITOR",
+  "MANUAL_REVIEW",
+  "DECLINE",
+]);
+export type FraudAction = z.infer<typeof FraudActionSchema>;
+
+export const FraudPredictionSchema = z.object({
+  fraud_probability: z.number().min(0).max(1),
+  risk_band: FraudRiskBandSchema,
+  recommended_action: FraudActionSchema,
+  ...ProvenanceFields,
+});
+export type FraudPrediction = z.infer<typeof FraudPredictionSchema>;
+
+export const predictFraud = (input: FraudInput) =>
+  post("/predict/fraud", input, FraudPredictionSchema);
+
+export const explainFraud = (input: FraudInput) =>
+  post("/explain/fraud", input, ExplanationSchema);
+
+// ─── Consumer credit risk ──────────────────────────────────────────────────
+
+export const CreditDecisionSchema = z.enum(["APPROVE", "REVIEW", "DECLINE"]);
+export type CreditDecision = z.infer<typeof CreditDecisionSchema>;
+
+export const CreditRiskPredictionSchema = z.object({
+  default_probability: z.number().min(0).max(1),
+  decision: CreditDecisionSchema,
+  // The API states in-band that these thresholds are illustrative, not policy.
+  threshold_basis: z.string(),
+  ...ProvenanceFields,
+});
+export type CreditRiskPrediction = z.infer<typeof CreditRiskPredictionSchema>;
 
 export const predictCreditRisk = (input: CreditRiskInput) =>
   post("/predict/credit-risk", input, CreditRiskPredictionSchema);
@@ -86,146 +118,26 @@ export const predictCreditRisk = (input: CreditRiskInput) =>
 export const explainCreditRisk = (input: CreditRiskInput) =>
   post("/explain/credit-risk", input, ExplanationSchema);
 
-export const RetentionActionSchema = z.enum(["URGENT_OUTREACH", "PROACTIVE_CHECKIN", "NO_ACTION"]);
+// ─── Card attrition ────────────────────────────────────────────────────────
+
+export const RetentionActionSchema = z.enum([
+  "NO_ACTION",
+  "PROACTIVE_CHECKIN",
+  "URGENT_OUTREACH",
+]);
 export type RetentionAction = z.infer<typeof RetentionActionSchema>;
 
-export const CustomerChurnPredictionSchema = z.object({
-  probability_churn: z.number().min(0).max(1),
-  retention_recommendation: RetentionActionSchema,
-  confidence: z.number().min(0).max(1),
+export const ChurnPredictionSchema = z.object({
+  attrition_probability: z.number().min(0).max(1),
+  retention_action: RetentionActionSchema,
+  // n = 10,127 and the dataset is easy. The API ships that caveat with the score.
+  caveat: z.string(),
+  ...ProvenanceFields,
 });
-export type CustomerChurnPrediction = z.infer<typeof CustomerChurnPredictionSchema>;
+export type ChurnPrediction = z.infer<typeof ChurnPredictionSchema>;
 
-export const predictCustomerChurn = (input: CustomerChurnInput) =>
-  post("/predict/churn", input, CustomerChurnPredictionSchema);
+export const predictChurn = (input: ChurnInput) =>
+  post("/predict/churn", input, ChurnPredictionSchema);
 
-export const explainCustomerChurn = (input: CustomerChurnInput) =>
+export const explainChurn = (input: ChurnInput) =>
   post("/explain/churn", input, ExplanationSchema);
-
-// Fraud-detection (A.9.4 — Gradio fraud-tab port).
-export const FraudRiskLevelSchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
-export type FraudRiskLevel = z.infer<typeof FraudRiskLevelSchema>;
-
-export const FraudPredictionSchema = z.object({
-  fraud_probability: z.number().min(0).max(1),
-  risk_level: FraudRiskLevelSchema,
-  reconstruction_error: z.number(),
-  anomaly_threshold: z.number(),
-  is_anomaly_autoencoder: z.boolean(),
-  is_anomaly_isolation_forest: z.boolean(),
-  isolation_forest_score: z.number(),
-});
-export type FraudPrediction = z.infer<typeof FraudPredictionSchema>;
-
-export const predictFraud = (input: FraudInput) =>
-  post("/predict/fraud", input, FraudPredictionSchema);
-
-export const explainFraud = (input: FraudInput) => post("/explain/fraud", input, ExplanationSchema);
-
-// ─── Industry: Real Estate (A.3 appends here) ──────────────────────────────
-
-export const RentalPricePredictionSchema = z.object({
-  predicted_rate: z.number(),
-  confidence_interval: z.tuple([z.number(), z.number()]).optional(),
-});
-export type RentalPricePrediction = z.infer<typeof RentalPricePredictionSchema>;
-
-export const predictRentalPrice = (input: RentalPriceInput) =>
-  post("/predict/rental-price", input, RentalPricePredictionSchema);
-
-export const explainRentalPrice = (input: RentalPriceInput) =>
-  post("/explain/rental-price", input, ExplanationSchema);
-
-// Price prediction (A.9.5 — Gradio price-tab port). Synthetic-data
-// LightGBM regressor — predicted_price plus a +/-10% range mirroring
-// the predictor's hardcoded confidence band.
-export const PricePredictionSchema = z.object({
-  predicted_price: z.number(),
-  price_range_low: z.number(),
-  price_range_high: z.number(),
-});
-export type PricePrediction = z.infer<typeof PricePredictionSchema>;
-
-export const predictPrice = (input: PricePredictionInput) =>
-  post("/predict/price", input, PricePredictionSchema);
-
-export const explainPrice = (input: PricePredictionInput) =>
-  post("/explain/price", input, ExplanationSchema);
-
-// ─── Industry: Dental (A.4 appends here) ───────────────────────────────────
-
-export const RiskBandSchema = z.enum(["HIGH_RISK", "MODERATE", "LIKELY_TO_SHOW"]);
-export type RiskBand = z.infer<typeof RiskBandSchema>;
-
-export const DentalNoShowPredictionSchema = z.object({
-  probability_no_show: z.number().min(0).max(1),
-  risk_band: RiskBandSchema,
-  confidence: z.number().min(0).max(1),
-});
-export type DentalNoShowPrediction = z.infer<typeof DentalNoShowPredictionSchema>;
-
-export const predictDentalNoShow = (input: DentalNoShowInput) =>
-  post("/predict/no-show", input, DentalNoShowPredictionSchema);
-
-export const explainDentalNoShow = (input: DentalNoShowInput) =>
-  post("/explain/no-show", input, ExplanationSchema);
-
-// ─── Industry: Healthcare (A.5 appends here) ───────────────────────────────
-
-export const HeartRiskBandSchema = z.enum(["HIGH", "ELEVATED", "LOW"]);
-export const HeartDiseasePredictionSchema = z.object({
-  probability_disease: z.number().min(0).max(1),
-  risk_band: HeartRiskBandSchema,
-  confidence: z.number().min(0).max(1),
-});
-export type HeartDiseasePrediction = z.infer<typeof HeartDiseasePredictionSchema>;
-export const predictHeartDisease = (input: HeartDiseaseInput) =>
-  post("/predict/heart-disease", input, HeartDiseasePredictionSchema);
-export const explainHeartDisease = (input: HeartDiseaseInput) =>
-  post("/explain/heart-disease", input, ExplanationSchema);
-
-// ─── Industry: Logistics (A.7 appends here) ────────────────────────────────
-
-export const DeliveryEtaPredictionSchema = z.object({
-  eta_hours: z.number(),
-  confidence_interval: z.tuple([z.number(), z.number()]),
-});
-export type DeliveryEtaPrediction = z.infer<typeof DeliveryEtaPredictionSchema>;
-
-export const predictDeliveryEta = (input: DeliveryEtaInput) =>
-  post("/predict/eta", input, DeliveryEtaPredictionSchema);
-
-export const explainDeliveryEta = (input: DeliveryEtaInput) =>
-  post("/explain/eta", input, ExplanationSchema);
-
-// Demand forecast (A.9.6 — Gradio demand-tab port). PyTorch LSTM,
-// 7-day forecast per product category. No /explain endpoint — the
-// gradient explainer isn't wired for the LSTM yet.
-export const DemandForecastSchema = z.object({
-  product: z.string(),
-  forecast_days: z.number().int(),
-  predictions: z.array(z.number()),
-  avg_predicted_demand: z.number(),
-});
-export type DemandForecast = z.infer<typeof DemandForecastSchema>;
-
-export const predictDemand = (input: DemandRequest) =>
-  post("/predict/demand", input, DemandForecastSchema);
-
-// ─── Industry: Legal/Immigration (A.8 appends here) ────────────────────────
-
-export const H1BRecommendationSchema = z.enum(["APPROVE_LIKELY", "REVIEW", "DECLINE_LIKELY"]);
-export type H1BRecommendation = z.infer<typeof H1BRecommendationSchema>;
-
-export const H1BApprovalPredictionSchema = z.object({
-  probability_approval: z.number().min(0).max(1),
-  recommendation: H1BRecommendationSchema,
-  confidence: z.number().min(0).max(1),
-});
-export type H1BApprovalPrediction = z.infer<typeof H1BApprovalPredictionSchema>;
-
-export const predictH1bApproval = (input: H1BApprovalInput) =>
-  post("/predict/h1b-approval", input, H1BApprovalPredictionSchema);
-
-export const explainH1bApproval = (input: H1BApprovalInput) =>
-  post("/explain/h1b-approval", input, ExplanationSchema);

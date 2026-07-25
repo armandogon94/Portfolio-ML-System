@@ -30,6 +30,7 @@ import logging
 import platform
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -241,6 +242,9 @@ class TabularTrainer(BaseTrainer):
             "model_type": self.config["model"]["type"],
             "seed": self.seed,
             "git_sha": _git_sha(),
+            # ISO-8601 UTC. Read by the dashboard's "last trained" column and by
+            # anyone asking whether a published number predates a code change.
+            "trained_at": datetime.now(timezone.utc).isoformat(),
             "dataset": self.config["data"]["source"],
             "split": self.config["split"],
             "feature_columns": self.feature_columns,
