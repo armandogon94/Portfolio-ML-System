@@ -92,8 +92,9 @@ else
   pass "uv sync --frozen"
 
   # -m 'not network' matches what CI runs. No credentials, no downloads.
-  if uv run pytest -m "not network" -q >"$WORK/pytest.log" 2>&1; then
-    pass "pytest ($(grep -oE '[0-9]+ passed' "$WORK/pytest.log" | tail -1))"
+  if uv run pytest -m "not network" >"$WORK/pytest.log" 2>&1; then
+    SUMMARY="$(grep -oE '[0-9]+ passed[^=]*' "$WORK/pytest.log" | tail -1 | sed 's/ *$//')"
+    pass "pytest — ${SUMMARY:-completed}"
   else
     tail -40 "$WORK/pytest.log"
     fail "the test suite does not pass from a fresh clone" ""

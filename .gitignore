@@ -69,3 +69,8 @@ ops/ports.local.md
 # Generated state
 artifacts/
 .coverage*
+
+# Superseded process docs — content migrated to docs/adr/ (0002, 0004).
+# Kept out of the tree entirely; git history is the record.
+/SPEC.md
+/decision.md
