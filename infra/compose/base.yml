@@ -28,7 +28,7 @@ services:
       - ml-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/')\""]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -60,7 +60,7 @@ services:
       - ml-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -88,7 +88,10 @@ services:
       - ml-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3070/"]
+      # 127.0.0.1, not localhost: this image resolves localhost to ::1 only while
+      # the Next standalone server binds IPv4 0.0.0.0, so wget got ECONNREFUSED
+      # and the container stayed unhealthy while serving 200 to the host.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3070/"]
       interval: 30s
       timeout: 10s
       retries: 3

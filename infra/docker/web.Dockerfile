@@ -59,7 +59,13 @@ EXPOSE 3070
 
 # Liveness: fetch the landing page. wget is built into busybox on
 # alpine so no extra package needed. --spider discards the body.
+#
+# 127.0.0.1, not localhost. This image's /etc/hosts maps localhost to ::1 only,
+# while the Next standalone server binds IPv4 0.0.0.0. wget resolved ::1, got
+# ECONNREFUSED, and the container sat "unhealthy" forever while serving 200 to
+# the host — which is what kept stage 7 of scripts/verify_fresh_clone.sh red and
+# had `docs/PROGRESS.md` recording the Docker stage as NOT COMPLETED.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD wget --quiet --spider http://localhost:3070/ || exit 1
+  CMD wget --quiet --spider http://127.0.0.1:3070/ || exit 1
 
 CMD ["node", "server.js"]
