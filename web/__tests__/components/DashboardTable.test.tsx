@@ -69,7 +69,9 @@ describe("DashboardTable", () => {
     // vertical cannot reappear in the dropdown after being deleted.
     render(<DashboardTable rows={FIXTURE} />);
     const filter = screen.getByLabelText(/industry filter/i) as HTMLSelectElement;
-    expect([...filter.options].map((o) => o.value)).toEqual(["all", "fintech"]);
+    // Array.from, not a spread: HTMLOptionsCollection is an array-LIKE with an
+    // iterator that TypeScript only allows spreading under downlevelIteration.
+    expect(Array.from(filter.options).map((o) => o.value)).toEqual(["all", "fintech"]);
   });
 
   it("filters rows to the selected industry", async () => {
