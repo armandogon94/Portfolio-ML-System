@@ -39,15 +39,27 @@ _MISSING_CREDS_MSG = (
     "needs option (1) or (2)."
 )
 
-#: Written by ``kagglehub login``. kagglehub reads it directly, so its presence
-#: means credentials exist even though there is nothing to export.
-KAGGLEHUB_TOKEN_PATH = Path.home() / ".kaggle" / "access_token"
+
+def kagglehub_token_path() -> Path:
+    """Path of the token written by ``kagglehub login``.
+
+    Resolved on every call rather than bound at import. As a module-level
+    constant this was evaluated once, against whatever ``Path.home()`` returned
+    the first time the module happened to be imported — so a caller that
+    redirects the home directory (the test suite does, to assert the
+    no-credentials path) permanently pinned the constant to a temporary
+    directory, and every later credential check in the same process reported
+    "no token" against a home that was never real. ``load_kaggle_creds`` already
+    resolves ``Path.home()`` per call; this now matches it.
+    """
+    return Path.home() / ".kaggle" / "access_token"
 
 
 def has_kagglehub_oauth_token() -> bool:
     """True when ``kagglehub login`` has left a token kagglehub can use itself."""
     try:
-        return KAGGLEHUB_TOKEN_PATH.is_file() and KAGGLEHUB_TOKEN_PATH.stat().st_size > 0
+        token = kagglehub_token_path()
+        return token.is_file() and token.stat().st_size > 0
     except OSError:
         return False
 
@@ -94,7 +106,7 @@ def ensure_kaggle_env() -> None:
         creds = load_kaggle_creds()
     except RuntimeError:
         if has_kagglehub_oauth_token():
-            logger.debug("Using the kagglehub OAuth token at %s", KAGGLEHUB_TOKEN_PATH)
+            logger.debug("Using the kagglehub OAuth token at %s", kagglehub_token_path())
             return
         raise
     os.environ["KAGGLE_USERNAME"] = creds["username"]

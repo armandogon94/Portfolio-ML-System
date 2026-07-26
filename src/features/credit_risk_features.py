@@ -93,17 +93,28 @@ def engineer_features(
             "float32"
         )
 
-    if {"issue_d", "earliest_cr_line"}.issubset(out.columns):
+    # The adapter parses these two to datetime64, but the serving path builds its
+    # frame from a request payload where any unsupplied key is a float NaN. Coercing
+    # here — rather than assuming a dtype — is what keeps this one implementation
+    # genuinely shared: it is a no-op on the training frame and yields NaT (and so
+    # a NaN feature, which LightGBM reads as "unknown") on a partial request.
+    dates = {
+        column: pd.to_datetime(out[column], errors="coerce")
+        for column in ("issue_d", "earliest_cr_line")
+        if column in out.columns
+    }
+
+    if {"issue_d", "earliest_cr_line"}.issubset(dates):
         # Credit-history length at origination, in months. Derived from two
         # origination-time dates, so it is not leakage.
-        months = (out["issue_d"] - out["earliest_cr_line"]).dt.days / 30.44
+        months = (dates["issue_d"] - dates["earliest_cr_line"]).dt.days / 30.44
         out["credit_history_months"] = months.astype("float32")
 
-    if "issue_d" in out.columns:
+    if "issue_d" in dates:
         # Vintage year is a legitimate feature (macro conditions differ by
         # cohort) but it is also the split key, so it is excluded from the
         # feature list below. Kept here only for the split and for reporting.
-        out["issue_year"] = out["issue_d"].dt.year.astype("float32")
+        out["issue_year"] = dates["issue_d"].dt.year.astype("float32")
 
     return out, artifacts
 
