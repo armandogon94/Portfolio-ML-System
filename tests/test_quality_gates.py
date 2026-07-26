@@ -28,6 +28,43 @@ from src.training.tabular import TabularTrainer
 
 registry = CheckpointRegistry()
 
+#: Every run whose numbers are *published*, which is not the same set as ``PROBLEMS``.
+#: ``PROBLEMS`` is the closed list of three business problems; a problem can have more
+#: than one dataset config (``fraud.yaml`` for IEEE-CIS, ``fraud_ulb.yaml`` for OpenML
+#: 1597). The gates must follow the **configs that have a trained checkpoint**, because
+#: those are the ones whose figures reach the README. Parametrising over ``PROBLEMS``
+#: left `fraud_ulb` — the measured result that replaced the retracted 0.964 — ungated.
+#: Derived, not hardcoded, so a newly trained run is gated the moment it exists.
+GATED_RUNS = (
+    tuple(
+        sorted(
+            path.stem
+            for path in (registry.root.parent / "configs").glob("*.yaml")
+            if (registry.root / path.stem / "metadata.json").exists()
+        )
+    )
+    or PROBLEMS
+)
+
+#: Union of declared problems and published runs. Keeping ``PROBLEMS`` in the
+#: parametrisation preserves the loud, informative skip for ``fraud`` (blocked on Kaggle
+#: credentials) instead of silently dropping it from the suite.
+CHECKED_RUNS = tuple(sorted(set(PROBLEMS) | set(GATED_RUNS)))
+
+
+def _banded_metric(problem: str, metrics: dict, config: dict) -> tuple[str, float | None]:
+    """Return the metric the sanity band actually names, and its measured value.
+
+    The band is declared per config: ``fraud_ulb`` bands **pr_auc** while the others band
+    **roc_auc**. Reading ROC-AUC unconditionally is what made this gate assert
+    ``0.9810 <= 0.90`` for ``fraud_ulb`` -- comparing a ROC-AUC against a PR-AUC bound.
+    The measured PR-AUC, 0.8569, sits inside its band; the gate was wrong, not the result.
+    Widening the bound to accommodate the mismatch is the move ADR-0003 forbids.
+    """
+    metric = config["sanity_band"].get("metric", "roc_auc")
+    key = f"cv_{metric}_mean" if config["split"]["type"] == "stratified_kfold" else f"test_{metric}"
+    return metric, metrics.get(key)
+
 
 def _metadata(problem: str) -> dict:
     path = registry.root / problem / "metadata.json"
@@ -41,36 +78,43 @@ def _metadata(problem: str) -> dict:
     return json.loads(path.read_text())
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
+@pytest.mark.parametrize("problem", CHECKED_RUNS)
 def test_metric_clears_the_configured_floor(problem):
     metrics = _metadata(problem)["metrics"]
     config = load_config(problem)
     floor = config["sanity_band"]["min"]
-    measured = (
-        metrics.get("cv_roc_auc_mean")
-        if config["split"]["type"] == "stratified_kfold"
-        else metrics.get("test_roc_auc")
-    )
-    assert measured is not None, "no ROC-AUC recorded in metadata.json"
-    assert measured >= floor, f"{problem}: ROC-AUC {measured:.4f} below floor {floor}"
+    metric, measured = _banded_metric(problem, metrics, config)
+    assert measured is not None, f"{problem}: no {metric} recorded in metadata.json"
+    assert measured >= floor, f"{problem}: {metric} {measured:.4f} below floor {floor}"
 
 
 @pytest.mark.parametrize(
     "problem",
-    [problem for problem in PROBLEMS if "max" in load_config(problem).get("sanity_band", {})],
+    [problem for problem in CHECKED_RUNS if "max" in load_config(problem).get("sanity_band", {})],
 )
 def test_metric_stays_inside_the_configured_sanity_band(problem):
     metrics = _metadata(problem)["metrics"]
     config = load_config(problem)
     upper = config["sanity_band"]["max"]
-    measured = (
-        metrics.get("cv_roc_auc_mean")
-        if config["split"]["type"] == "stratified_kfold"
-        else metrics.get("test_roc_auc")
-    )
+    metric, measured = _banded_metric(problem, metrics, config)
+    assert measured is not None, f"{problem}: no {metric} recorded in metadata.json"
     assert measured <= upper, (
-        f"{problem}: ROC-AUC {measured:.4f} is above the expected-range sanity "
+        f"{problem}: {metric} {measured:.4f} is above the expected-range sanity "
         f"band {upper}. Investigate the split, features, and target before publishing."
+    )
+
+
+def test_every_published_run_is_covered_by_the_metric_gates():
+    """Guard the guard: a trained checkpoint must never sit outside the gates.
+
+    ``fraud_ulb`` -- the measured result that replaced the retracted 0.964 -- was
+    published in the README while every gate parametrised over ``PROBLEMS``, which omits
+    it. This fails if that ever recurs.
+    """
+    ungated = set(GATED_RUNS) - set(CHECKED_RUNS)
+    assert not ungated, f"trained checkpoints outside the metric gates: {sorted(ungated)}"
+    assert "fraud_ulb" in CHECKED_RUNS, (
+        "fraud_ulb has a checkpoint and is published in the README; it must be gated"
     )
 
 
