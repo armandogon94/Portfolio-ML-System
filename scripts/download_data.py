@@ -54,8 +54,11 @@ DATASETS = {
     },
     "lending-club": {
         "provenance": lending_club.PROVENANCE,
+        # Measured 2026-07-26: the two .gz files are 648 MB together
+        # (accepted 392.6 + rejected 255.5), kagglehub transfers ~1.26 GB, and
+        # it also extracts each archive, leaving a ~3.94 GB cache directory.
         "approx_mb": 648,
-        "expanded_mb": 648,
+        "expanded_mb": 3936,
         "primary_file": lending_club.PROVENANCE["filename"],
     },
     "cc-churn": {

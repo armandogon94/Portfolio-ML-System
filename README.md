@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Three real-money fintech problems — payment fraud, consumer credit risk, and card
-attrition — with two accepted real-data training runs, tracked in MLflow and
+attrition — with three accepted real-data training runs, tracked in MLflow and
 served behind a FastAPI inference API with SHAP explanations. It was rebuilt
 from a version whose headline metric was real, reproducible, and completely
 meaningless.
@@ -16,7 +16,7 @@ meaningless.
 - **Focus** — payment fraud · consumer credit risk · card attrition
 - **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
 - **Stack** — Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
-- **Output** — a results table where every cell traces to a CSV written by a training run. That is now true for the two measured rows, `fraud_ulb` and `churn`; three rows remain empty because IEEE-CIS is credential-blocked, its autoencoder needs the same data, and LendingClub was not run.
+- **Output** — a results table where every filled cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows remain empty because both need the credential-blocked IEEE-CIS competition data.
 
 📄 **[Read the full methodology & analysis →](reports/RESULTS.md)**
 
@@ -58,15 +58,23 @@ class balance and disclose what the underlying data can actually support.
 Full reasoning, including the enforcement that stops this recurring:
 **[ADR-0003 — Real public data only](docs/adr/0003-real-data-over-synthetic.md)**.
 
+The retracted fraud number was **0.964 ROC-AUC** on labels I generated. On real
+labels, the measured replacements are **0.9810 ROC-AUC / 0.8569 PR-AUC** for
+`fraud_ulb` and **0.7160 ROC-AUC / 0.3935 PR-AUC** for `credit_risk`. The
+credit-risk result is the least flattering of the three measured rows, and it is
+also the one that most resembles what a consumer-credit model scores on
+origination-time data.
+
 ---
 
 ## Current status
 
-**Two of five result rows are measured on real data: `fraud_ulb` and `churn`.**
+**Three of five result rows are measured on real data: `fraud_ulb`,
+`credit_risk`, and `churn`.**
 
-The other three remain empty. IEEE-CIS is blocked because its competition
+The other two remain empty. IEEE-CIS is blocked because its competition
 download needs a classic `kaggle.json` token rather than the working Kaggle OAuth
-token; `fraud_autoencoder` needs the same data. LendingClub has not been run.
+token; `fraud_autoencoder` needs the same data.
 
 [`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
 commands to unblock it.
@@ -81,6 +89,11 @@ commands to unblock it.
 - **The credential-free fraud result beat its logistic baseline on the metric
   that matters.** ULB/OpenML 1597 measured PR-AUC **0.8569 ± 0.0331** against
   **0.7300 ± 0.0279** for logistic regression, all out of fold.
+- **Gradient boosting was barely better than logistic regression on
+  LendingClub.** LightGBM measured **0.3935 PR-AUC** against **0.3720**, a
+  **+0.0215** margin. The test partition is censored by terminal-status
+  filtering at the 2018Q4 data cut, so this is not an unbiased estimate of
+  forward default risk.
 - **The churn score is not prospective.** Its **0.9735 ± 0.0078 PR-AUC**
   substantially detects an attrition that already happened because current
   status and trailing-activity features describe the same period.
@@ -104,14 +117,13 @@ uv run python scripts/evaluate.py --markdown
 | Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM |  |  |  |  | `reports/fraud_metrics.csv` |
 | Fraud (`fraud_ulb`, credential-free) | ULB / OpenML 1597 · 284,807 × 30 · 0.1727% | 5-fold stratified CV | LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | [`reports/fraud_ulb_metrics.csv`](reports/fraud_ulb_metrics.csv) |
 | Fraud (unsup. baseline) | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | Autoencoder (MPS) |  |  |  |  | `reports/fraud_autoencoder_metrics.csv` |
-| Credit risk | LendingClub · terminal statuses only | time (`issue_d`) | LightGBM |  |  |  |  | `reports/credit_risk_metrics.csv` |
+| Credit risk | LendingClub · 1,345,310 terminal-status rows × 32 features · 19.96% default | time (`issue_d`, actual 71.6/8.8/19.6) | LightGBM | **0.3935** | 0.7160 | 0.3720 | 0.0215 | [`reports/credit_risk_metrics.csv`](reports/credit_risk_metrics.csv) |
 | Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | [`reports/churn_metrics.csv`](reports/churn_metrics.csv) |
 
-<sub>Two rows are measured; three remain empty. IEEE-CIS is blocked on a classic
-`kaggle.json` competition token, the autoencoder needs that dataset, and the
-LendingClub download was not attempted. `scripts/evaluate.py` reads every filled
-cell from training-written `reports/*_metrics.csv`; it computes nothing. Full
-config, caveats, and provenance:
+<sub>Three rows are measured; two remain empty. IEEE-CIS is blocked on a classic
+`kaggle.json` competition token, and the autoencoder needs that dataset.
+`scripts/evaluate.py` reads every filled cell from training-written
+`reports/*_metrics.csv`; it computes nothing. Full config, caveats, and provenance:
 [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
 
 <sub>For stratified cross-validation, the displayed and gated result is the CV
@@ -450,9 +462,9 @@ The network exclusion now lives visibly in
 
 ## Limitations & Known Caveats
 
-- **Only two of five rows are measured.** ULB/OpenML and churn have accepted
-  out-of-fold results. IEEE-CIS remains credential-blocked, its autoencoder needs
-  the same data, and LendingClub was not run.
+- **Three of five rows are measured.** ULB/OpenML and churn have accepted
+  out-of-fold results, and LendingClub has a held-out temporal result. IEEE-CIS
+  remains credential-blocked, and its autoencoder needs the same data.
 - **IEEE-CIS test labels do not exist.** The competition's `test_transaction.csv`
   is unlabelled, so evaluation is a temporal split *within* the training file.
   That is the only honest option, and a random split would inflate AUC by putting
@@ -468,6 +480,11 @@ The network exclusion now lives visibly in
 - **The credit-risk thresholds are illustrative, not a credit policy.** A real
   approve/decline cut point comes from expected loss at a target approval rate,
   which needs a pricing model this repository does not contain.
+- **Credit risk is post-pricing.** `int_rate`, `grade_ordinal`, and
+  `sub_grade_ordinal` encode LendingClub's own origination-time risk pricing.
+  The model predicts default given that pricing; it is not an independent
+  approval or pricing model. The comparison without those fields has not been
+  run.
 - **MPS on the host, CPU in Docker.** `src/device.py` selects MPS on Apple
   Silicon, but `infra/docker/api.Dockerfile` force-installs CPU PyTorch — MPS is
   macOS-only and cannot exist in a Linux container. LightGBM and XGBoost ship

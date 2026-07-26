@@ -1,9 +1,9 @@
 # Results & Methodology
 
-> **Status: two of five rows are measured; three are not.**
+> **Status: three of five rows are measured; two are not.**
 >
-> `fraud_ulb` and `churn` are accepted real-data, out-of-fold results.
-> `fraud` (IEEE-CIS), `fraud_autoencoder`, and `credit_risk` remain empty and
+> `fraud_ulb`, `credit_risk`, and `churn` are accepted real-data results.
+> `fraud` (IEEE-CIS) and `fraud_autoencoder` remain empty and
 > explicitly marked **not yet measured** below.
 >
 > IEEE-CIS is **BLOCKED**: with only the OAuth token in
@@ -12,8 +12,9 @@
 > `403 ... Please make sure you are authenticated and have accepted the
 > competition rules`. Kaggle datasets authenticate with that token; Kaggle
 > competitions do not. IEEE-CIS needs a classic `~/.kaggle/kaggle.json` API
-> token. LendingClub has not been run. The autoencoder needs the blocked
-> IEEE-CIS data.
+> token.
+>
+> The autoencoder needs the blocked IEEE-CIS data.
 >
 > Every accepted metric below is read from `reports/*_metrics.csv`, written by
 > training. Empty cells remain empty rather than becoming estimates.
@@ -30,7 +31,7 @@ class is rare; ROC-AUC is retained only as a familiar secondary diagnostic.
 | `fraud` |  |  |  |  |  |  | **not yet measured — BLOCKED:** IEEE-CIS competition download needs a classic `kaggle.json` token |
 | `fraud_ulb` | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 | measured · [`fraud_ulb_metrics.csv`](fraud_ulb_metrics.csv) |
 | `fraud_autoencoder` |  |  |  |  |  |  | **not yet measured — BLOCKED:** needs the same IEEE-CIS data |
-| `credit_risk` |  |  |  |  |  |  | **not yet measured:** LendingClub has not been run |
+| `credit_risk` | **0.3935** | 0.7160 | 0.3720 | 0.0215 | 0.5807 | 0.0457 | measured · [`credit_risk_metrics.csv`](credit_risk_metrics.csv) |
 | `churn` | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 | measured · [`churn_metrics.csv`](churn_metrics.csv) |
 
 ### `fraud_ulb`: PR-AUC is the informative result
@@ -309,26 +310,53 @@ above are part of this result, not footnotes.
 
 ## 2. Consumer credit risk — LendingClub
 
-**Dataset.** Accepted loans 2007-2018Q4, ~2.26M rows × 151 columns, CC0.
+**Dataset.** LendingClub accepted loans 2007-2018Q4,
+`accepted_2007_to_2018Q4.csv.gz`: **2,260,701 raw rows × 151 columns** and
+**392.6 MB**. The SHA-256 is
+`55c16f75120f897683f02e7aabcf080d0e4a20c4832feb1d592cfa941bd62a2d`.
+The uploader tags the file CC0, but the upstream authority is unverified, so
+rows are not redistributed. After target filtering, **1,345,310
+terminal-status rows** remain with an overall **0.1996 default rate**. The model
+uses **32 origination-time features**.
 
 **Target.** `loan_status` filtered to terminal outcomes only: `Fully Paid` → 0,
 `Charged Off` → 1. Everything else — `Current`, `In Grace Period`, `Late (…)` —
-is dropped, because those loans have not resolved. Labelling a `Current` loan as
-non-default records a success that has not happened and biases the model toward
-optimism on recent vintages, which are exactly the vintages with the most
-`Current` rows.
+is dropped, because those loans have not resolved. This removed **40.5%** of the
+raw rows. Labelling a `Current` loan as non-default would record a success that
+has not happened.
 
 **Split: time-based on `issue_d`.** Consumer credit shifts by vintage — 2015
 borrowers are not 2018 borrowers, and the macro environment differs. Training on
 earlier vintages and testing on later ones is the only split that resembles how
-the model would be used.
+the model would be used. The config requested 70/10/20. Because `issue_d` is
+monthly and timestamp ties stay together, the boundaries moved to month edges
+and produced an actual **71.6/8.8/19.6** split:
+
+| Partition | n | Positives | Positive rate | Min `issue_d` | Max `issue_d` |
+|---|---:|---:|---:|---|---|
+| Train | 962,641 | 181,265 | 0.1883 | 2007-06-01 | 2016-04-01 |
+| Validation | 118,689 | 29,840 | 0.2514 | 2016-05-01 | 2016-10-01 |
+| Test | 263,980 | 57,454 | 0.2176 | 2016-11-01 | 2018-12-01 |
+
+Zero `issue_d` values appear in more than one partition
+(`split_key_leak: false`).
+
+**Main interpretive limitation: terminal-status filtering censors the later
+vintages.** The default rate rises from **0.1883** in train to **0.2176** in
+test because filtering happens before the split. By the 2018Q4 data cut, the
+latest vintages retain only loans that had already resolved, which
+over-represents early charge-offs and fast payoffs. This survivorship/censoring
+bias is a limitation of the target construction, not a modelling choice. The
+held-out result must not be read as an unbiased estimate of forward default
+risk.
 
 ### The leakage denylist — the most informative thing in this document
 
 `configs/credit_risk.yaml` names 29 entries the model may never see, enforced by
 `tests/data/test_leakage_denylist.py` and additionally never read at all
-(`src/data/adapters/lending_club.py` uses a `usecols` allowlist of ~30
-origination-time fields).
+(`src/data/adapters/lending_club.py` uses a `usecols` allowlist of 30
+origination-time fields, which the feature module turns into the 32 columns the
+model actually sees).
 
 The ones that matter:
 
@@ -350,6 +378,15 @@ That delta is the point. **A correct LendingClub model is not
 impressive-looking**; the controlled comparison remains empty until both rows
 have been measured by the documented training path.
 
+### Post-pricing risk model, not an approval or pricing model
+
+`int_rate`, `grade_ordinal`, and `sub_grade_ordinal` are LendingClub's own risk
+pricing, assigned at origination. Including them makes this a **post-pricing**
+model: it estimates default risk given how LendingClub already priced the loan.
+It is not an independent approval or pricing model. ROC-AUC would be lower
+without those fields, but that comparison has not been run, so no number or
+delta is reported for it.
+
 **The business framing matters more than the AUC here.** At origination the
 decision is not "classify this loan" but "approve at what rate". Expected loss at
 a chosen approval threshold — `P(default) × loss_given_default` against interest
@@ -362,11 +399,36 @@ body rather than implying a calibrated policy.
 
 | Model | PR-AUC ↑ | ROC-AUC ↑ | P@1% ↑ | R@1%FPR ↑ | Brier ↓ |
 |---|---|---|---|---|---|
-| LightGBM |  |  |  |  |  |
-| Logistic regression (FICO + DTI + term + grade) |  |  |  |  |  |
-| Prior (baseline) |  |  | — | — |  |
+| LightGBM | **0.3935** | 0.7160 | 0.5807 | 0.0457 | 0.1551 |
+| Logistic regression (baseline) | 0.3720 | 0.6989 | 0.5307 | 0.0405 | 0.2122 |
+| Prior (baseline) | 0.2176 | 0.5000 | — | — | 0.1711 |
 
-*Not yet measured.* LendingClub has not been run.
+LightGBM beats logistic regression by only **+0.0215 PR-AUC** (**0.3935** vs
+**0.3720**) and **+0.017 ROC-AUC** (**0.7160** vs **0.6989**). On these
+origination-time LendingClub features, gradient boosting is barely better than
+logistic regression. That narrow margin is the finding.
+
+The logistic baseline uses median imputation and standardisation for numeric
+features, plus most-frequent imputation and one-hot encoding capped at 20
+categories for categoricals. It was configured with `max_iter: 1000` and
+`class_weight: balanced`.
+
+| Run configuration | Recorded value |
+|---|---|
+| Dataset | Kaggle `wordsforthewise/lending-club`, `accepted_2007_to_2018Q4.csv.gz` |
+| Raw / filtered rows | 2,260,701 / 1,345,310 terminal-status rows |
+| Overall / test positive rate | 0.1996 / 0.2176 |
+| Features | 32 origination-time columns |
+| Split | Time on `issue_d`; requested 70/10/20, actual 71.6/8.8/19.6; no split-key overlap |
+| Model / seed | LightGBM / 42 |
+| Training SHA / time | `052adab726b6dd5a176cfdc737110b172198a749` / `2026-07-26T03:54:55Z` |
+| Reproducibility | Trained twice at seed 42 on 2026-07-26. Every metric in `credit_risk_metrics.csv` was identical across both runs; the checkpoint on disk is the second. |
+| Hardware | `macOS-26.5.2-arm64-arm-64bit`, arm64; CPU-only LightGBM wheel, no GPU or Metal backend |
+| Fit / evaluation scope | 962,641 training-partition rows / 263,980 held-out test rows |
+| Wall-clock / early stop | 49.2 s / iteration 513 of 1,500 configured |
+| Hyperparameters | `objective=binary`; `metric=average_precision`; `learning_rate=0.05`; `num_leaves=31`; `min_child_samples=200`; `feature_fraction=0.8`; `bagging_fraction=0.8`; `bagging_freq=1`; `n_estimators=1500`; `early_stopping_rounds=100`; `n_jobs=8` |
+| Sanity band | ROC-AUC 0.62–0.80; measured 0.7160, inside the band; `sanity_band_warning: null` |
+| Config / checkpoint | [`configs/credit_risk.yaml`](../configs/credit_risk.yaml) / `checkpoints/credit_risk/metadata.json` |
 
 ---
 
@@ -430,16 +492,13 @@ a prospective task.
 
 ### Rows no run has produced
 
-No run has produced the `fraud`, `fraud_autoencoder`, or `credit_risk` result
-tables yet. When their data prerequisites are available, the commands will be:
+No run has produced the `fraud` or `fraud_autoencoder` result tables yet. When
+their shared IEEE-CIS data prerequisite is available, the commands will be:
 
 ```bash
 uv run python scripts/download_data.py --dataset ieee-cis
 uv run python scripts/train.py --model fraud
 uv run python scripts/train.py --model fraud --autoencoder
-uv run python scripts/download_data.py --dataset lending-club
-uv run python scripts/train.py --model credit_risk
-./.venv/bin/python scripts/evaluate.py --markdown
 ```
 
 ### Rows produced by completed runs
@@ -447,15 +506,26 @@ uv run python scripts/train.py --model credit_risk
 ```bash
 uv run python scripts/train.py --model fraud_ulb
 uv run python scripts/train.py --model churn
-./.venv/bin/python scripts/evaluate.py --markdown
+uv run python scripts/download_data.py --dataset lending-club
+uv run python scripts/train.py --model credit_risk
+uv run python scripts/describe_split.py --model credit_risk
+uv run python scripts/evaluate.py --markdown
 ```
 
-> On 2026-07-25, only `fraud_ulb` and `churn` were run. Both checkpoint metadata
-> files record training SHA `05d32cae0d54dee97a70be575097182e9b5f8278`,
+> On 2026-07-25, `fraud_ulb` and `churn` were run. Both checkpoint metadata files
+> record training SHA `05d32cae0d54dee97a70be575097182e9b5f8278`,
 > seed 42, and `macOS-26.5.2-arm64-arm-64bit` on arm64; LightGBM used its CPU-only
-> macOS wheel. The current repository HEAD used to render this document is
-> `4584c9b`. `fraud`, `fraud_autoencoder`, and `credit_risk` were not run.
-> `scripts/evaluate.py` computed nothing; it read the two training-written CSVs.
+> macOS wheel.
+>
+> On 2026-07-26 UTC, `credit_risk` was trained with seed 42 at
+> `052adab726b6dd5a176cfdc737110b172198a749` on
+> `macOS-26.5.2-arm64-arm-64bit`, arm64. The LightGBM CPU-only run took 49.2 s
+> wall clock and early-stopped at iteration 513 of 1,500 configured trees. The
+> checkpoint was fitted on 962,641 training-partition rows and evaluated on the
+> 263,980-row held-out test partition.
+>
+> `fraud` and `fraud_autoencoder` were not run. `scripts/evaluate.py` computed
+> nothing; it read the three training-written CSVs.
 
 LightGBM and XGBoost ship CPU-only wheels on macOS arm64; there is no Metal
 backend for either, so the three headline models are CPU-bound regardless of the

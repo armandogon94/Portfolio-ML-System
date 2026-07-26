@@ -92,7 +92,7 @@ kagglehub login
 
 uv run python scripts/download_data.py --dataset cc-churn       # ~2 MB
 uv run python scripts/download_data.py --dataset ieee-cis       # ~118 MB zipped
-uv run python scripts/download_data.py --dataset lending-club   # ~648 MB gzipped
+uv run python scripts/download_data.py --dataset lending-club   # 648 MB gzipped; ~3.9 GB cache after extraction
 ```
 
 Without credentials the script prints the remediation and exits non-zero. **There
@@ -162,13 +162,15 @@ artifacts. Fitting them on the full frame leaks the test distribution.
 | Source | <https://www.kaggle.com/datasets/wordsforthewise/lending-club> |
 | Licence | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
 | File | `accepted_2007_to_2018Q4.csv.gz` |
-| Scale | ~2,260,701 rows × 151 columns |
-| Size | ~648 MB gzipped |
+| Scale | 2,260,701 raw rows × 151 columns; matched `expected_rows` exactly |
+| Size | 392.6 MB |
 | Adapter | [`src/data/adapters/lending_club.py`](../src/data/adapters/lending_club.py) |
 | Target | `is_default`, derived from `loan_status` |
 | Split | Time-based on `issue_d` |
-| Rows after filtering | *not yet recorded — the download has not been run* |
-| sha256 | *not yet recorded* |
+| Rows after filtering | 1,345,310 terminal-status rows; 40.5% of raw rows dropped as unresolved |
+| Default rate after filtering | 0.1996 |
+| Accessed | 2026-07-26 (UTC) |
+| sha256 | `55c16f75120f897683f02e7aabcf080d0e4a20c4832feb1d592cfa941bd62a2d` |
 
 The upload originates from LendingClub itself. The uploader tags it CC0, but
 the uploader's authority to apply CC0 to the upstream data is undocumented; do
@@ -202,13 +204,14 @@ matrix. The important ones:
 Every one is recorded **after** origination. `recoveries` changes only after a
 loan has defaulted; a model that sees it is worthless because the field is not
 available at origination. The adapter
-additionally never *reads* these columns: `usecols` is an allowlist of ~30
-origination-time fields, which is also what keeps a 648 MB file from becoming a
-3 GB frame.
+additionally never *reads* these columns: `usecols` is an allowlist of 30
+origination-time fields, which is also what keeps a 392.6 MB gzipped file from
+becoming a multi-gigabyte frame. The feature module turns those 30 raw fields
+into the 32 columns the model actually sees.
 
-`reports/RESULTS.md` will carry the with-denylist / without-denylist delta once
-the model has been trained. That contrast is the most informative single
-comparison this repository can offer.
+`reports/RESULTS.md` leaves the with-denylist / without-denylist comparison
+empty because that controlled experiment has not been run. The accepted
+credit-risk result uses the denylist-applied 32-feature matrix.
 
 ---
 
