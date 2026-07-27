@@ -14,9 +14,14 @@ Produces, per problem:
   reports/figures/<problem>_feature_importance.png  LightGBM gain
 
 Requires a trained checkpoint. Without one it says so and exits non-zero rather
-than drawing an empty axis — a blank chart in a README is worse than no chart.
+than drawing an empty axis; a blank chart in a README is worse than no chart.
+
+The two README figures are rebuilt directly from persisted out-of-fold scores:
+  reports/figures/precision_recall_curves.png
+  reports/figures/calibration_curves.png
 
 Usage:
+    uv run python scripts/make_figures.py --published-only
     uv run python scripts/make_figures.py
     uv run python scripts/make_figures.py --problem fraud
 """
@@ -26,6 +31,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,11 +44,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from rich.console import Console
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     average_precision_score,
+    brier_score_loss,
     confusion_matrix,
     precision_recall_curve,
     roc_auc_score,
@@ -57,9 +66,23 @@ from src.serving.registry import CheckpointRegistry
 
 console = Console()
 
+REPORTS_DIR = get_project_root() / "reports"
 FIGURE_DIR = get_project_root() / "reports" / "figures"
 IMAGE_DIR = get_project_root() / "docs" / "images"
 DPI = 160
+WILSON_Z_95 = 1.959963984540054
+
+
+@dataclass(frozen=True)
+class CalibrationBins:
+    """Measured probability-bin summaries and binomial uncertainty."""
+
+    mean_predicted: np.ndarray
+    observed: np.ndarray
+    positive_count: np.ndarray
+    count: np.ndarray
+    lower: np.ndarray
+    upper: np.ndarray
 
 
 def _rebuild_model_matrix(problem: str, loaded):
@@ -77,11 +100,9 @@ def _rebuild_model_matrix(problem: str, loaded):
     return frame, matrix
 
 
-def _load_oof_predictions(
-    problem: str, *, reports_dir: Path | None = None
-) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Load held-out predictions for honest cross-validation performance plots."""
-    root = reports_dir or get_project_root() / "reports"
+def _load_oof_frame(problem: str, *, reports_dir: Path | None = None) -> pd.DataFrame:
+    """Load and validate persisted held-out predictions."""
+    root = reports_dir or REPORTS_DIR
     path = root / f"{problem}_oof_predictions.csv"
     if not path.exists():
         raise FileNotFoundError(
@@ -95,6 +116,16 @@ def _load_oof_predictions(
         raise ValueError(f"{path} is missing required OOF columns: {sorted(missing)}")
     if frame["row_index"].duplicated().any():
         raise ValueError(f"{path} contains duplicate OOF row_index values.")
+    if not frame["y_true"].isin([0, 1]).all():
+        raise ValueError(f"{path} contains labels outside 0 and 1.")
+    return frame
+
+
+def _load_oof_predictions(
+    problem: str, *, reports_dir: Path | None = None
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Load held-out predictions for honest cross-validation performance plots."""
+    frame = _load_oof_frame(problem, reports_dir=reports_dir)
 
     model_type = load_config(problem)["model"]["type"]
     labels = {
@@ -113,6 +144,110 @@ def _load_oof_predictions(
     return frame["y_true"].to_numpy(), scores
 
 
+def _wilson_interval(
+    positive_count: np.ndarray,
+    count: np.ndarray,
+    *,
+    z: float = WILSON_Z_95,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a two-sided Wilson score interval for each binomial count."""
+    positive = np.asarray(positive_count, dtype=float)
+    total = np.asarray(count, dtype=float)
+    if positive.shape != total.shape:
+        raise ValueError("positive_count and count must have the same shape.")
+    if np.any(total <= 0) or np.any(positive < 0) or np.any(positive > total):
+        raise ValueError("Binomial counts must satisfy 0 <= positive_count <= count.")
+
+    proportion = positive / total
+    z_squared = z**2
+    denominator = 1.0 + z_squared / total
+    centre = (proportion + z_squared / (2.0 * total)) / denominator
+    half_width = (
+        z
+        * np.sqrt(proportion * (1.0 - proportion) / total + z_squared / (4.0 * total**2))
+        / denominator
+    )
+    return np.maximum(0.0, centre - half_width), np.minimum(1.0, centre + half_width)
+
+
+def _quantile_calibration_bins(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    *,
+    n_bins: int = 10,
+) -> CalibrationBins:
+    """Summarise quantile bins without dropping bins that have zero positives."""
+    labels = np.asarray(y_true)
+    scores = np.asarray(y_score, dtype=float)
+    if labels.ndim != 1 or scores.ndim != 1 or labels.shape != scores.shape:
+        raise ValueError("y_true and y_score must be one-dimensional arrays of equal length.")
+    if not np.isin(labels, [0, 1]).all():
+        raise ValueError("y_true must contain only 0 and 1.")
+    if np.any(~np.isfinite(scores)) or np.any((scores < 0) | (scores > 1)):
+        raise ValueError("y_score must contain finite probabilities in [0, 1].")
+
+    edges = np.percentile(scores, np.linspace(0, 100, n_bins + 1))
+    bin_ids = np.searchsorted(edges[1:-1], scores)
+    count = np.bincount(bin_ids, minlength=n_bins)
+    if np.any(count == 0):
+        raise ValueError(
+            f"Quantile binning produced {np.count_nonzero(count == 0)} empty bins; "
+            "the published figure requires ten measured bins."
+        )
+
+    positive_count = np.bincount(bin_ids, weights=labels, minlength=n_bins).astype(int)
+    score_sum = np.bincount(bin_ids, weights=scores, minlength=n_bins)
+    mean_predicted = score_sum / count
+    observed = positive_count / count
+    lower, upper = _wilson_interval(positive_count, count)
+    return CalibrationBins(
+        mean_predicted=mean_predicted,
+        observed=observed,
+        positive_count=positive_count,
+        count=count,
+        lower=lower,
+        upper=upper,
+    )
+
+
+def _metric_value(problem: str, metric: str, *, reports_dir: Path | None = None) -> float:
+    """Read one training-written metric and fail if it is absent or ambiguous."""
+    root = reports_dir or REPORTS_DIR
+    path = root / f"{problem}_metrics.csv"
+    frame = pd.read_csv(path)
+    matches = frame.loc[frame["metric"] == metric, "value"]
+    if len(matches) != 1:
+        raise ValueError(f"{path} must contain exactly one {metric!r} row.")
+    return float(matches.iloc[0])
+
+
+def _validated_fold_metric(
+    problem: str,
+    score_column: str,
+    metric_name: str,
+    scorer,
+    *,
+    reports_dir: Path | None = None,
+) -> float:
+    """Cross-check a persisted fold metric against the OOF rows used in a figure."""
+    frame = _load_oof_frame(problem, reports_dir=reports_dir)
+    measured = float(
+        frame.groupby("fold", sort=True)
+        .apply(
+            lambda fold: scorer(fold["y_true"], fold[score_column]),
+            include_groups=False,
+        )
+        .mean()
+    )
+    recorded = _metric_value(problem, metric_name, reports_dir=reports_dir)
+    if not np.isclose(measured, recorded, rtol=1e-12, atol=1e-15):
+        raise ValueError(
+            f"{problem} {metric_name} does not match its persisted OOF predictions: "
+            f"metrics CSV={recorded!r}, OOF rows={measured!r}."
+        )
+    return recorded
+
+
 def _save(fig, name: str) -> Path:
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
     path = FIGURE_DIR / f"{name}.png"
@@ -120,6 +255,243 @@ def _save(fig, name: str) -> Path:
     plt.close(fig)
     console.print(f"    {path.relative_to(get_project_root())}")
     return path
+
+
+def _published_precision_recall(*, reports_dir: Path | None = None) -> Path:
+    """Build the README PR figure from the two persisted OOF score files."""
+    root = reports_dir or REPORTS_DIR
+    specifications = (
+        ("fraud_ulb", "ULB fraud", "492 positives in 284,807 rows"),
+        ("churn", "Card attrition", "1,627 positives in 10,127 rows"),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(12.4, 5.1))
+    colours = {"score_model": "#2563eb", "score_logreg": "#ea580c"}
+    labels = {"score_model": "LightGBM", "score_logreg": "Logistic regression"}
+
+    for ax, (problem, title, sample_text) in zip(axes, specifications, strict=True):
+        frame = _load_oof_frame(problem, reports_dir=root)
+        for column in ("score_model", "score_logreg"):
+            precision, recall, _ = precision_recall_curve(
+                frame["y_true"],
+                frame[column],
+            )
+            pooled_ap = average_precision_score(frame["y_true"], frame[column])
+            ax.plot(
+                recall,
+                precision,
+                color=colours[column],
+                linewidth=2.2,
+                label=f"{labels[column]} (pooled AP {pooled_ap:.3f})",
+            )
+
+        base_rate = float(frame["y_true"].mean())
+        ax.axhline(
+            base_rate,
+            color="#6b7280",
+            linestyle="--",
+            linewidth=1.3,
+            label=f"positive rate {base_rate:.4f}",
+        )
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1.02)
+        ax.set_xlabel("Recall")
+        ax.set_ylabel("Precision")
+        ax.set_title(f"{title}\n{sample_text}", fontsize=11)
+        ax.grid(alpha=0.2)
+        ax.legend(loc="upper right", fontsize=8.5, framealpha=0.95)
+
+    fig.suptitle("Precision-recall performance on held-out rows", fontsize=14, y=0.98)
+    fig.subplots_adjust(left=0.075, right=0.985, bottom=0.12, top=0.82, wspace=0.22)
+    return _save(fig, "precision_recall_curves")
+
+
+def _log_tick_label(value: float, _position: int) -> str:
+    """Format exact powers of ten as compact labels such as 1e-9."""
+    if value <= 0:
+        return ""
+    exponent = int(round(np.log10(value)))
+    if not np.isclose(value, 10.0**exponent):
+        return ""
+    return "1" if exponent == 0 else f"1e{exponent}"
+
+
+def _calibration_y_floor(bins: CalibrationBins) -> float:
+    """Place the floor just below the smallest measured positive interval limit."""
+    finite_positive = np.concatenate(
+        (
+            bins.observed[bins.observed > 0],
+            bins.lower[bins.lower > 0],
+            bins.upper[bins.upper > 0],
+        )
+    )
+    if finite_positive.size == 0:
+        raise ValueError("Calibration bins contain no finite positive interval limit.")
+    return float(finite_positive.min() / 1.6)
+
+
+def _draw_calibration_panel(ax, bins: CalibrationBins, *, color: str) -> None:
+    """Draw all quantile bins, including zero-event bins, on log axes."""
+    positive = bins.positive_count > 0
+    zero = ~positive
+    y_floor = _calibration_y_floor(bins)
+
+    interval = ax.errorbar(
+        bins.mean_predicted[positive],
+        bins.observed[positive],
+        yerr=np.vstack(
+            (
+                bins.observed[positive] - bins.lower[positive],
+                bins.upper[positive] - bins.observed[positive],
+            )
+        ),
+        fmt="o",
+        color=color,
+        ecolor=color,
+        elinewidth=1.4,
+        capsize=4,
+        markersize=6,
+        markeredgecolor="white",
+        markeredgewidth=0.7,
+        zorder=3,
+    )
+    interval.lines[0].set_gid("positive-bins")
+
+    if np.any(zero):
+        zero_x = bins.mean_predicted[zero]
+        zero_upper = bins.upper[zero]
+        whiskers = ax.vlines(
+            zero_x,
+            y_floor,
+            zero_upper,
+            color="#7c3aed",
+            linewidth=1.7,
+            zorder=2,
+        )
+        whiskers.set_gid("zero-bin-whiskers")
+        cap_left = zero_x / 1.12
+        cap_right = zero_x * 1.12
+        ax.hlines(
+            zero_upper,
+            cap_left,
+            cap_right,
+            color="#7c3aed",
+            linewidth=1.7,
+            zorder=2,
+        )
+        ax.hlines(
+            np.full(zero_x.shape, y_floor),
+            cap_left,
+            cap_right,
+            color="#7c3aed",
+            linewidth=1.7,
+            zorder=2,
+        )
+
+    x_lower = float(bins.mean_predicted.min() / 1.7)
+    x_upper = 1.25 if bins.mean_predicted.max() > 0.8 else float(bins.mean_predicted.max() * 1.35)
+    y_upper = 1.15 if bins.upper.max() > 0.8 else float(bins.upper.max() * 1.4)
+    diagonal_lower = max(x_lower, y_floor)
+    diagonal_upper = min(x_upper, y_upper, 1.0)
+    diagonal = ax.plot(
+        [diagonal_lower, diagonal_upper],
+        [diagonal_lower, diagonal_upper],
+        color="#4b5563",
+        linestyle="--",
+        linewidth=1.3,
+        zorder=1,
+    )[0]
+    diagonal.set_gid("perfect-calibration")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(x_lower, x_upper)
+    ax.set_ylim(y_floor, y_upper)
+    formatter = FuncFormatter(_log_tick_label)
+    for axis in (ax.xaxis, ax.yaxis):
+        axis.set_major_locator(LogLocator(base=10, numticks=9))
+        axis.set_major_formatter(formatter)
+        axis.set_minor_formatter(NullFormatter())
+    ax.tick_params(axis="both", which="major", labelsize=8)
+    ax.grid(which="major", alpha=0.22)
+    ax.grid(which="minor", alpha=0.08)
+    ax.set_xlabel("predicted probability")
+    ax.set_ylabel("observed frequency (share that are positive)")
+
+
+def _published_calibration(*, reports_dir: Path | None = None) -> Path:
+    """Build the README calibration figure with Wilson intervals in every bin."""
+    root = reports_dir or REPORTS_DIR
+    specifications = (
+        ("fraud_ulb", "ULB fraud", "#2563eb"),
+        ("churn", "Card attrition", "#ea580c"),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(12.8, 6.1))
+
+    for ax, (problem, title, color) in zip(axes, specifications, strict=True):
+        frame = _load_oof_frame(problem, reports_dir=root)
+        bins = _quantile_calibration_bins(
+            frame["y_true"].to_numpy(),
+            frame["score_model"].to_numpy(),
+        )
+        _draw_calibration_panel(ax, bins, color=color)
+        brier = _validated_fold_metric(
+            problem,
+            "score_model",
+            "cv_brier_mean",
+            brier_score_loss,
+            reports_dir=root,
+        )
+        ax.set_title(f"{title}\n10 equal-count score bins", fontsize=11)
+        ax.legend(
+            [Line2D([], [], linestyle="none")],
+            [f"Brier score {brier:.5f}"],
+            loc="upper left",
+            handlelength=0,
+            handletextpad=0,
+            framealpha=0.95,
+            fontsize=9,
+        )
+
+    shared_legend = (
+        Line2D(
+            [],
+            [],
+            color="#2563eb",
+            marker="o",
+            linestyle="none",
+            markersize=6,
+            label="bin with observed positives",
+        ),
+        Line2D(
+            [],
+            [],
+            color="#7c3aed",
+            marker="_",
+            linestyle="-",
+            linewidth=1.7,
+            markersize=9,
+            label="bin with none observed (upper bound only)",
+        ),
+        Line2D(
+            [],
+            [],
+            color="#4b5563",
+            linestyle="--",
+            linewidth=1.3,
+            label="perfect calibration",
+        ),
+    )
+    fig.legend(
+        handles=shared_legend,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        fontsize=9,
+        bbox_to_anchor=(0.5, 0.015),
+    )
+    fig.suptitle("Calibration across ten probability quantiles", fontsize=14, y=0.985)
+    fig.subplots_adjust(left=0.08, right=0.985, bottom=0.19, top=0.82, wspace=0.24)
+    return _save(fig, "calibration_curves")
 
 
 def pr_curve(
@@ -167,7 +539,7 @@ def roc_plot(
     ax.plot([0, 1], [0, 1], "--", color="grey", linewidth=1, label="chance")
     ax.set_xlabel("False positive rate")
     ax.set_ylabel("True positive rate")
-    ax.set_title(f"{problem}: ROC (secondary — see the PR curve first)")
+    ax.set_title(f"{problem}: ROC (secondary; see the PR curve first)")
     if evidence_note:
         fig.text(0.5, 0.01, evidence_note, ha="center", fontsize=8, color="#555555")
     ax.legend(loc="lower right", fontsize=8)
@@ -322,7 +694,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     config_names = available_config_names()
     parser.add_argument("--problem", choices=[*config_names, "all"], default="all")
+    parser.add_argument(
+        "--published-only",
+        action="store_true",
+        help="Build the two README figures from persisted out-of-fold predictions.",
+    )
     args = parser.parse_args()
+
+    if args.published_only:
+        _published_precision_recall()
+        _published_calibration()
+        console.print("\n[green]2 published figures rebuilt from OOF predictions.[/green]")
+        return 0
 
     registry = CheckpointRegistry()
     problems = list(config_names) if args.problem == "all" else [args.problem]
@@ -331,7 +714,7 @@ def main() -> int:
 
     if produced == 0:
         console.print(
-            "\n[bold red]No figures produced — no trained checkpoint exists.[/bold red]\n"
+            "\n[bold red]No figures produced: no trained checkpoint exists.[/bold red]\n"
             "A blank chart in a README is worse than no chart, so nothing was drawn.\n"
             "  uv run python scripts/download_data.py --dataset all\n"
             f"  uv run python scripts/train.py --model {train_target}\n"

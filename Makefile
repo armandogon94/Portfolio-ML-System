@@ -35,8 +35,8 @@ train-sample:  ## Smoke-train on the committed CI fixtures (writes NO checkpoint
 evaluate:  ## Print the results table, read from reports/*_metrics.csv
 	uv run python scripts/evaluate.py
 
-figures:  ## Regenerate every chart from real checkpoints
-	uv run python scripts/make_figures.py
+figures:  ## Regenerate the published PR and calibration figures from OOF scores
+	uv run python scripts/make_figures.py --published-only
 
 diagrams:  ## Export docs/diagrams/*.mmd to SVG
 	@for f in docs/diagrams/*.mmd; do \

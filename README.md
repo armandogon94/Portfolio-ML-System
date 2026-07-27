@@ -72,10 +72,22 @@ row. The autoencoder uses raw reconstruction error for ranking metrics and its
 training-set 95th-percentile threshold for hard decisions; it reports no Brier
 score because that error is not a calibrated probability.</sub>
 
+<img src="reports/figures/calibration_curves.png" alt="Log-scale calibration plots with ten equal-count bins and 95% Wilson intervals. ULB fraud has a Brier score of 0.00039 with 3 of 10 bins containing no observed positives; card attrition has a Brier score of 0.02096 with 4 of 10 bins containing no observed positives.">
+
+Predicted and observed rates are closest in the highest-score bins for both
+datasets. The whiskers are 95% Wilson intervals; zero-event bins show only their
+measured upper limit down to a data-derived axis floor.
+
 **PR-AUC is the primary metric.** On ULB, ROC-AUC **0.9810 ± 0.0092** is inflated by the
 **0.1727%** positive rate; the prior baseline gets **0.5000 ROC-AUC** but only
 **0.0017 PR-AUC**. The informative comparison is **0.8569 ± 0.0331 PR-AUC**
 against the logistic-regression baseline of **0.7300 ± 0.0279**.
+
+<img src="reports/figures/precision_recall_curves.png" alt="Precision-recall curves from out-of-fold predictions. The published five-fold mean PR-AUC is 0.8569 ± 0.0331 for LightGBM versus 0.7300 ± 0.0279 for logistic regression on ULB fraud, and 0.9735 ± 0.0078 versus 0.7800 ± 0.0217 on card attrition.">
+
+The curves pool one held-out prediction per row, while the headline values are
+the mean ± standard deviation of the five fold scores. LightGBM separates
+positives more effectively than the logistic baseline on both datasets.
 
 **The churn result measures detection, not forecasting.** `Attrition_Flag` is current status while
 its strongest features summarise the same trailing activity window. With no
@@ -258,7 +270,7 @@ To train on real data:
 make data            # needs a Kaggle token; see data/README.md
 make train
 make evaluate        # reads reports/*_metrics.csv
-make figures         # PR curves, calibration, SHAP -> reports/figures/
+make figures         # published PR and calibration figures -> reports/figures/
 make screenshots-install  # one-time Chromium install
 make screenshots     # needs the running stack and trained checkpoints
 ```

@@ -34,6 +34,12 @@ class is rare; ROC-AUC is retained only as a familiar secondary diagnostic.
 | `credit_risk` | **0.3935** | 0.7160 | 0.3720 | 0.0215 | 0.5807 | 0.0457 | measured · [`credit_risk_metrics.csv`](credit_risk_metrics.csv) |
 | `churn` | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 | measured · [`churn_metrics.csv`](churn_metrics.csv) |
 
+<img src="figures/precision_recall_curves.png" alt="Precision-recall curves from out-of-fold predictions. The published five-fold mean PR-AUC is 0.8569 ± 0.0331 for LightGBM versus 0.7300 ± 0.0279 for logistic regression on ULB fraud, and 0.9735 ± 0.0078 versus 0.7800 ± 0.0217 on card attrition.">
+
+The curves pool one held-out prediction per row, while the table reports the
+mean ± standard deviation of the five fold scores. The credit-risk run has
+metrics but no saved per-row predictions, so it is not plotted.
+
 ### `fraud_ulb`: PR-AUC is the informative result
 
 At a **0.1727% positive rate**, ROC-AUC **0.9810 ± 0.0092** looks spectacular
@@ -218,6 +224,14 @@ the **CV mean with its standard deviation**. Fold metrics never retain ambiguous
 `test_*` names. The saved estimator is refit on all rows after evaluation, while
 the PR, ROC, calibration, and confusion-matrix figures use persisted out-of-fold
 predictions—each plotted row was scored by a model that did not train on it.
+
+<img src="figures/calibration_curves.png" alt="Log-scale calibration plots with ten equal-count bins and 95% Wilson intervals. ULB fraud has a Brier score of 0.00039 with 3 of 10 bins containing no observed positives; card attrition has a Brier score of 0.02096 with 4 of 10 bins containing no observed positives.">
+
+The calibration panels retain all ten bins on log scales. Whiskers are 95%
+Wilson intervals; bins with no observed positives show their measured upper
+limit without a point marker. The plotted Brier scores are the fold means from
+the corresponding metrics CSVs. Credit risk is absent because its temporal run
+did not save per-row predictions.
 
 ---
 
