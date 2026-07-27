@@ -5,9 +5,10 @@
 
 COMPOSE := docker compose -f infra/compose/base.yml
 COMPOSE_DEV := $(COMPOSE) -f infra/compose/dev.yml
+MMDC ?= npx -y @mermaid-js/mermaid-cli@11.16.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup data train train-sample evaluate figures diagrams \
+.PHONY: help setup data train train-sample evaluate figures diagrams diagrams-check \
         screenshots-install screenshots serve \
         test test-all lint format typecheck verify clean \
         docker-build docker-up docker-down docker-logs docker-clean \
@@ -39,10 +40,13 @@ figures:  ## Regenerate the published PR and calibration figures from OOF scores
 	uv run python scripts/make_figures.py --published-only
 
 diagrams:  ## Export docs/diagrams/*.mmd to SVG
-	@for f in docs/diagrams/*.mmd; do \
+	@set -e; for f in docs/diagrams/*.mmd; do \
 	  echo "  $$f"; \
-	  npx -y @mermaid-js/mermaid-cli -i "$$f" -o "$${f%.mmd}.svg" -b transparent; \
+	  $(MMDC) -i "$$f" -o "$${f%.mmd}.svg" -b transparent; \
 	done
+
+diagrams-check:  ## Render every Mermaid source and verify text containment
+	MMDC_BIN="$(MMDC)" uv run python scripts/check_diagram_text.py
 
 screenshots:  ## Capture README screenshots (needs the stack running + a trained model)
 	uv run --extra dev python scripts/capture_screenshots.py

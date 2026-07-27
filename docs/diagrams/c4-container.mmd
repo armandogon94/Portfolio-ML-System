@@ -1,24 +1,21 @@
+%%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart TB
     subgraph client["Client"]
         U["Reviewer / recruiter<br/>browser"]
     end
     subgraph web["ml-web · Next.js 14 · :3070"]
-        P["/fintech/{fraud,credit-risk,churn}<br/>Zod forms + SHAP charts"]
+        P["/fintech/{fraud, credit-risk,<br/>churn}<br/>Zod forms + SHAP charts"]
         D["/dashboard · ISR 30s"]
     end
-    subgraph api["ml-api · FastAPI · :8070"]
-        R["routes: /predict/* /explain/* /models /health<br/>src/serving/api.py"]
+    subgraph api[" "]
+        R["ml-api · FastAPI · :8070<br/>routes: /predict/* /explain/*<br/>/models /health<br/>src/serving/api.py"]
         REG["checkpoint registry<br/>src/serving/registry.py"]
-        PRE["request → features<br/>src/serving/preprocessing.py"]
-        PRD["predictors/{fraud,credit_risk,churn}.py"]
+        PRE["request → features<br/>src/serving/<br/>preprocessing.py"]
+        PRD["predictors/{fraud, credit_risk,<br/>churn}.py"]
         EXP["SHAP + gradient<br/>src/explainability/"]
     end
-    subgraph store["Artifacts (gitignored)"]
-        CK[("checkpoints/&lt;problem&gt;/<br/>model.joblib · features.joblib<br/>metadata.json")]
-    end
-    subgraph track["ml-mlflow · :5070"]
-        ML[("runs · params · metrics<br/>model registry")]
-    end
+    CK[("Artifacts (gitignored)<br/>checkpoints/&lt;problem&gt;/<br/>model.joblib<br/>features.joblib<br/>metadata.json")]
+    ML[("ml-mlflow · :5070<br/>runs · params<br/>metrics<br/>model registry")]
     U --> P --> R
     U --> D --> ML
     R --> PRE --> PRD --> EXP

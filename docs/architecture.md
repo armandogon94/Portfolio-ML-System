@@ -10,27 +10,24 @@ Each diagram below is also exported to [`docs/diagrams/`](diagrams/) as an SVG b
 ## Container view
 
 ```mermaid
+%%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart TB
     subgraph client["Client"]
         U["Reviewer / recruiter<br/>browser"]
     end
     subgraph web["ml-web · Next.js 14 · :3070"]
-        P["/fintech/{fraud,credit-risk,churn}<br/>Zod forms + SHAP charts"]
+        P["/fintech/{fraud, credit-risk,<br/>churn}<br/>Zod forms + SHAP charts"]
         D["/dashboard · ISR 30s"]
     end
-    subgraph api["ml-api · FastAPI · :8070"]
-        R["routes: /predict/* /explain/* /models /health<br/>src/serving/api.py"]
+    subgraph api[" "]
+        R["ml-api · FastAPI · :8070<br/>routes: /predict/* /explain/*<br/>/models /health<br/>src/serving/api.py"]
         REG["checkpoint registry<br/>src/serving/registry.py"]
-        PRE["request → features<br/>src/serving/preprocessing.py"]
-        PRD["predictors/{fraud,credit_risk,churn}.py"]
+        PRE["request → features<br/>src/serving/<br/>preprocessing.py"]
+        PRD["predictors/{fraud, credit_risk,<br/>churn}.py"]
         EXP["SHAP + gradient<br/>src/explainability/"]
     end
-    subgraph store["Artifacts (gitignored)"]
-        CK[("checkpoints/&lt;problem&gt;/<br/>model.* · features.joblib<br/>metadata.json")]
-    end
-    subgraph track["ml-mlflow · :5070"]
-        ML[("runs · params · metrics<br/>model registry")]
-    end
+    CK[("Artifacts (gitignored)<br/>checkpoints/&lt;problem&gt;/<br/>model.joblib<br/>features.joblib<br/>metadata.json")]
+    ML[("ml-mlflow · :5070<br/>runs · params<br/>metrics<br/>model registry")]
     U --> P --> R
     U --> D --> ML
     R --> PRE --> PRD --> EXP
@@ -60,37 +57,38 @@ because the project has no application data model to describe.
 ## The critical path: one prediction
 
 ```mermaid
+%%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif'}}%%
 sequenceDiagram
     autonumber
     actor U as User
-    participant W as Next.js /fintech/fraud
-    participant A as FastAPI /predict/fraud
-    participant G as serving/registry.py
-    participant F as features/fraud_features.py
-    participant M as LightGBM checkpoint
-    participant S as explainability/shap_explainer.py
-    U->>W: submit transaction form (Zod-validated)
+    participant W as Next.js
+    participant A as FastAPI
+    participant G as Registry
+    participant F as Fraud features
+    participant M as LightGBM
+    participant S as SHAP
+    U->>W: submit transaction form<br/>(Zod-validated)
     W->>A: POST /predict/fraud {json}
     A->>G: load("fraud")
-    G-->>A: model + feature_columns + category_dtypes + metadata
-    Note over A,G: 503 with the exact train command<br/>when no checkpoint exists
-    A->>F: engineer_features(payload, fit=False)
-    Note over F: the SAME function training called,<br/>with the frequency maps fitted on train
+    G-->>A: model + feature_columns<br/>+ category_dtypes + metadata
+    Note over A,G: 503 with exact train command<br/>when checkpoint is missing
+    A->>F: engineer_features(...)
+    Note over F: same feature code<br/>used in training<br/>frequency maps fit<br/>on train
     F-->>A: feature frame
     A->>M: predict_proba(X)
     M-->>A: fraud probability
     A->>S: explain(model, X)
-    S-->>A: per-feature SHAP contributions
-    A-->>W: {probability, risk_band, action, model_version}
-    W-->>U: score + provenance + SHAP bar chart
+    S-->>A: per-feature SHAP<br/>contributions
+    A-->>W: probability + risk band<br/>+ action + model version
+    W-->>U: score + provenance<br/>+ SHAP bar chart
 ```
 
-**Design decision this encodes.** Step 5 calls the *same* `engineer_features`
-that training called, with the frequency maps and category dtypes that training
-fitted, loaded from the checkpoint. Training/serving skew is the most common
-production ML bug. Sharing the implementation removes a second feature path
-that could diverge. `tests/serving/test_skew.py` scores the same rows through
-both paths and demands identical matrices.
+**Design decision this encodes.** `src/serving/registry.py` loads the checkpoint,
+training and serving both call `src/features/fraud_features.py`, and
+`src/explainability/shap_explainer.py` provides the explanation. Sharing the
+implementation removes a second feature path that could diverge.
+`tests/serving/test_skew.py` scores the same rows through both paths and demands
+identical matrices.
 
 Step 3 returns **503** when a checkpoint is missing, not a 500. The service is
 healthy, but the model has not been trained. The response includes the exact
@@ -102,13 +100,14 @@ service state.
 ## Data pipeline
 
 ```mermaid
+%%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart LR
     K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
     K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
-    K3[("Kaggle dataset<br/>sakshigoyal7/credit-card-customers<br/>10,127 × 23")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 × 23")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
-    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256 compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
-    C -->|"src/data/adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
+    K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256<br/>compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
+    C -->|"src/data/<br/>adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
     P -->|"src/data/split.py<br/>TIME-BASED"| T{{"train / val / test"}}
     T -->|"src/features/*<br/>fit on TRAIN only"| X["feature matrix"]
     X -->|"src/training/tabular.py<br/>configs/&lt;problem&gt;.yaml"| MDL["LightGBM + baselines<br/>prior · logreg"]

@@ -1,7 +1,46 @@
-# PROGRESS — fintech real-data rebuild
+# PROGRESS: fintech real-data rebuild
 
-HEAD: `052adab` on `main`
-NEXT ACTION: **Human IEEE-CIS unblock.** Install a classic
+HEAD: `590baab` on `main`
+NEXT ACTION: **Render diagram exports outside the restricted sandbox.** Run:
+
+```bash
+export MMDC_BIN="/private/tmp/claude-501/-Users-armandogonzalez-Downloads-Claude-Deep-Research-Claude-Code/c2be8eaa-de57-4b28-9bab-5a3420aace0f/scratchpad/tools/node_modules/.bin/mmdc"
+make diagrams MMDC="$MMDC_BIN"
+python3 scripts/check_diagram_text.py
+```
+
+The final command must print `OK`. Inspect all three SVG files before committing
+the diagram source and export changes.
+
+## Diagram text containment slice: BLOCKED
+
+- [x] Copied `scripts/check_diagram_text.py` from the tested owner-provided
+  path.
+- [x] Added the required top-level `htmlLabels: false` directive to every
+  Mermaid source and every Markdown Mermaid block.
+- [x] Shortened and wrapped the C4, prediction sequence, and training pipeline
+  labels. The single-node C4 subgraphs were folded into their nodes.
+- [x] Added `make diagrams-check` and the Python 3.11 CI gate. Removed the
+  obsolete SVG label hardening step and script.
+- [x] Re-ran `.venv/bin/python scripts/evaluate.py --markdown`: exit 0 with
+  the accepted values unchanged.
+- [x] Re-ran `.venv/bin/pytest -m "not network"`: 262 passed, 5 skipped,
+  1 deselected, and 88.26% coverage.
+- [x] Re-ran Ruff and `git diff --check`: both exited 0.
+- BLOCKED Regeneration and rendered inspection. The owner-provided
+  Mermaid CLI 11.16.0 reached Chromium startup, then macOS denied its Mach port
+  rendezvous with `Permission denied`. The checker could not render any of the
+  12 source instances in this sandbox.
+- KNOWN ISSUE The current SVG exports are stale. Direct inspection with the
+  checker reports `foreignObject` labels in the C4 and pipeline SVGs, plus
+  overflowing sequence labels. No diagram has a PASS result yet.
+- COMMIT No commit exists for this incomplete slice. Committing source files
+  while their generated exports are stale would violate the repository
+  contract.
+
+## Deferred next action: IEEE-CIS unblock
+
+Install a classic
 `~/.kaggle/kaggle.json` API token from
 <https://www.kaggle.com/settings/account>, set mode `600`, and re-run the two
 competition-download checks below. The OAuth token in

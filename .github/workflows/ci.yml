@@ -36,6 +36,16 @@ jobs:
       - name: Sync (frozen)
         run: uv sync --frozen --extra dev --python "${{ matrix.python-version }}"
 
+      - name: Set up Node for diagram rendering
+        if: matrix.python-version == '3.11'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Diagram text containment
+        if: matrix.python-version == '3.11'
+        run: make diagrams-check
+
       - name: Lint
         run: |
           uv run ruff check src/ scripts/ tests/
