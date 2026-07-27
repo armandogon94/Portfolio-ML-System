@@ -12,7 +12,7 @@ MLflow and served behind a FastAPI inference API with SHAP explanations.
 - **Focus:** payment fraud · consumer credit risk · card attrition
 - **Data:** [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
 - **Stack:** Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
-- **Output:** a results table where every filled cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows remain empty because both need the credential-blocked IEEE-CIS competition data.
+- **Output:** a results table where every measured cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows are not measured because both need the IEEE-CIS competition data.
 
 📄 **[Read the full methodology & analysis →](reports/RESULTS.md)**
 
@@ -23,9 +23,8 @@ MLflow and served behind a FastAPI inference API with SHAP explanations.
 **Three of five result rows are measured on real data: `fraud_ulb`,
 `credit_risk`, and `churn`.**
 
-The other two remain empty. IEEE-CIS is blocked because its competition
-download needs a classic `kaggle.json` token rather than the working Kaggle OAuth
-token; `fraud_autoencoder` needs the same data.
+The other two are not measured. Both require IEEE-CIS, whose competition
+download needs a classic `kaggle.json` token that is not available here.
 
 [`docs/PROGRESS.md`](docs/PROGRESS.md) lists exactly what is blocked, why, and the
 commands to unblock it.
@@ -54,15 +53,15 @@ uv run python scripts/evaluate.py --markdown
 
 | Problem | Dataset (rows × cols, % positive) | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline PR-AUC | Δ vs baseline | Source |
 |---|---|---|---|---|---|---|---|---|
-| Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM |  |  |  |  | `reports/fraud_metrics.csv` |
+| Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM | not measured | not measured | not measured | not measured | `reports/fraud_metrics.csv` |
 | Fraud (`fraud_ulb`, credential-free) | ULB / OpenML 1597 · 284,807 × 30 · 0.1727% | 5-fold stratified CV | LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | [`reports/fraud_ulb_metrics.csv`](reports/fraud_ulb_metrics.csv) |
-| Fraud (unsup. baseline) | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | Autoencoder (MPS) |  |  |  |  | `reports/fraud_autoencoder_metrics.csv` |
+| Fraud (unsup. baseline) | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | Autoencoder (MPS) | not measured | not measured | not measured | not measured | `reports/fraud_autoencoder_metrics.csv` |
 | Credit risk | LendingClub · 1,345,310 terminal-status rows × 32 features · 19.96% default | time (`issue_d`, actual 71.6/8.8/19.6) | LightGBM | **0.3935** | 0.7160 | 0.3720 | 0.0215 | [`reports/credit_risk_metrics.csv`](reports/credit_risk_metrics.csv) |
 | Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | [`reports/churn_metrics.csv`](reports/churn_metrics.csv) |
 
-<sub>Three rows are measured; two remain empty. IEEE-CIS is blocked on a classic
-`kaggle.json` competition token, and the autoencoder needs that dataset.
-`scripts/evaluate.py` reads every filled cell from training-written
+The `fraud` and `fraud_autoencoder` rows need the IEEE-CIS competition data, which requires Kaggle credentials that are not available here.
+
+<sub>`scripts/evaluate.py` reads every measured cell from training-written
 `reports/*_metrics.csv`; it computes nothing. Full config, caveats, and provenance:
 [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
 
@@ -73,12 +72,12 @@ row. The autoencoder uses raw reconstruction error for ranking metrics and its
 training-set 95th-percentile threshold for hard decisions; it reports no Brier
 score because that error is not a calibrated probability.</sub>
 
-**Read PR-AUC first.** On ULB, ROC-AUC **0.9810 ± 0.0092** is inflated by the
+**PR-AUC is the primary metric.** On ULB, ROC-AUC **0.9810 ± 0.0092** is inflated by the
 **0.1727%** positive rate; the prior baseline gets **0.5000 ROC-AUC** but only
 **0.0017 PR-AUC**. The informative comparison is **0.8569 ± 0.0331 PR-AUC**
 against the logistic-regression baseline of **0.7300 ± 0.0279**.
 
-**Do not read churn as forecasting.** `Attrition_Flag` is current status while
+**The churn result measures detection, not forecasting.** `Attrition_Flag` is current status while
 its strongest features summarise the same trailing activity window. With no
 event timestamp, feature cutoff, or future outcome window, the dataset supports
 detection of an attrition that already happened, not prospective prediction.
@@ -117,10 +116,10 @@ flowchart TB
     R -->|"training-time only"| ML
 ```
 
-The API discovers models by globbing `checkpoints/*/metadata.json` rather than
-holding a hardcoded list, so adding a model needs no change to `api.py` and no
-redeploy; a fresh clone with zero checkpoints reports `status: ok` with three
-unavailable models instead of crash-looping.
+The API discovers models by globbing `checkpoints/*/metadata.json`. Adding a
+model needs no change to `api.py` and no redeploy. A fresh clone with zero
+checkpoints reports `status: ok` with three unavailable models without entering
+a crash loop.
 [SVG](docs/diagrams/c4-container.svg) · [full notes](docs/architecture.md)
 
 ## How a prediction happens
@@ -179,10 +178,9 @@ flowchart LR
 
 The split happens **before** feature engineering. Frequency encodings and group
 aggregates are fitted on the training rows only; fitting them on the full frame
-leaks information about the test distribution into training. The dotted edge is
-the other load-bearing detail: fixtures reach
-the trainer but open no tracking run and cannot reach `checkpoints/` or
-`reports/`.
+leaks information about the test distribution into training. The dotted edge
+shows fixture isolation: fixtures reach the trainer but open no tracking run and
+cannot reach `checkpoints/` or `reports/`.
 [SVG](docs/diagrams/pipeline-dag.svg)
 
 This project has no application database, so there is **no ERD**. The only
@@ -232,7 +230,7 @@ boundary.
 ├── infra/                      # docker/ multi-stage non-root images · compose/ 3-service stack
 ├── docs/                       # adr/ 0001-0005 · diagrams/ Mermaid + SVG · architecture.md
 ├── reports/                    # RESULTS.md + *_metrics.csv (written by training, never by hand)
-├── conftest.py                 # AT ROOT ON PURPOSE: imports xgboost+lightgbm before torch (libomp)
+├── conftest.py                 # imports xgboost+lightgbm before torch to avoid libomp conflicts
 └── uv.lock                     # COMMITTED. The Docker build fails without it.
 ```
 
@@ -299,17 +297,18 @@ not anonymously downloadable; the OpenML source is:
 | Dataset | Account | Extra gate | Redistributable |
 |---|---|---|---|
 | IEEE-CIS Fraud Detection | Free Kaggle | **Yes (one-click rules acceptance)** | **No** |
-| LendingClub 2007-2018Q4 | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Do not redistribute rows. |
-| Credit Card Customers | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Do not redistribute rows. |
-| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
+| LendingClub 2007-2018Q4 | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Rows are not cleared for redistribution. |
+| Credit Card Customers | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Rows are not cleared for redistribution. |
+| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Rows are not cleared for redistribution. |
 
 IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
-rules that cannot be scripted. On this machine,
-`~/.kaggle/access_token` authenticates Kaggle **datasets** but
-`kagglehub.competition_download('ieee-fraud-detection')` still returns 403; the
-competition path needs a classic `~/.kaggle/kaggle.json` API token. The
-ULB/OpenML path needs **no account at all**, so a reviewer with zero Kaggle
-presence can reproduce a real-data fraud result with the commands above.
+rules that cannot be scripted. `~/.kaggle/access_token` authenticates Kaggle
+**datasets**, but
+`kagglehub.competition_download('ieee-fraud-detection')` returns 403 with the
+available credentials; the competition path needs a classic
+`~/.kaggle/kaggle.json` API token. The ULB/OpenML path needs **no account at
+all**, so a reviewer with zero Kaggle presence can reproduce a real-data fraud
+result with the commands above.
 
 Because IEEE-CIS competition data is not redistributable, **no real row from any
 of these datasets is committed here.** The only data in git is `data/sample/`:
@@ -337,7 +336,7 @@ Full provenance, per-dataset column notes and both leakage traps:
   controls. Autoencoder checkpoints write the same fields and the same metrics
   CSV path as tabular checkpoints.
 - **`/predict` returns `model_version`:** the short git SHA from that metadata is
-  included in every response. A score with no provenance is unreviewable.
+  included in every response, linking the score to its training commit.
 - **No published result metric is typed by hand.** `scripts/evaluate.py` reads
   `reports/*_metrics.csv`; it computes nothing. There is no code path from a
   fixture to a published table: sample mode opens no MLflow/W&B run and writes
@@ -356,8 +355,8 @@ Two explainers, dispatched on the checkpoint's model type by
   `nn.Linear` transforms and a 16-unit bottleneck; model-agnostic explanation is
   not used on the request path.
 
-An unknown model type raises `NotImplementedError` → HTTP 501 rather than
-returning an empty explanation that a UI would render as "no important features".
+An unknown model type raises `NotImplementedError` → HTTP 501. Empty explanation
+payloads do not reach the UI.
 
 The `/explain/*` routes reuse the exact feature frame the score was computed
 from, so the explanation always describes the number beside it.
@@ -379,7 +378,7 @@ The **88%** coverage badge is the rounded **88.24%** reported by:
 ./.venv/bin/pytest -p no:cacheprovider -m "not network" --cov=src --cov-report=term-missing
 ```
 
-What the gates assert, beyond plumbing:
+The gates assert:
 
 | Test | Assertion |
 |---|---|
@@ -436,7 +435,7 @@ What the gates assert, beyond plumbing:
 | ADR | Decision |
 |---|---|
 | [0001](docs/adr/0001-gradio-to-nextjs.md) | Gradio → Next.js + shadcn/ui. Gradio could not provide per-model deep links or the required result-card layouts. |
-| [0002](docs/adr/0002-experiment-tracking.md) | MLflow is primary for real runs; sample runs are deliberately untracked. W&B remains optional. |
+| [0002](docs/adr/0002-experiment-tracking.md) | MLflow is primary for real runs; sample runs do not write tracking records. W&B remains optional. |
 | [0003](docs/adr/0003-real-data-over-synthetic.md) | **Real public data only.** Every generator is deleted, and the config loader enforces a real data source. |
 | [0004](docs/adr/0004-narrow-to-fintech.md) | Ten industries → three fintech problems. Twenty-one catalogued models over four checkpoints did not match the implemented scope. |
 | [0005](docs/adr/0005-assumptions-log.md) | Implementation assumptions, each reversible in one commit. |
