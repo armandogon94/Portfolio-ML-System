@@ -431,7 +431,7 @@ What the gates assert, beyond plumbing:
   regenerable, but screenshots were not generated in this results-publication
   pass.
 
-## Tech decisions
+## Architectural Decisions
 
 | ADR | Decision |
 |---|---|
@@ -448,6 +448,5 @@ What the gates assert, beyond plumbing:
 
 ## Author
 
-**Armando Gonzalez:** ex-software engineer at a fintech company, finishing an
-M.S. in Data Science & AI at FIU.
+**Armando Gonzalez, AI/ML Engineer, M.S. in Data Science and AI**
 [GitHub](https://github.com/armandogon94)
