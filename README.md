@@ -1,69 +1,20 @@
-# Fintech ML System — Fraud, Credit Risk, and Attrition on Real Public Data
+# Fintech ML System: Fraud, Credit Risk, and Attrition on Real Public Data
 
 [![CI](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml/badge.svg)](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Three real-money fintech problems — payment fraud, consumer credit risk, and card
-attrition — with three accepted real-data training runs, tracked in MLflow and
-served behind a FastAPI inference API with SHAP explanations. It was rebuilt
-from a version whose headline metric was real, reproducible, and completely
-meaningless.
+Three real-money fintech problems are covered: payment fraud, consumer credit
+risk, and card attrition. Three accepted real-data training runs are tracked in
+MLflow and served behind a FastAPI inference API with SHAP explanations.
 
-**Can a fraud model hold up when the labels aren't ones I wrote myself?**
-
-- **Focus** — payment fraud · consumer credit risk · card attrition
-- **Data** — [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
-- **Stack** — Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
-- **Output** — a results table where every filled cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows remain empty because both need the credential-blocked IEEE-CIS competition data.
+- **Focus:** payment fraud · consumer credit risk · card attrition
+- **Data:** [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
+- **Stack:** Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
+- **Output:** a results table where every filled cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows remain empty because both need the credential-blocked IEEE-CIS competition data.
 
 📄 **[Read the full methodology & analysis →](reports/RESULTS.md)**
-
----
-
-## A correction, and why it's here
-
-An earlier version of this README reported **AUC-ROC 0.964** for fraud detection.
-That number was real — it reproduced exactly from
-`results/fraud_detection_metrics.csv` and from
-`checkpoints/fraud_detection/metadata.json`, and every artefact agreed with it.
-
-It was also meaningless. The dataset came from `src/data/generate_fraud.py`,
-which drew fraudulent and normal transactions from **two different
-distributions** and passed `is_fraud` into the generator as an **input** rather
-than deriving it from the features:
-
-```python
-# src/data/generate_fraud.py:26,29  (deleted)
-normal = _generate_transactions(rng, n_normal, is_fraud=False)
-fraud  = _generate_transactions(rng, n_fraud,  is_fraud=True)
-
-# src/data/generate_fraud.py:42,50  (deleted)
-if is_fraud:  transaction_amount = rng.lognormal(mean=5.5, sigma=1.5, ...)
-else:         transaction_amount = rng.lognormal(mean=3.5, sigma=1.0, ...)
-```
-
-The model's entire task was to separate `lognormal(5.5, 1.5)` from
-`lognormal(3.5, 1.0)`. It was measuring how far apart I had put two of my own
-random number generators. The credit-risk and housing targets had the same
-defect: the label was a closed-form function of the features, which I wrote.
-
-**All four published numbers are retracted** — fraud 0.964, credit risk 0.888,
-housing R² 0.942, forecasting MAE 22.2. Every synthetic generator is deleted, and
-`src/config.py` now raises at load time on any config that does not name a real,
-downloadable dataset. Replacement results now use the metric appropriate to each
-class balance and disclose what the underlying data can actually support.
-
-Full reasoning, including the enforcement that stops this recurring:
-**[ADR-0003 — Real public data only](docs/adr/0003-real-data-over-synthetic.md)**.
-
-The retracted fraud number was **0.964 ROC-AUC** on labels I generated. On real
-labels, the measured replacements are **0.9810 ROC-AUC / 0.8569 PR-AUC** for
-`fraud_ulb` and **0.7160 ROC-AUC / 0.3935 PR-AUC** for `credit_risk`. The
-credit-risk result is the least flattering of the three measured rows, and it is
-also the one that most resembles what a consumer-credit model scores on
-origination-time data.
 
 ---
 
@@ -83,11 +34,8 @@ commands to unblock it.
 
 ## Key Findings
 
-- **The old fraud result was not a model result.** `generate_fraud.py` passed the
-  label into the generator as a parameter, so 0.964 measured the separation
-  between two hand-chosen lognormals. Retracted rather than quietly deleted.
-- **The credential-free fraud result beat its logistic baseline on the metric
-  that matters.** ULB/OpenML 1597 measured PR-AUC **0.8569 ± 0.0331** against
+- **The credential-free fraud result beat its logistic baseline on PR-AUC.**
+  ULB/OpenML 1597 measured PR-AUC **0.8569 ± 0.0331** against
   **0.7300 ± 0.0279** for logistic regression, all out of fold.
 - **Gradient boosting was barely better than logistic regression on
   LendingClub.** LightGBM measured **0.3935 PR-AUC** against **0.3720**, a
@@ -97,14 +45,6 @@ commands to unblock it.
 - **The churn score is not prospective.** Its **0.9735 ± 0.0078 PR-AUC**
   substantially detects an attrition that already happened because current
   status and trailing-activity features describe the same period.
-- **The old test suite could not have caught any of it.** `pyproject.toml` hid
-  `-m 'not network and not parity'` inside
-  `addopts` — silently deselecting both the Kaggle canary and the pre-ship gate.
-  `tests/test_serving.py` asserted only key presence and `0 <= score <= 1`, which
-  a predictor hardcoded to `0.5` passes. That exclusion is gone and the gates now
-  assert the expected-range smoke alarm, baseline improvement, and monotonic
-  direction.
-
 ## Results
 
 ```bash
@@ -179,7 +119,7 @@ flowchart TB
 
 The API discovers models by globbing `checkpoints/*/metadata.json` rather than
 holding a hardcoded list, so adding a model needs no change to `api.py` and no
-redeploy — and a fresh clone with zero checkpoints reports `status: ok` with three
+redeploy; a fresh clone with zero checkpoints reports `status: ok` with three
 unavailable models instead of crash-looping.
 [SVG](docs/diagrams/c4-container.svg) · [full notes](docs/architecture.md)
 
@@ -213,8 +153,7 @@ sequenceDiagram
 
 Step 5 calls the *same* `engineer_features` training called, with the frequency
 maps and category dtypes training fitted, loaded from the checkpoint.
-Training/serving skew is the most common production ML bug and the only
-structural defence is refusing to have a second implementation —
+A shared implementation prevents training/serving skew.
 `tests/serving/test_skew.py` scores the same rows through both paths and demands
 identical matrices. [SVG](docs/diagrams/sequence-predict.svg)
 
@@ -246,10 +185,10 @@ the trainer but open no tracking run and cannot reach `checkpoints/` or
 `reports/`.
 [SVG](docs/diagrams/pipeline-dag.svg)
 
-There is **no ERD** here on purpose: this project has no application database.
-The only durable state is MLflow's SQLite store, which is a vendor schema this
-project does not own. [`docs/architecture.md`](docs/architecture.md) says so in
-one line rather than drawing a fictional one.
+This project has no application database, so there is **no ERD**. The only
+durable state is MLflow's SQLite store, which is a vendor schema this project
+does not own. [`docs/architecture.md`](docs/architecture.md) documents that
+boundary.
 
 ---
 
@@ -262,7 +201,7 @@ one line rather than drawing a fictional one.
 │   ├── fraud.yaml              #   IEEE-CIS · time split on TransactionDT
 │   ├── fraud_ulb.yaml          #   OpenML 1597 · credential-free · time split on Time
 │   ├── credit_risk.yaml        #   LendingClub · time split on issue_d · 29-entry denylist
-│   └── churn.yaml              #   Card attrition · 5-fold stratified CV
+│   └── churn.yaml              #   Card attrition: 5-fold stratified CV
 ├── src/
 │   ├── config.py               # Loads AND validates. Refuses a config with no real data.source.
 │   ├── data/
@@ -285,15 +224,15 @@ one line rather than drawing a fictional one.
 │   ├── README.md               # Provenance, licence, access gate, and the leakage traps per dataset
 │   └── sample/                 # COMMITTED 500-row synthetic CI fixtures. Labels are pure noise.
 ├── tests/                      # Mirrors src/ package-for-package; local coverage gate is 80%.
-│   ├── data/test_leakage_denylist.py   # the highest-value test in the repo
+│   ├── data/test_leakage_denylist.py   # blocks post-origination and target leakage
 │   ├── serving/test_skew.py            # training features == serving features
 │   ├── test_quality_gates.py           # sanity band, baseline improvement, monotonicity
 │   └── e2e/test_train_to_serve.py      # fixtures -> train -> checkpoint -> HTTP, under 30s
-├── web/                        # Next.js 14. Three routes + /dashboard. Zero placeholder copy.
+├── web/                        # Next.js 14. Three routes + /dashboard. No placeholder copy.
 ├── infra/                      # docker/ multi-stage non-root images · compose/ 3-service stack
 ├── docs/                       # adr/ 0001-0005 · diagrams/ Mermaid + SVG · architecture.md
 ├── reports/                    # RESULTS.md + *_metrics.csv (written by training, never by hand)
-├── conftest.py                 # AT ROOT ON PURPOSE — imports xgboost+lightgbm before torch (libomp)
+├── conftest.py                 # AT ROOT ON PURPOSE: imports xgboost+lightgbm before torch (libomp)
 └── uv.lock                     # COMMITTED. The Docker build fails without it.
 ```
 
@@ -307,7 +246,7 @@ cd Portfolio-ML-System
 cp .env.example .env
 
 make setup           # uv sync --frozen --extra dev
-make test            # test suite on committed fixtures — no credentials, no network
+make test            # test suite on committed fixtures; no credentials or network
 make train-sample    # smoke-train all 4 configs (opens no tracker; writes no artifacts)
 ```
 
@@ -318,7 +257,7 @@ install; cached dependencies can be reused afterward.
 To train on real data:
 
 ```bash
-make data            # needs a Kaggle token — see data/README.md
+make data            # needs a Kaggle token; see data/README.md
 make train
 make evaluate        # reads reports/*_metrics.csv
 make figures         # PR curves, calibration, SHAP -> reports/figures/
@@ -359,10 +298,10 @@ not anonymously downloadable; the OpenML source is:
 
 | Dataset | Account | Extra gate | Redistributable |
 |---|---|---|---|
-| IEEE-CIS Fraud Detection | Free Kaggle | **Yes — one-click rules acceptance** | **No** |
-| LendingClub 2007-2018Q4 | Free Kaggle | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
-| Credit Card Customers | Free Kaggle | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
-| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
+| IEEE-CIS Fraud Detection | Free Kaggle | **Yes (one-click rules acceptance)** | **No** |
+| LendingClub 2007-2018Q4 | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Do not redistribute rows. |
+| Credit Card Customers | Free Kaggle | No | Uploader tags CC0; upstream authority unverified. Do not redistribute rows. |
+| ULB Credit Card Fraud (OpenML 1597) | **None** | No | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
 IEEE-CIS sits behind a Kaggle account *and* an acceptance of the competition
 rules that cannot be scripted. On this machine,
@@ -373,7 +312,7 @@ ULB/OpenML path needs **no account at all**, so a reviewer with zero Kaggle
 presence can reproduce a real-data fraud result with the commands above.
 
 Because IEEE-CIS competition data is not redistributable, **no real row from any
-of these datasets is committed here.** The only data in git is `data/sample/` —
+of these datasets is committed here.** The only data in git is `data/sample/`:
 500-row synthetic fixtures whose labels are drawn independently of the features,
 used by CI and by nothing else.
 
@@ -387,21 +326,18 @@ Full provenance, per-dataset column notes and both leakage traps:
 - **Seed 42**, declared once per config and threaded into the split,
   preprocessing and every estimator by `BaseTrainer._seed_everything`, including
   PyTorch weight initialisation, dropout and shuffling. Seeded MPS kernels are not
-  guaranteed bit-deterministic, and the code says so rather than claiming exact
-  reproducibility.
-- **`uv.lock` is committed.** Before this, `.gitignore` hid it while
-  `api.Dockerfile` ran
-  `COPY pyproject.toml uv.lock ./` and `uv sync --frozen` —
-  the advertised quickstart was physically unbuildable from a fresh clone.
-  `scripts/verify_fresh_clone.sh` exists to keep that fixed.
+  guaranteed bit-deterministic.
+- **`uv.lock` is committed.** `api.Dockerfile` runs
+  `COPY pyproject.toml uv.lock ./` and `uv sync --frozen`.
+  `scripts/verify_fresh_clone.sh` checks the quickstart from a fresh clone.
 - **Every checkpoint carries its own provenance.**
   `checkpoints/<problem>/metadata.json` records the git SHA that trained it, the
   seed, the dataset source, the split config, the full feature column list, every
   metric, the checkpoint fit scope and row count, and the enforced leakage
   controls. Autoencoder checkpoints write the same fields and the same metrics
   CSV path as tabular checkpoints.
-- **`/predict` returns `model_version`** — the short git SHA from that metadata —
-  on every response. A score with no provenance is unreviewable.
+- **`/predict` returns `model_version`:** the short git SHA from that metadata is
+  included in every response. A score with no provenance is unreviewable.
 - **No published result metric is typed by hand.** `scripts/evaluate.py` reads
   `reports/*_metrics.csv`; it computes nothing. There is no code path from a
   fixture to a published table: sample mode opens no MLflow/W&B run and writes
@@ -413,8 +349,8 @@ Full provenance, per-dataset column notes and both leakage traps:
 Two explainers, dispatched on the checkpoint's model type by
 [`src/serving/explain.py`](src/serving/explain.py):
 
-- **SHAP `TreeExplainer`** for LightGBM and XGBoost — exact, fast enough for a
-  request path, and returns signed per-feature contributions.
+- **SHAP `TreeExplainer`** for LightGBM and XGBoost uses exact Tree SHAP on the
+  request path and returns signed per-feature contributions.
 - **Input-gradient attribution** for the autoencoder baseline, because
   `TreeExplainer` does not apply. The model is a symmetric autoencoder with six
   `nn.Linear` transforms and a 16-unit bottleneck; model-agnostic explanation is
@@ -436,8 +372,7 @@ make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
 Checkpoint-dependent quality gates skip with an explicit training command when a
-real checkpoint is absent. The fresh-clone verifier names that skip rather than
-implying those model-quality gates ran; a vacuously passing gate is not evidence.
+real checkpoint is absent. The fresh-clone verifier reports that skip separately.
 The **88%** coverage badge is the rounded **88.24%** reported by:
 
 ```bash
@@ -454,8 +389,8 @@ What the gates assert, beyond plumbing:
 | [`tests/test_quality_gates.py`](tests/test_quality_gates.py) | Expected-range smoke alarm, model beats its own baseline, monotonic direction |
 | [`tests/e2e/test_train_to_serve.py`](tests/e2e/test_train_to_serve.py) | Fixtures → train → checkpoint → HTTP predict in under 30s, and asserts the fixture result is **near chance** |
 
-`pyproject.toml` no longer hides `-m 'not network and not parity'` in `addopts`.
-The network exclusion now lives visibly in
+`pyproject.toml` contains no `-m 'not network and not parity'` filter in
+`addopts`. The network exclusion is defined in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
@@ -467,8 +402,8 @@ The network exclusion now lives visibly in
   remains credential-blocked, and its autoencoder needs the same data.
 - **IEEE-CIS test labels do not exist.** The competition's `test_transaction.csv`
   is unlabelled, so evaluation is a temporal split *within* the training file.
-  That is the only honest option, and a random split would inflate AUC by putting
-  the same card and device on both sides of the boundary.
+  A random split would inflate AUC by putting the same card and device on both
+  sides of the boundary.
 - **Churn is not prospective.** `Attrition_Flag` and the trailing-activity
   features describe the same period. The source has no event timestamp, feature
   cutoff, or future outcome window, so the score substantially detects attrition
@@ -486,12 +421,12 @@ The network exclusion now lives visibly in
   approval or pricing model. The comparison without those fields has not been
   run.
 - **MPS on the host, CPU in Docker.** `src/device.py` selects MPS on Apple
-  Silicon, but `infra/docker/api.Dockerfile` force-installs CPU PyTorch — MPS is
+  Silicon, but `infra/docker/api.Dockerfile` force-installs CPU PyTorch. MPS is
   macOS-only and cannot exist in a Linux container. LightGBM and XGBoost ship
   CPU-only wheels on macOS arm64 regardless, so the three headline models gain
   nothing from MPS either way.
-- **No deployment.** Zero cloud budget, and no dead "Live:" link. Docker plus the
-  committed screenshot script is the demo.
+- **No cloud deployment.** Docker plus the committed screenshot script is the
+  demo.
 - **`docs/images/` is empty.** `scripts/capture_screenshots.py` is committed and
   regenerable, but screenshots were not generated in this results-publication
   pass.
@@ -500,19 +435,19 @@ The network exclusion now lives visibly in
 
 | ADR | Decision |
 |---|---|
-| [0001](docs/adr/0001-gradio-to-nextjs.md) | Gradio → Next.js + shadcn/ui. Gradio could not do per-model deep links or bespoke result cards, and every Gradio app looks like a research prototype. |
+| [0001](docs/adr/0001-gradio-to-nextjs.md) | Gradio → Next.js + shadcn/ui. Gradio could not provide per-model deep links or the required result-card layouts. |
 | [0002](docs/adr/0002-experiment-tracking.md) | MLflow is primary for real runs; sample runs are deliberately untracked. W&B remains optional. |
-| [0003](docs/adr/0003-real-data-over-synthetic.md) | **Real public data only.** Every generator deleted, the config loader enforces it, and the old 0.964 is publicly retracted with its mechanism stated. |
-| [0004](docs/adr/0004-narrow-to-fintech.md) | Ten industries → three fintech problems. Twenty-one catalogued models over four checkpoints was breadth as a tell, not as range. |
-| [0005](docs/adr/0005-assumptions-log.md) | Assumptions taken during the autonomous rebuild, each reversible in one commit. |
+| [0003](docs/adr/0003-real-data-over-synthetic.md) | **Real public data only.** Every generator is deleted, and the config loader enforces a real data source. |
+| [0004](docs/adr/0004-narrow-to-fintech.md) | Ten industries → three fintech problems. Twenty-one catalogued models over four checkpoints did not match the implemented scope. |
+| [0005](docs/adr/0005-assumptions-log.md) | Implementation assumptions, each reversible in one commit. |
 
 ## License
 
-- Repository licence: MIT — see [LICENSE](LICENSE).
+- Repository licence: MIT. See [LICENSE](LICENSE).
 - Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Author
 
-**Armando Gonzalez** — ex-software engineer at a fintech company, finishing an
+**Armando Gonzalez:** ex-software engineer at a fintech company, finishing an
 M.S. in Data Science & AI at FIU.
 [GitHub](https://github.com/armandogon94)
