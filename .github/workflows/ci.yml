@@ -99,11 +99,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The 0.964 retraction is load-bearing. If someone deletes the correction
-      # section, or reintroduces a placeholder, CI fails.
+      # The historical correction no longer belongs in README. CI still blocks
+      # the retired 0.964 metric, placeholder copy, and unsupported claims while
+      # requiring the ADR that documents why the metric was retired.
       - name: No placeholders, no resurrected claims
         run: |
           set -e
+          if grep -n "0\.964" README.md; then
+            echo "README resurrected the retired 0.964 metric."
+            exit 1
+          fi
           if grep -n "YOUR_USERNAME" README.md; then
             echo "README contains the placeholder repository owner."
             exit 1
@@ -121,7 +126,6 @@ jobs:
             exit 1
           fi
           grep -q "docs/adr/0003-real-data-over-synthetic.md" README.md
-          grep -q "A correction, and why it's here" README.md
 
       - name: Every relative README link resolves to a real file
         run: |

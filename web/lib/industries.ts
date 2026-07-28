@@ -6,7 +6,7 @@
  * real copy.
  *
  * The previous version listed six industries and twenty-one models, ten of which
- * were permanent placeholders carrying literal `TODO(copy)` taglines. A dashboard
+ * were permanent placeholders carrying unfinished taglines. A dashboard
  * whose rows never resolve reads as abandonment, and six unrelated verticals read
  * as generated breadth. See `docs/adr/0004-narrow-to-fintech.md`.
  */

@@ -438,9 +438,8 @@ The gates assert:
   nothing from MPS either way.
 - **No cloud deployment.** Docker plus the committed screenshot script is the
   demo.
-- **`docs/images/` is empty.** `scripts/capture_screenshots.py` is committed and
-  regenerable, but screenshots were not generated in this results-publication
-  pass.
+- **No screenshots are tracked.** `scripts/capture_screenshots.py` is committed
+  and regenerable, but capture requires the live stack and a trained checkpoint.
 
 ## Architectural Decisions
 

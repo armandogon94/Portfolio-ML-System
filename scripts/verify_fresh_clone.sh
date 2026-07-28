@@ -82,7 +82,7 @@ echo "==> [2/7] Files the documented quickstart needs"
 [ -d data/sample ]        || fail "data/sample/ is missing" "CI and the e2e test run against these fixtures."
 pass "required files are tracked"
 
-# ── 3. No agent scaffolding or retracted claim escaped into the clone ────────
+# ── 3. No agent scaffolding or retired metric escaped into the clone ─────────
 echo "==> [3/7] Repository hygiene"
 if git ls-files | grep -iE 'AGENT-BRIEF|AGENTS\.md|CLAUDE\.md|(^|/)\.claude/|(^|/)\.handoff/|PORT-MAP|^PORTS\.md|^PLAN\.md|LOOP_|FABLE|\.bak$'; then
   fail "agent scaffolding is tracked" "Listed above. Add to .gitignore and 'git rm --cached'."
@@ -94,9 +94,9 @@ fi
 if grep -q "YOUR_USERNAME" README.md; then
   fail "README still contains the YOUR_USERNAME placeholder" ""
 fi
-if ! grep -q "A correction, and why it's here" README.md; then
-  fail "the 0.964 retraction section is missing from README.md" \
-    "It is required above the fold. See docs/adr/0003-real-data-over-synthetic.md."
+if grep -n "0\.964" README.md; then
+  fail "README resurrected the retired 0.964 metric" \
+    "The rationale remains in docs/adr/0003-real-data-over-synthetic.md."
 fi
 pass "hygiene"
 
