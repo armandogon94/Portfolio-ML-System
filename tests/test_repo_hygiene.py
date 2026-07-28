@@ -10,13 +10,18 @@ carried the character. A gate whose walk cannot reach the files that break it is
 gate that cannot fail, so :func:`test_the_scan_reaches_beyond_documentation` asserts
 the walk itself.
 
-Two forms are checked:
+Two kinds of spelling are checked:
 
 * the literal glyph, matched on the raw UTF-8 bytes;
-* the backslash-u escape of the same code point, which a grep for the glyph cannot
-  see and which reaches a reader as a real em dash the moment JSON or Python decodes
-  it. :data:`ESCAPED_EM_DASH` is assembled from two string literals so that naming
-  the pattern does not plant it.
+* every *encoded* spelling that decodes back to the same code point, listed in
+  :data:`ENCODED_SPELLINGS`. A grep for the glyph cannot see any of them, and each one
+  reaches a reader as a real em dash the moment JSON, Python or an HTML parser decodes
+  it. This tree is Python, TypeScript, TSX, YAML and SVG, so the backslash escapes and
+  the HTML entities are both live re-entry routes: the named entity in a TSX component
+  or in a generated SVG diagram renders as the character itself.
+
+Every needle is assembled from two string literals, so naming a pattern here does not
+plant it in the tree and trip this module against itself.
 
 Binary files are excluded by git's own heuristic, a NUL byte in the first 8000, so a
 PNG that happens to contain the byte sequence is not reported as prose.
@@ -35,9 +40,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EM_DASH = chr(0x2014)
 EM_DASH_BYTES = EM_DASH.encode("utf-8")
 
-#: The escaped spelling, assembled the same way and for the same reason.
-ESCAPED_EM_DASH = "\\" + "u2014"
-ESCAPED_EM_DASH_BYTES = ESCAPED_EM_DASH.encode("ascii")
+#: Encoded spellings that decode back to U+2014, as ``(spelling, fold_case)``.
+#:
+#: Each is assembled from two literals for the same reason as :data:`EM_DASH`. The
+#: backslash escapes are case-significant, lowercase ``u`` and uppercase ``U`` being
+#: different escapes rather than variants of one, so both are listed and matched as
+#: written. HTML entity names and the hexadecimal marker are case-insensitive per the
+#: HTML spec, so those are matched against a folded haystack instead.
+ENCODED_SPELLINGS: tuple[tuple[str, bool], ...] = (
+    ("\\" + "u2014", False),  # JSON, JavaScript and Python, four hex digits
+    ("\\" + "U00002014", False),  # Python and C, eight hex digits
+    ("\\" + "N{EM DASH}", False),  # Python, by Unicode character name
+    ("&" + "mdash;", True),  # HTML, XML, SVG and JSX, by entity name
+    ("&#" + "8212;", True),  # HTML numeric entity, decimal
+    ("&#" + "x2014;", True),  # HTML numeric entity, hexadecimal
+)
 
 #: git treats a file as binary when a NUL byte appears in this many leading bytes.
 _BINARY_SNIFF_BYTES = 8000
@@ -82,13 +99,19 @@ def _text_payloads() -> list[tuple[Path, bytes]]:
     return payloads
 
 
-def _hits(needle: bytes) -> list[str]:
-    """``path:count`` for every tracked text file containing ``needle``."""
-    return [
-        f"{path.relative_to(REPO_ROOT)}: {data.count(needle)}"
-        for path, data in _text_payloads()
-        if needle in data
-    ]
+def _hits(needle: bytes, fold_case: bool = False) -> list[str]:
+    """``path:count`` for every tracked text file containing ``needle``.
+
+    ``fold_case`` lowercases the haystack, for spellings whose grammar is
+    case-insensitive; the needle is already lowercase in that case.
+    """
+    hits = []
+    for path, data in _text_payloads():
+        haystack = data.lower() if fold_case else data
+        count = haystack.count(needle)
+        if count:
+            hits.append(f"{path.relative_to(REPO_ROOT)}: {count}")
+    return hits
 
 
 def test_no_tracked_text_file_contains_an_em_dash():
@@ -101,14 +124,14 @@ def test_no_tracked_text_file_contains_an_em_dash():
     )
 
 
-def test_no_tracked_text_file_contains_an_escaped_em_dash():
-    """The escape survives a glyph grep and decodes back into the character."""
-    offenders = _hits(ESCAPED_EM_DASH_BYTES)
+@pytest.mark.parametrize(("spelling", "fold_case"), ENCODED_SPELLINGS, ids=lambda v: str(v))
+def test_no_tracked_text_file_contains_an_encoded_em_dash(spelling: str, fold_case: bool):
+    """Each encoded spelling survives a glyph grep and decodes back to the character."""
+    needle = spelling.lower() if fold_case else spelling
+    offenders = _hits(needle.encode("ascii"), fold_case=fold_case)
     assert not offenders, (
-        f"{len(offenders)} tracked text file(s) contain the {ESCAPED_EM_DASH} escape.\n"
-        + _FIX
-        + "\n"
-        + "\n".join(offenders)
+        f"{len(offenders)} tracked text file(s) contain the {spelling} spelling of "
+        f"U+2014.\n" + _FIX + "\n" + "\n".join(offenders)
     )
 
 
@@ -136,4 +159,27 @@ def test_the_scan_reaches_beyond_documentation():
     assert len(scanned) > 5 * len(markdown), (
         f"only {len(scanned)} files scanned against {len(markdown)} markdown files; "
         "the walk has been narrowed back toward documentation"
+    )
+
+
+def test_every_known_encoding_route_is_still_covered():
+    """Guard the guard, second axis: emptying the spelling table must break a test.
+
+    An empty ``parametrize`` argument list collects one case and reports it SKIPPED,
+    not failed, so the encoded-spelling test can be disarmed without a red run. That
+    is the same defect class as a walk that cannot reach the offending files. This
+    pins the routes that actually decode to the character in this tree: the backslash
+    escapes for Python, JSON and TypeScript, and the three HTML entity forms for TSX
+    and the generated SVG diagrams.
+    """
+    spellings = {spelling for spelling, _ in ENCODED_SPELLINGS}
+    for required in ("\\" + "u2014", "\\" + "U00002014", "&" + "mdash;"):
+        assert required in spellings, f"the {required} spelling is no longer checked"
+
+    entity_forms = {spelling for spelling in spellings if spelling.startswith("&")}
+    assert len(entity_forms) == 3, (
+        f"expected the named, decimal and hexadecimal entity forms, found {entity_forms}"
+    )
+    assert all(fold for spelling, fold in ENCODED_SPELLINGS if spelling.startswith("&")), (
+        "HTML entity names are case-insensitive, so they must be matched case-folded"
     )

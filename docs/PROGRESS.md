@@ -1,24 +1,10 @@
 # PROGRESS: fintech real-data rebuild
 
-HEAD: `6cc1361` on `main`
-NEXT ACTION: **Create the two verified local commits.** The source workspace is
-writable, but this session cannot create `.git/index.lock`. Run:
-
-```bash
-git add .github/workflows/ci.yml scripts/verify_fresh_clone.sh web/lib/industries.ts
-git -c user.name="Armando Gonzalez" -c user.email="armandogon94@gmail.com" \
-  commit -m "fix(ci): reject retired README metric"
-
-git add README.md THIRD_PARTY_NOTICES.md data/README.md docs/PROGRESS.md \
-  docs/adr/0001-gradio-to-nextjs.md docs/adr/0002-experiment-tracking.md \
-  docs/adr/0003-real-data-over-synthetic.md docs/adr/0004-narrow-to-fintech.md \
-  docs/adr/0005-assumptions-log.md docs/ports.example.md pyproject.toml \
-  reports/RESULTS.md scripts/make_figures.py web/README.md
-git -c user.name="Armando Gonzalez" -c user.email="armandogon94@gmail.com" \
-  commit -m "docs: remove dangling image claims and em dashes"
-```
-
-Do not push.
+HEAD: `653629a` on `main`
+NEXT ACTION: **Push.** The two commits this file previously listed as pending were
+created: `8e037e4` swept tracked Markdown and the figure generator, and `653629a`
+swept tracked source, config and tests and added the repository-wide guard. Only
+`8e037e4` has been pushed, so the typography commits after it are local.
 
 ## CI green repair: VERIFIED, COMMIT BLOCKED
 
@@ -46,6 +32,47 @@ Do not push.
 - Pytest result: 262 passed, 5 skipped, 1 deselected, 88.26% coverage.
 - Web result: 18 files and 98 tests passed; the production build completed.
 - Exit 0: `uv lock --check --offline` and the pnpm frozen lockfile-only check.
+- Not run by task rule: Docker builds, full fresh-clone verification, live
+  services, screenshot capture, training, and browser-based diagram rendering.
+
+## Typography guard widened to every encoding route
+
+- Re-measured the tree rather than trusting the previous commit message. At the
+  pushed commit `8e037e4`: 250 U+2014 characters on 245 lines across 103 tracked
+  text files, plus one backslash escape of the same code point in this file, in a
+  documented shell command. At `653629a`: zero of both.
+  Counts are occurrences, not lines containing one.
+- Binary exclusion is real but changed nothing here. Three tracked files are
+  binary by git's NUL-in-first-8000 heuristic: the two report figures and the web
+  favicon. None contained the byte sequence, so there were no false positives to
+  discard in either measurement.
+- The guard was proven able to fail before being trusted. Injecting the glyph
+  into `src/config.py` and the escape into `web/lib/industries.ts` turned it red;
+  narrowing its walk back to `git ls-files '*.md'` left both glyph assertions
+  green and failed `test_the_scan_reaches_beyond_documentation`, which is the
+  gate-that-cannot-fail defect the test exists to catch.
+- The check still had a blind spot. It read the literal glyph and the four-digit
+  backslash escape only. An HTML entity in a `.tsx` component or in a generated
+  SVG diagram renders to a reader as a real em dash and neither assertion could
+  see it. `ENCODED_SPELLINGS` now covers six routes: the four- and eight-digit
+  backslash escapes, the Python name escape, and the named, decimal and
+  hexadecimal HTML entities, the last three matched case-folded.
+- Each of the nine injected spellings, including the uppercase entity variants,
+  was confirmed to fail the matching case before the widened guard was accepted.
+  The guard also caught the literal entity in its own module docstring, which was
+  rewritten to describe the pattern instead of spelling it.
+- An empty `parametrize` list collects one case and reports it SKIPPED rather
+  than failed, so the spelling table could have been emptied without a red run.
+  `test_every_known_encoding_route_is_still_covered` pins the routes; emptying
+  the table was verified to fail it.
+- Exit 0: Ruff check, Ruff format check, mypy, non-network pytest with the 80%
+  coverage gate, README link check, README claims check, Mermaid/SVG count,
+  synthetic-generator check, web lint, web typecheck, web tests, and web build.
+- Pytest result: 271 passed, 5 skipped, 1 deselected, 88.26% coverage.
+- Web result: 18 files and 98 tests passed; the production build completed.
+- No generator emits the character. `scripts/make_figures.py` was fixed at
+  `8e037e4` and is unchanged since. No source constructs the code point
+  programmatically, by `chr`, by entity, or by escape.
 - Not run by task rule: Docker builds, full fresh-clone verification, live
   services, screenshot capture, training, and browser-based diagram rendering.
 - Exact dependency installs were not repeated because the sandbox blocks package
