@@ -28,9 +28,9 @@ class is rare; ROC-AUC is retained only as a familiar secondary diagnostic.
 
 | Run | **PR-AUC ↑ (primary)** | ROC-AUC ↑ | Logistic-regression PR-AUC | Δ PR-AUC | P@1% ↑ | R@1%FPR ↑ | Status |
 |---|---|---|---|---|---|---|---|
-| `fraud` |  |  |  |  |  |  | **not yet measured — BLOCKED:** IEEE-CIS competition download needs a classic `kaggle.json` token |
+| `fraud` |  |  |  |  |  |  | **not yet measured (BLOCKED):** IEEE-CIS competition download needs a classic `kaggle.json` token |
 | `fraud_ulb` | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 | measured · [`fraud_ulb_metrics.csv`](fraud_ulb_metrics.csv) |
-| `fraud_autoencoder` |  |  |  |  |  |  | **not yet measured — BLOCKED:** needs the same IEEE-CIS data |
+| `fraud_autoencoder` |  |  |  |  |  |  | **not yet measured (BLOCKED):** needs the same IEEE-CIS data |
 | `credit_risk` | **0.3935** | 0.7160 | 0.3720 | 0.0215 | 0.5807 | 0.0457 | measured · [`credit_risk_metrics.csv`](credit_risk_metrics.csv) |
 | `churn` | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 | measured · [`churn_metrics.csv`](churn_metrics.csv) |
 
@@ -112,9 +112,9 @@ Attrition is **not** monotonic in inactivity in this dataset. The 0-month cell i
 above 0 months would be contradicting its own training data, so the gate was
 asserting a bug rather than catching one.
 
-The gate now probes **1 against 4 months** — the segment where the relationship
+The gate now probes **1 against 4 months**: the segment where the relationship
 is monotone increasing (4.5% → 29.9%) and every cell has hundreds to thousands of
-rows behind it — and the checkpoint passes it. Widening it back to 0..6 needs
+rows behind it, and the checkpoint passes it. Widening it back to 0..6 needs
 different data, not a different model. The test was corrected, not relaxed: it
 still fails a model wired backwards over the range where "backwards" is defined.
 
@@ -208,9 +208,9 @@ a secondary number because it is what everyone expects to see.
 **Two operational metrics are reported alongside both AUCs**, because they are
 what a fintech reviewer actually asks about:
 
-- `precision_at_1pct` — of the top 1% of transactions by score, the slice a human
+- `precision_at_1pct`: of the top 1% of transactions by score, the slice a human
   review team would work, what fraction are truly positive? The queue's hit rate.
-- `recall_at_1pct_fpr` — at a 1% false-positive budget, what fraction of the
+- `recall_at_1pct_fpr`: at a 1% false-positive budget, what fraction of the
   positives do we catch? The loss-prevention number.
 
 **Each config declares an expected-range sanity band.** `sanity_band` is only a
@@ -223,7 +223,7 @@ For stratified cross-validation, the headline and sanity-band metric is always
 the **CV mean with its standard deviation**. Fold metrics never retain ambiguous
 `test_*` names. The saved estimator is refit on all rows after evaluation, while
 the PR, ROC, calibration, and confusion-matrix figures use persisted out-of-fold
-predictions—each plotted row was scored by a model that did not train on it.
+predictions: each plotted row was scored by a model that did not train on it.
 
 <img src="figures/calibration_curves.png" alt="Log-scale calibration plots with ten equal-count bins and 95% Wilson intervals. ULB fraud has a Brier score of 0.00039 with 3 of 10 bins containing no observed positives; card attrition has a Brier score of 0.02096 with 4 of 10 bins containing no observed positives.">
 
@@ -235,7 +235,7 @@ did not save per-row predictions.
 
 ---
 
-## 1. Payment fraud — IEEE-CIS
+## 1. Payment fraud: IEEE-CIS
 
 **Dataset.** 590,540 transactions × 394 columns, ~3.5% fraudulent, contributed by
 Vesta Corporation. Joined with a 20-column subset of `train_identity.csv`.
@@ -279,9 +279,9 @@ features before publication.
 | Model | PR-AUC ↑ | ROC-AUC ↑ | P@1% ↑ | R@1%FPR ↑ | Brier ↓ |
 |---|---|---|---|---|---|
 | LightGBM |  |  |  |  |  |
-| Autoencoder (unsupervised, MPS) |  |  |  |  | not reported — uncalibrated |
+| Autoencoder (unsupervised, MPS) |  |  |  |  | not reported: uncalibrated |
 | Logistic regression (baseline) |  |  |  |  |  |
-| Prior (baseline) |  |  | — | — |  |
+| Prior (baseline) |  |  |  |  |  |
 
 *Not yet measured.* The autoencoder row is included because the gap between it
 and the supervised model is the interesting number: it quantifies what
@@ -302,7 +302,7 @@ monotonically with distance from the training period.
 
 ---
 
-## 1b. Payment fraud — ULB / OpenML 1597
+## 1b. Payment fraud: ULB / OpenML 1597
 
 OpenML returned **284,807 rows × 30 columns**: `V1`–`V28`, `Amount`, and
 `Class`. It did **not** return `Time`, so this dataset cannot support a temporal
@@ -313,7 +313,7 @@ uses stratified 5-fold cross-validation.
 |---|---|---|---|---|
 | LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.1544 ± 0.0043 | 0.8964 ± 0.0219 |
 | Logistic regression (baseline) | 0.7300 ± 0.0279 |  |  |  |
-| Prior (baseline) | 0.0017 | 0.5000 | — | — |
+| Prior (baseline) | 0.0017 | 0.5000 |  |  |
 
 Every headline value is the mean ± standard deviation across held-out folds.
 After cross-validation, the serving estimator was refit on all **284,807** rows;
@@ -322,7 +322,7 @@ above are part of this result, not footnotes.
 
 ---
 
-## 2. Consumer credit risk — LendingClub
+## 2. Consumer credit risk: LendingClub
 
 **Dataset.** LendingClub accepted loans 2007-2018Q4,
 `accepted_2007_to_2018Q4.csv.gz`: **2,260,701 raw rows × 151 columns** and
@@ -334,12 +334,12 @@ terminal-status rows** remain with an overall **0.1996 default rate**. The model
 uses **32 origination-time features**.
 
 **Target.** `loan_status` filtered to terminal outcomes only: `Fully Paid` → 0,
-`Charged Off` → 1. Everything else — `Current`, `In Grace Period`, `Late (…)` —
-is dropped, because those loans have not resolved. This removed **40.5%** of the
+`Charged Off` → 1. Everything else, including `Current`, `In Grace Period`,
+`Late (…)`, is dropped because those loans have not resolved. This removed **40.5%** of the
 raw rows. Labelling a `Current` loan as non-default would record a success that
 has not happened.
 
-**Split: time-based on `issue_d`.** Consumer credit shifts by vintage — 2015
+**Split: time-based on `issue_d`.** Consumer credit shifts by vintage: 2015
 borrowers are not 2018 borrowers, and the macro environment differs. Training on
 earlier vintages and testing on later ones is the only split that resembles how
 the model would be used. The config requested 70/10/20. Because `issue_d` is
@@ -364,7 +364,7 @@ bias is a limitation of the target construction, not a modelling choice. The
 held-out result must not be read as an unbiased estimate of forward default
 risk.
 
-### The leakage denylist — the most informative thing in this document
+### The leakage denylist: the most informative thing in this document
 
 `configs/credit_risk.yaml` names 29 entries the model may never see, enforced by
 `tests/data/test_leakage_denylist.py` and additionally never read at all
@@ -403,8 +403,8 @@ delta is reported for it.
 
 **The business framing matters more than the AUC here.** At origination the
 decision is not "classify this loan" but "approve at what rate". Expected loss at
-a chosen approval threshold — `P(default) × loss_given_default` against interest
-income — is the metric a lender optimises, and a ROC-AUC of 0.70 can be entirely
+a chosen approval threshold, `P(default) × loss_given_default` against interest
+income, is the metric a lender optimises, and a ROC-AUC of 0.70 can be entirely
 usable under it. The predictor's approve/review/decline thresholds are
 illustrative, and `src/serving/predictors/credit_risk.py` says so in its response
 body rather than implying a calibrated policy.
@@ -415,7 +415,7 @@ body rather than implying a calibrated policy.
 |---|---|---|---|---|---|
 | LightGBM | **0.3935** | 0.7160 | 0.5807 | 0.0457 | 0.1551 |
 | Logistic regression (baseline) | 0.3720 | 0.6989 | 0.5307 | 0.0405 | 0.2122 |
-| Prior (baseline) | 0.2176 | 0.5000 | — | — | 0.1711 |
+| Prior (baseline) | 0.2176 | 0.5000 |  |  | 0.1711 |
 
 LightGBM beats logistic regression by only **+0.0215 PR-AUC** (**0.3935** vs
 **0.3720**) and **+0.017 ROC-AUC** (**0.7160** vs **0.6989**). On these
@@ -467,8 +467,8 @@ Naive_Bayes_Classifier_Attrition_Flag_..._Months_Inactive_12_mon_1
 Naive_Bayes_Classifier_Attrition_Flag_..._Months_Inactive_12_mon_2
 ```
 
-These are pre-computed posterior probabilities of the target — the label,
-laundered through a classifier — and the dataset's own author instructs users to
+These are pre-computed posterior probabilities of the target: the label
+laundered through a classifier. The dataset's own author instructs users to
 delete them. They are a well-known trap: a notebook that leaves them in reports
 near-perfect AUC and has learned nothing.
 
@@ -492,7 +492,7 @@ the protection.
 |---|---|---|---|---|
 | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 1.0000 ± 0.0000 | 0.8869 ± 0.0317 |
 | Logistic regression (baseline) | 0.7800 ± 0.0217 |  |  |  |
-| Prior (baseline) |  |  | — | — |
+| Prior (baseline) |  |  |  |  |
 
 **Caveat, stated next to the number:** this is substantially detection of a
 current attrition that already happened, not a prospective forecast. The target

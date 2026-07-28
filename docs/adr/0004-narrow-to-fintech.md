@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted** — 2026-07-25.
+**Accepted**: 2026-07-25.
 
 ## Context
 
@@ -13,7 +13,7 @@ What was actually there:
 
 - `configs/` held 10 YAML files. `checkpoints/` held 4 problems.
   `src/serving/api.py` exposed 21 routes. Six of those routes raised
-  `FileNotFoundError` — a 500 — on every call, because no checkpoint existed.
+  `FileNotFoundError` (an HTTP 500) on every call because no checkpoint existed.
 - `web/lib/industries.ts` had 11 entries with `ready: true` and 10 with
   `ready: false`, including **eight literal `TODO(copy)` markers** in
   user-visible taglines.
@@ -47,7 +47,7 @@ decisions in one domain**, each with a different shape:
 | Problem | Shape | What it demonstrates |
 |---|---|---|
 | Fraud | 590k rows, 3.5% positive, temporal | Severe imbalance, feature engineering on anonymised columns, PR-AUC over ROC-AUC |
-| Credit risk | 2.26M rows, target derived from loan outcome | Leakage discipline — the with/without-denylist delta is the single best data-science paragraph available here |
+| Credit risk | 2.26M rows, target derived from loan outcome | Leakage discipline: the with/without-denylist delta is the single best data-science paragraph available here |
 | Churn | 10,127 rows | Correct statistics on small n: 5-fold CV with mean ± std, never a single hold-out number |
 
 They share a vocabulary a fintech interviewer already has. Credit risk carries
@@ -57,7 +57,7 @@ numbers.
 
 ## Consequences
 
-- **`src/serving/api.py` drops from 21 routes to 8** — three predict, three
+- **`src/serving/api.py` drops from 21 routes to 8**: three predict, three
   explain, `/models` and `/health`. Every route now has a model behind it, and a
   missing checkpoint returns 503 with the command that fixes it rather than a 500.
 - **The web catalogue is fully resolved.** Three models, all `ready: true`, zero
@@ -67,7 +67,7 @@ numbers.
   `Industry.modelCount` reads `models.length`, and the README quotes no count
   that is not backed by a file.
 - **The deleted domains are in git history.** Nothing is lost; the commit that
-  removed them is the record. They are not coming back — Phase B in the old plan
+  removed them is the record. They are not coming back: Phase B in the old plan
   proposed nine *more* industry models and directly contradicts this decision.
 - **`src/evaluation/regression_metrics.py` and `timeseries_metrics.py` are
   deleted** along with `lstm_forecaster.py` and `price_model.py`. All three
@@ -86,7 +86,7 @@ catalogue that is half roadmap reads as abandoned, and the honest label does not
 fix the underlying tell: the six industries were never chosen, they were
 enumerated.
 
-**Narrow to one problem — fraud only.** Rejected as too far. Three problems in
+**Narrow to one problem: fraud only.** Rejected as too far. Three problems in
 one domain lets the results table show *contrast*: an imbalanced problem where
 PR-AUC is the right metric, a hard problem with a pre-run expectation around
 0.70, and an easy problem where a high score means nothing. One problem cannot

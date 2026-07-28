@@ -1,6 +1,6 @@
 # ADR-001: Replace Gradio with Next.js + shadcn/ui for the demo UI
 
-## Status/Amendment — 2026-07-25
+## Status/Amendment: 2026-07-25
 
 **Accepted; historical references amended.** The decision and its original
 reasoning remain below unchanged. `SPEC.md`, `tasks/plan.md`, the parity test,
@@ -17,7 +17,7 @@ command output instead of treating 181 as a permanent count.
 
 ## Status
 
-**Accepted** — implemented in Phase A.9 (slices A.9.2 through A.9.11).
+**Accepted**: implemented in Phase A.9 (slices A.9.2 through A.9.11).
 Supersedes the implicit Slice 1 decision to use Gradio as the demo UI.
 
 ## Date
@@ -27,13 +27,13 @@ Supersedes the implicit Slice 1 decision to use Gradio as the demo UI.
 ## Context
 
 The original Slice 1 deliverable (committed at v1.0.0) used Gradio as
-the demo interface — a Python-native UI library that ships with FastAPI
+the demo interface: a Python-native UI library that ships with FastAPI
 on the same Docker image. That choice was right for the prototype phase:
 Gradio let one Python file render five tabs of forms + result cards
 with no frontend toolchain, and shipped a working UI in an afternoon.
 
 By the time Phase A's industry expansion was scoped (20 models across
-6 industries — Real Estate, Dental, Healthcare, Fintech, Logistics,
+6 industries: Real Estate, Dental, Healthcare, Fintech, Logistics,
 Legal/Immigration), Gradio had become the project's primary
 constraint:
 
@@ -62,7 +62,7 @@ constraint:
    needs a non-trivial host. Phase C ships publicly; the stack matters.
 
 6. **Type-safe inputs.** Zod-validated forms catch shape drift at the
-   boundary. Gradio inputs are dynamically typed — every form drift
+   boundary. Gradio inputs are dynamically typed: every form drift
    is a 422 from FastAPI.
 
 The team had to choose between piling Gradio workarounds for each
@@ -88,7 +88,7 @@ The migration was executed via the **strangler pattern**:
   API level is byte-for-byte parity at the UI level.
 - **A.9.11** (this ADR): deleted `app/gradio_app.py`, `Dockerfile.ui`,
   the `ml-ui` compose service, the `make ui` Makefile target, and the
-  Gradio dependency from `pyproject.toml` — all in one atomic commit.
+  Gradio dependency from `pyproject.toml`: all in one atomic commit.
 
 Rollback path: revert this commit. The parity snapshots were captured
 before deletion and remain in `tests/fixtures/gradio_parity/` so a
@@ -103,7 +103,7 @@ unchanged.
 - **Cons:** every per-industry result card becomes a Gradio
   workaround; doesn't address landing-page or deep-link needs;
   visual ceiling unchanged. Doesn't fix the deploy story.
-- **Rejected** because the friction was already accumulating —
+- **Rejected** because the friction was already accumulating.
   6 industries × 3-4 models each means at least 20 customised
   result cards. The cost of that scaled poorly.
 
@@ -111,7 +111,7 @@ unchanged.
 
 - **Pros:** Python-native like Gradio; a touch more layout control;
   has a reasonably active component library.
-- **Cons:** Same fundamental category as Gradio — a Python "app
+- **Cons:** Same fundamental category as Gradio: a Python "app
   framework" that visually betrays itself in every layout. Same
   deploy + deep-link problems. Routing is event-driven, not URL-
   driven; same single-page constraint.
@@ -144,7 +144,7 @@ unchanged.
 - **Cons:** larger bundle; more opinionated styling that's harder to
   customize per-industry; ships an entire CSS-in-JS system that
   conflicts with Tailwind.
-- **Rejected** in favor of shadcn/ui — components are copy-pasted
+- **Rejected** in favor of shadcn/ui: components are copy-pasted
   into the repo (no opaque dependency), Tailwind-styled (full
   customization), tree-shakable.
 
@@ -165,7 +165,7 @@ unchanged.
    means the entire UI ships to Vercel. FastAPI deploys separately.
 5. **Server Components + ISR.** The `/dashboard` page fetches FastAPI
    `/models` + MLflow run history server-side, caches for 30 s, and
-   prerenders on the next access — no per-request fan-out to MLflow.
+   prerenders on the next access: no per-request fan-out to MLflow.
 6. **`make lint` is now Python-only.** No more `app/` directory in
    the lint target list; cleaner separation of concerns.
 
@@ -206,7 +206,7 @@ unchanged.
   drift.
 - **Acceptance gates** (per SPEC §Phase A.9 success criteria):
   - `docker compose up --build` brings up exactly 3 services
-    (`mlflow`, `ml-api`, `ml-web`) — all healthy ≤120 s. ✓
+    (`mlflow`, `ml-api`, `ml-web`): all healthy ≤120 s. ✓
   - `git grep -i gradio` returns matches only in this ADR + the
     superseded SPEC sections (kept for archaeology). Zero matches
     in `src/`, `web/`, `Makefile`, `docker-compose*.yml`. ✓
@@ -215,9 +215,9 @@ unchanged.
 
 ## References
 
-- `SPEC.md` §Phase A.9 — full retirement spec
-- `tasks/plan.md` §Phase A.9 — task-level breakdown
-- `tests/test_parity_gradio_nextjs.py` — the regression gate
-- `web/README.md` — Next.js app onboarding
-- Tag `v1.3.0-phase-a-fanout` — last commit with Gradio in tree
-- Tag `v1.4.0-phase-a-complete` — first commit without Gradio (TBD A.9.12)
+- `SPEC.md` §Phase A.9: full retirement spec
+- `tasks/plan.md` §Phase A.9: task-level breakdown
+- `tests/test_parity_gradio_nextjs.py`: the regression gate
+- `web/README.md`: Next.js app onboarding
+- Tag `v1.3.0-phase-a-fanout`: last commit with Gradio in tree
+- Tag `v1.4.0-phase-a-complete`: first commit without Gradio (TBD A.9.12)

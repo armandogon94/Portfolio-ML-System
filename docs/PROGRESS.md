@@ -1,16 +1,53 @@
 # PROGRESS: fintech real-data rebuild
 
-HEAD: `590baab` on `main`
-NEXT ACTION: **Render diagram exports outside the restricted sandbox.** Run:
+HEAD: `6cc1361` on `main`
+NEXT ACTION: **Create the two verified local commits.** The source workspace is
+writable, but this session cannot create `.git/index.lock`. Run:
 
 ```bash
-export MMDC_BIN="/private/tmp/claude-501/-Users-armandogonzalez-Downloads-Claude-Deep-Research-Claude-Code/c2be8eaa-de57-4b28-9bab-5a3420aace0f/scratchpad/tools/node_modules/.bin/mmdc"
-make diagrams MMDC="$MMDC_BIN"
-python3 scripts/check_diagram_text.py
+git add .github/workflows/ci.yml scripts/verify_fresh_clone.sh web/lib/industries.ts
+git -c user.name="Armando Gonzalez" -c user.email="armandogon94@gmail.com" \
+  commit -m "fix(ci): reject retired README metric"
+
+git add README.md THIRD_PARTY_NOTICES.md data/README.md docs/PROGRESS.md \
+  docs/adr/0001-gradio-to-nextjs.md docs/adr/0002-experiment-tracking.md \
+  docs/adr/0003-real-data-over-synthetic.md docs/adr/0004-narrow-to-fintech.md \
+  docs/adr/0005-assumptions-log.md docs/ports.example.md pyproject.toml \
+  reports/RESULTS.md scripts/make_figures.py web/README.md
+git -c user.name="Armando Gonzalez" -c user.email="armandogon94@gmail.com" \
+  commit -m "docs: remove dangling image claims and em dashes"
 ```
 
-The final command must print `OK`. Inspect all three SVG files before committing
-the diagram source and export changes.
+Do not push.
+
+## CI green repair: VERIFIED, COMMIT BLOCKED
+
+- The removed README correction heading produced the focused RED result:
+  `grep -q "A correction, and why it's here" README.md` exited 1.
+- README contains no `0.964`; the replacement negative assertion and the
+  existing ADR-link assertion both pass.
+- The workflow comment and fresh-clone hygiene check now describe and enforce
+  the current contract. The docs gate also found a retired placeholder token in
+  a TypeScript comment; the comment was corrected and the unchanged gate passes.
+- The limitation text now says that no screenshots are tracked and points to
+  the regenerable capture script. `scripts/make_figures.py` no longer creates an
+  empty image directory. The remaining tracked path reference is the capture
+  script's runtime output message.
+- The exact tracked-Markdown count moved from 138 to 0:
+  `git ls-files '*.md' | xargs grep -c "$(printf '\u2014')"`.
+- Exit 0: Ruff check, Ruff format check, mypy, non-network pytest with coverage,
+  README link check, README claims check, Mermaid/SVG count, synthetic-generator
+  check, static diagram text inspection of all committed SVGs, generated results
+  Markdown, shell syntax, web lint, web typecheck, web tests, and web build.
+- Pytest result: 262 passed, 5 skipped, 1 deselected, 88.26% coverage.
+- Web result: 18 files and 98 tests passed; the production build completed.
+- Exit 0: `uv lock --check --offline` and the pnpm frozen lockfile-only check.
+- Not run by task rule: Docker builds, full fresh-clone verification, live
+  services, screenshot capture, training, and browser-based diagram rendering.
+- Exact dependency installs were not repeated because the sandbox blocks package
+  network access and writes to the existing user caches.
+- BLOCKED: `git add` cannot create `.git/index.lock` in this session and exits
+  with `Operation not permitted`. The required path-scoped commands are above.
 
 ## Diagram text containment slice: BLOCKED
 
@@ -51,7 +88,7 @@ SUCCESS: `uv run python scripts/download_data.py --dataset ieee-cis` completes;
 then run the two blocked fraud training commands without changing their rows in
 the results documents beforehand.
 
-**`./scripts/verify_fresh_clone.sh` PASSES — all seven stages, 2026-07-25 at
+**`./scripts/verify_fresh_clone.sh` PASSES: all seven stages, 2026-07-25 at
 `60ee15f`.** This is the first time stage 7 has ever completed. Verbatim tail:
 
 ```
@@ -72,7 +109,7 @@ the working tree.
 
 Status legend: `[x]` complete · `[~]` partial · `[ ]` not started · `BLOCKED`
 needs an external input. The credit-risk result batch is committed locally on
-`main`. **Nothing has been pushed** — the public remote still serves the
+`main`. **Nothing has been pushed**: the public remote still serves the
 pre-retraction tree, and pushing remains an owner decision.
 
 ## Accepted measured results
@@ -107,18 +144,18 @@ and are not presented as measurements.
 
 ## Historical slices and commit map
 
-- [x] **Slice 1 — trust-signal repairs.** Commit `1def9ad` tracked `uv.lock`,
+- [x] **Slice 1: trust-signal repairs.** Commit `1def9ad` tracked `uv.lock`,
   added the licence, and retracted the invalid synthetic results.
-- [x] **Slice 2 — narrow to fintech.** Commits `75afe98`, `f50c1af`, and
+- [x] **Slice 2: narrow to fintech.** Commits `75afe98`, `f50c1af`, and
   `d3d9951` removed the non-fintech domains, narrowed the web routes, and
   removed superseded process files.
-- [x] **Slice 3 — real-data acquisition.** Commit `75afe98` contains the data
+- [x] **Slice 3: real-data acquisition.** Commit `75afe98` contains the data
   layer, configs, adapters, training refactor, serving split, and test rebuild.
   Commit `e15842a` added and validated the credential-free ULB/OpenML path.
-- BLOCKED **Slice 4 — IEEE-CIS fraud result.** The implementation is in
+- BLOCKED **Slice 4: IEEE-CIS fraud result.** The implementation is in
   `75afe98`; no result commit exists because the competition download is still
   blocked.
-- [x] **Slice 5 — LendingClub credit risk result.** The implementation is in
+- [x] **Slice 5: LendingClub credit risk result.** The implementation is in
   `75afe98`; the real run completed on 2026-07-26 UTC with training SHA
   `052adab726b6dd5a176cfdc737110b172198a749`. It measured **0.3935 PR-AUC**,
   **0.7160 ROC-AUC**, a **0.3720 logistic-regression PR-AUC**, and a
@@ -135,17 +172,17 @@ and are not presented as measurements.
   partition counts, positive rates, time bounds, and split-key overlap. The
   result CSV, script, test, and publication edits are committed locally and
   unpushed.
-- [x] **Slice 6 — card attrition result.** Pipeline work is in `75afe98` and
+- [x] **Slice 6: card attrition result.** Pipeline work is in `75afe98` and
   `e15842a`; the accepted measured row was published in `4584c9b`.
-- [x] **Slice 7 — config-driven trainer and split serving modules.** Commit
+- [x] **Slice 7: config-driven trainer and split serving modules.** Commit
   `75afe98`.
-- [x] **Slice 8 — tests that can fail.** Core rebuild in `75afe98`,
+- [x] **Slice 8: tests that can fail.** Core rebuild in `75afe98`,
   constant-predictor repair in `57b4921`, methodology gates in `e15842a`.
   The current port, screenshot, coverage, and web-test gate fixes are
   uncommitted in this batch.
-- [x] **Slice 9 — documentation, diagrams, ADRs, and results report.** Commit
+- [x] **Slice 9: documentation, diagrams, ADRs, and results report.** Commit
   `f80fec0`; measured result publication in `4584c9b`.
-- [~] **Slice 10 — CI and fresh-clone verification.** Initial verifier/CI in
+- [~] **Slice 10: CI and fresh-clone verification.** Initial verifier/CI in
   `f80fec0`, prior verifier repair in `57b4921`. This batch fixes the
   unconditional PASS, adds fixture smoke training and web README link checks,
   and wires the Python matrix; a full verifier run against the repaired script
@@ -153,7 +190,7 @@ and are not presented as measurements.
 
 ## BLOCKED and not run
 
-### IEEE-CIS competition download — BLOCKED
+### IEEE-CIS competition download: BLOCKED
 
 `~/.kaggle/access_token` authenticates Kaggle dataset downloads but the
 competition downloads remain blocked. Both paths were re-confirmed on
@@ -183,7 +220,7 @@ uv run python scripts/train.py --model fraud
 uv run python scripts/train.py --model fraud --autoencoder
 ```
 
-### Screenshot success gate — BLOCKED on a runnable measured-model UI
+### Screenshot success gate: BLOCKED on a runnable measured-model UI
 
 The screenshot command must install its browser, launch a browser, write real
 PNG files, and exit zero. Missing Playwright now produces zero captures and a
@@ -195,9 +232,9 @@ make docker-up
 make screenshots
 ```
 
-`docs/images/` remains empty. Do not mark the screenshot gate complete until
-the dashboard, measured-model prediction, and MLflow views are present and
-visually inspected.
+No screenshots are tracked. Do not mark the screenshot gate complete until the
+committed capture script has produced the dashboard, measured-model prediction,
+and MLflow views and they have been visually inspected.
 
 ## Current audit repair
 
@@ -319,23 +356,23 @@ existed on disk. Neither test was weakened to make it pass.
 1. **The credit-risk serving path raised on every request.**
    `tests/test_quality_gates.py::test_a_higher_fico_score_does_not_raise_default_risk`
    skips itself when there is no checkpoint, so it had never run. With one, it
-   failed — not on the assertion, but with
+   failed, not on the assertion, but with
    `AttributeError: Can only use .dt accessor with datetimelike values` from
    `src/features/credit_risk_features.py`. The adapter parses `issue_d` and
    `earliest_cr_line` to `datetime64`, but `src/serving/preprocessing.py` builds
    its one-row frame from the request payload, where any unsupplied key is a
-   float `NaN` — so the shared feature module met `float64` where it assumed
+   float `NaN`, so the shared feature module met `float64` where it assumed
    dates. Fixed by coercing both columns with `pd.to_datetime(errors="coerce")`
    inside the shared module: a no-op on the training frame, and `NaT` (hence a
    `NaN` feature, which LightGBM reads as "unknown") on a partial request. The
-   gate now passes on its merits — the model does score higher FICO as lower
+   gate now passes on its merits. The model does score higher FICO as lower
    default risk.
 
 2. **`KAGGLEHUB_TOKEN_PATH` was frozen at import time.**
    `tests/data/test_download.py::test_real_kaggle_canary` failed in a full-suite
    run but passed alone. `src/data/kaggle_credentials.py` bound the OAuth token
    path as a module-level constant, and the module is first imported inside a
-   test that redirects `Path.home()` to a `tmp_path` — pinning the constant to a
+   test that redirects `Path.home()` to a `tmp_path`, pinning the constant to a
    temporary directory for the rest of the process, so every later credential
    check reported "no token" against a home that never existed. Replaced with
    `kagglehub_token_path()`, resolved per call, matching what

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Regenerate every figure in the README and reports/ from real checkpoints.
 
-Figures are **never hand-exported**. Everything under `reports/figures/` and every
-chart in `docs/images/` is produced by this script from a checkpoint that a
-training run wrote, so a figure cannot drift from the number beside it.
+Figures are **never hand-exported**. Everything under `reports/figures/` is
+produced by this script from a checkpoint that a training run wrote, so a figure
+cannot drift from the number beside it.
 
 Produces, per problem:
   reports/figures/<problem>_pr_curve.png            model vs each baseline
@@ -68,7 +68,6 @@ console = Console()
 
 REPORTS_DIR = get_project_root() / "reports"
 FIGURE_DIR = get_project_root() / "reports" / "figures"
-IMAGE_DIR = get_project_root() / "docs" / "images"
 DPI = 160
 WILSON_Z_95 = 1.959963984540054
 
@@ -732,7 +731,6 @@ def main() -> int:
         )
         return 1
 
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     console.print(f"\n[green]{produced} problem(s) plotted into reports/figures/.[/green]")
     return 0
 

@@ -25,10 +25,10 @@ redistribution rights are unresolved or restrictive.
 
 | Dataset | Account needed | Extra gate | Redistributable |
 |---|---|---|---|
-| IEEE-CIS Fraud Detection | Free Kaggle account | **Yes** — one-click acceptance of the competition rules | **No** |
-| LendingClub 2007-2018Q4 | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
-| Credit Card Customers | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
-| ULB Credit Card Fraud | **None** | No | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
+| IEEE-CIS Fraud Detection | Free Kaggle account | **Yes**: one-click acceptance of the competition rules | **No** |
+| LendingClub 2007-2018Q4 | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified: do not redistribute rows |
+| Credit Card Customers | Free Kaggle account | No | Uploader tags CC0; upstream authority unverified: do not redistribute rows |
+| ULB Credit Card Fraud | **None** | No | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 
 **The Kaggle token types are not interchangeable.** On this machine,
 `~/.kaggle/access_token`, the OAuth token written by `kagglehub login`,
@@ -107,19 +107,19 @@ warning because vendors can re-upload a dataset.
 
 ---
 
-## 1. Payment fraud — IEEE-CIS (Vesta Corporation)
+## 1. Payment fraud: IEEE-CIS (Vesta Corporation)
 
 | | |
 |---|---|
 | Source | <https://www.kaggle.com/competitions/ieee-fraud-detection/data> |
-| Licence | Kaggle competition rules — **not redistributable** |
+| Licence | Kaggle competition rules: **not redistributable** |
 | Scale | `train_transaction.csv` 590,540 × 394; `train_identity.csv` ~144,000 × 41 |
 | Positive rate | ~3.5% (20,663 fraudulent transactions) |
 | Size | ~118 MB zipped, ~1.35 GB expanded |
 | Adapter | [`src/data/adapters/ieee_cis.py`](../src/data/adapters/ieee_cis.py) |
-| Target | `isFraud` — ships with the dataset, nothing here derives it |
+| Target | `isFraud`: ships with the dataset, nothing here derives it |
 | Split | Time-based on `TransactionDT`, first 80% train / last 20% test |
-| sha256 | *not yet recorded — the download has not been run on this machine* |
+| sha256 | *not yet recorded: the download has not been run on this machine* |
 
 Real e-commerce payments contributed by Vesta. Most columns are anonymised:
 `card1`–`card6` are card attributes whose meanings are unpublished, `C1`–`C14` are
@@ -132,7 +132,7 @@ therefore the only honest evaluation available, and a random split would be
 actively wrong: the same card and device appear on both sides of a random
 boundary, and the resulting AUC does not survive deployment.
 
-**Memory.** 590,540 × 393 in float32 is about 0.93 GB — comfortable in 32 GB. The
+**Memory.** 590,540 × 393 in float32 is about 0.93 GB: comfortable in 32 GB. The
 adapter downcasts every numeric column on read and converts strings to pandas
 `category`; the naive float64-plus-object load is roughly four times larger.
 
@@ -144,7 +144,7 @@ Not all 394. The adapter reads the transaction base, `C1`–`C14`, `D1`–`D15`,
 
 | Feature | Why |
 |---|---|
-| `amt_decimal`, `amt_is_round` | The cents portion is signal — card-testing bots produce round amounts, humans do not |
+| `amt_decimal`, `amt_is_round` | The cents portion is signal: card-testing bots produce round amounts, humans do not |
 | `tx_hour`, `tx_weekday`, `tx_is_night` | Card testing peaks overnight |
 | `D*_detrend` | `D` columns drift with `TransactionDT`; subtracting the transaction day stops the model learning the calendar |
 | `card1_freq`, `addr1_freq`, … | "How often has this card been seen" generalises; the raw id memorises |
@@ -155,12 +155,12 @@ artifacts. Fitting them on the full frame leaks the test distribution.
 
 ---
 
-## 2. Consumer credit risk — LendingClub 2007-2018Q4
+## 2. Consumer credit risk: LendingClub 2007-2018Q4
 
 | | |
 |---|---|
 | Source | <https://www.kaggle.com/datasets/wordsforthewise/lending-club> |
-| Licence | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| Licence | Uploader tags CC0; upstream authority unverified: do not redistribute rows |
 | File | `accepted_2007_to_2018Q4.csv.gz` |
 | Scale | 2,260,701 raw rows × 151 columns; matched `expected_rows` exactly |
 | Size | 392.6 MB |
@@ -185,8 +185,8 @@ not redistribute rows.
 "Charged Off" -> is_default = 1
 ```
 
-Everything else — `Current`, `In Grace Period`, `Late (…)`, `Default`, `Issued` —
-is **dropped**. Those loans have not resolved. Labelling a `Current` loan as
+Everything else, including `Current`, `In Grace Period`, `Late (…)`, `Default`,
+and `Issued`, is **dropped**. Those loans have not resolved. Labelling a `Current` loan as
 non-default records a success that has not happened yet and biases the model
 toward optimism on recent vintages, which are exactly the ones with the most
 `Current` rows.
@@ -215,12 +215,12 @@ credit-risk result uses the denylist-applied 32-feature matrix.
 
 ---
 
-## 3. Card attrition — Credit Card Customers
+## 3. Card attrition: Credit Card Customers
 
 | | |
 |---|---|
 | Source | <https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers> |
-| Licence | Uploader tags CC0; upstream authority unverified — do not redistribute rows |
+| Licence | Uploader tags CC0; upstream authority unverified: do not redistribute rows |
 | File | `BankChurners.csv` |
 | Scale | **10,127 rows × 23 columns** |
 | Positive rate | 16.07% attrited |
@@ -247,8 +247,8 @@ Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Depend
 Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2
 ```
 
-These are pre-computed posterior probabilities of the target — the label,
-laundered through a classifier — and the dataset's own author instructs users to
+These are pre-computed posterior probabilities of the target: the label
+laundered through a classifier. The dataset's own author instructs users to
 delete them. The adapter **keeps them in the returned frame on purpose** so that
 `reports/RESULTS.md` can report the AUC with and without as an explicit leakage
 demonstration. `configs/churn.yaml` is what stops them reaching the model, and
@@ -260,12 +260,12 @@ protection.
 
 ---
 
-## 4. Ungated fallback — ULB Credit Card Fraud
+## 4. Ungated fallback: ULB Credit Card Fraud
 
 | | |
 |---|---|
 | Source | <https://www.openml.org/d/1597> (also Kaggle `mlg-ulb/creditcardfraud`) |
-| Licence | Unresolved — OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
+| Licence | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
 | Scale | **284,807 rows × 30 columns** (`V1`–`V28`, `Amount`, `Class`) |
 | Class counts | **`Class=0`: 284,315 · `Class=1`: 492** |
 | Positive rate | **0.1727%** |
@@ -275,7 +275,7 @@ protection.
 | Config | [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) |
 | Target | `is_fraud`, derived from source `Class` |
 | Split | Stratified 5-fold cross-validation |
-| sha256 | n/a — OpenML returns a frame rather than a primary file |
+| sha256 | n/a: OpenML returns a frame rather than a primary file |
 
 OpenML returned **no `Time` column**. The 29 model features are the PCA
 components `V1`–`V28` plus `Amount`; `Class` is the target and is denylisted from
@@ -290,7 +290,7 @@ primary metric.
 
 ---
 
-## CI fixtures — `data/sample/`
+## CI fixtures: `data/sample/`
 
 | File | Rows | Shape of |
 |---|---|---|
@@ -307,7 +307,7 @@ committing 500 real rows would violate the competition rules. This is the only
 synthetic data that survived ADR-0003, and it survives for a licensing reason
 rather than a convenience one.
 
-**The label in every fixture is drawn independently of the features** — a
+**The label in every fixture is drawn independently of the features**: a
 Bernoulli draw with no relationship to any column. That is the exact opposite of
 what the deleted `generate_fraud.py` did. A model trained on a fixture should
 score near chance, and `tests/e2e/test_train_to_serve.py` asserts
@@ -337,11 +337,11 @@ uv run python scripts/make_fixtures.py
 ```
 data/
 ├── README.md                    # this file
-├── sample/                      # COMMITTED — synthetic CI fixtures
+├── sample/                      # COMMITTED: synthetic CI fixtures
 │   ├── ieee_cis_sample.csv
 │   ├── lending_club_sample.csv
 │   ├── churn_sample.csv
 │   └── ulb_creditcard_sample.csv
-├── raw/                         # GITIGNORED — nothing real is committed
-└── processed/                   # GITIGNORED — parquet intermediates
+├── raw/                         # GITIGNORED: nothing real is committed
+└── processed/                   # GITIGNORED: parquet intermediates
 ```

@@ -2,13 +2,13 @@
 
 ## Status
 
-**Accepted** — 2026-07-25. Written by the agent that performed the rebuild, per
+**Accepted**: 2026-07-25. Written by the agent that performed the rebuild, per
 the instruction to record any ambiguity resolved without asking.
 
 ## Context
 
 The rebuild ran unsupervised against a written brief. Three points were genuinely
-ambiguous — the source documents disagreed with each other. Each was resolved by
+ambiguous: the source documents disagreed with each other. Each was resolved by
 picking the option most consistent with the governing document, and each is
 recorded here so the owner can reverse it cheaply.
 
@@ -34,7 +34,7 @@ is exactly one number to change.
 ### A2. Slice commits are preserved; the branch is merged with `--no-ff`
 
 **Conflict.** The brief's final slice said "squash-merge to `main`". The run
-instructions said "commit after EVERY slice — small commits are the point, the
+instructions said "commit after EVERY slice: small commits are the point, the
 commit graph is a portfolio artifact."
 
 **Resolved:** keep every slice commit and merge with `git merge --no-ff`. A
@@ -51,13 +51,13 @@ anything ships.
 number". The owner's priority note for this run forbade downloading datasets and
 running heavy compute, and forbade using credentials.
 
-**Resolved:** implement the entire path — adapters, splits, features, trainer,
-metrics, quality gates, figures and screenshot scripts — and stop at the point
+**Resolved:** implement the entire path (adapters, splits, features, trainer,
+metrics, quality gates, figures and screenshot scripts), then stop at the point
 where data or compute is required. The results table ships with **empty cells and
 an explicit "not yet measured" note**, never a placeholder number.
 
 The remaining steps, in the exact order to run them, are in
-[`docs/PROGRESS.md`](../PROGRESS.md) under "BLOCKED — needs owner".
+[`docs/PROGRESS.md`](../PROGRESS.md) under "BLOCKED: needs owner".
 
 This is the assumption most worth checking: it means the repository is complete
 as *engineering* and incomplete as a *results document*. The README says so

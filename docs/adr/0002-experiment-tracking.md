@@ -2,13 +2,13 @@
 
 ## Status
 
-**Accepted** — 2026-04-11, migrated from `decision.md` Decision 1 on 2026-07-25.
+**Accepted**: 2026-04-11, migrated from `decision.md` Decision 1 on 2026-07-25.
 
 ## Context
 
 The training code used Weights & Biases with a graceful fallback when no API key
 was present. `docker-compose.yml` declared an MLflow service that **no code
-connected to** — it was dead weight in the compose file.
+connected to**: it was dead weight in the compose file.
 
 Both are industry-standard. The question was whether to pick one.
 
@@ -22,11 +22,11 @@ Both are industry-standard. The question was whether to pick one.
 
 ## Decision
 
-**C — MLflow is primary for real runs; W&B is optional and off by default.**
+**C: MLflow is primary for real runs; W&B is optional and off by default.**
 
 MLflow needs no account, no API key and no network: the default tracking URI is
 a local `mlruns/` directory, and `docker compose` raises a server on the repo's
-assigned port. That matters more than it sounds — a reviewer cloning this
+assigned port. That matters more than it sounds: a reviewer cloning this
 repository gets working experiment tracking without signing up for anything.
 Fixture-only sample mode is the deliberate exception: it opens neither tracker,
 so synthetic CI metrics cannot enter the production experiment.
@@ -63,5 +63,5 @@ offer that.
 
 ## References
 
-- `src/training/trainer.py` — `_init_mlflow`, `_init_wandb`, `register_model`
-- `infra/compose/base.yml` — the `mlflow` service
+- `src/training/trainer.py`: `_init_mlflow`, `_init_wandb`, `register_model`
+- `infra/compose/base.yml`: the `mlflow` service

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted** — 2026-07-25. Supersedes the implicit "synthetic data is fine for a
+**Accepted**: 2026-07-25. Supersedes the implicit "synthetic data is fine for a
 portfolio" assumption baked into every earlier phase of this project.
 
 This is the ADR the rest of the repository exists to serve. Read it before
@@ -70,7 +70,7 @@ model. It is a unit test for `model.fit()`.
 `README.md` said, in one line near the bottom: *"All datasets are **synthetic**."*
 
 That is true and it is not the point. Readers hear "synthetic" as "simulated but
-structurally realistic" — the sense in which a synthetic-data vendor uses the
+structurally realistic", the sense in which a synthetic-data vendor uses the
 word. What was actually true is that **the label was a closed-form function of
 the features, written by the person reporting the score.** That is the part that
 voids the metric, and it was never stated.
@@ -88,7 +88,7 @@ Concretely:
 
 1. **All ten `src/data/generate_*.py` files are deleted**, along with
    `src/data/modality.py` and the `--modality {synthetic,stream,mixed}` flag. The
-   three-modality system was scaffolding — it had never produced a single
+   three-modality system was scaffolding: it had never produced a single
    `results/modality_comparison_*.csv` or a single `*_stream` checkpoint.
 
 2. **`src/config.py` refuses to load a config without a real `data.source`.**
@@ -102,9 +102,9 @@ Concretely:
 
    | Problem | Dataset | Access |
    |---|---|---|
-   | Fraud | IEEE-CIS (Vesta) — 590,540 × 394, ~3.5% fraud | Free Kaggle account **plus** one-click acceptance of the competition rules |
-   | Credit risk | LendingClub 2007-2018Q4 — ~2.26M × 151, CC0 | Free Kaggle account |
-   | Churn | Credit-card attrition — 10,127 × 23 | Free Kaggle account |
+   | Fraud | IEEE-CIS (Vesta): 590,540 × 394, ~3.5% fraud | Free Kaggle account **plus** one-click acceptance of the competition rules |
+   | Credit risk | LendingClub 2007-2018Q4: ~2.26M × 151, CC0 | Free Kaggle account |
+   | Churn | Credit-card attrition: 10,127 × 23 | Free Kaggle account |
    | Ungated fallback | ULB credit-card fraud (OpenML 1597) | **No account at all** |
 
    IEEE-CIS is public and free but it is **not anonymous-`curl`-able**, and
@@ -116,7 +116,7 @@ Concretely:
    missing it prints the exact remediation and exits non-zero. Nothing is
    trained and no number is written.
 
-5. **The one surviving synthetic artefact is `data/sample/*.csv`** — 500-row,
+5. **The one surviving synthetic artefact is `data/sample/*.csv`**: 500-row,
    schema-shaped CI fixtures whose labels are drawn *independently* of the
    features. They survive for a licensing reason, not a convenience one: IEEE-CIS
    competition data is not redistributable, so committing 500 real rows would
@@ -125,11 +125,11 @@ Concretely:
    metrics CSV when `--sample` is set. Dashboard history additionally requires
    `sample=false` plus matching problem/config tags.
 
-6. **The retraction is published, not quietly deleted.** `README.md` opens with a
-   correction section, above the fold, that states the mechanism — that the label
-   was an input to the generator — rather than the softer and less useful
-   "metrics were computed on synthetic data". A reader who saw the 0.964 claim
-   deserves to know why it was wrong, not just that it is gone.
+6. **The retired metric remains documented in this ADR.** This record states the
+   mechanism: the label was an input to the generator, not merely that the
+   metrics came from synthetic data. The README no longer repeats the historical
+   correction, so CI prevents the retired value from reappearing there while
+   retaining the link to this rationale.
 
 ## Consequences
 
@@ -167,7 +167,7 @@ uv run python scripts/train.py --model fraud_ulb
 cat reports/fraud_ulb_metrics.csv
 ```
 
-The alternative — a synthetic fallback so the demo always "works" — is exactly
+The alternative, a synthetic fallback so the demo always "works", is exactly
 the thing being deleted.
 
 ### What was kept
@@ -175,7 +175,7 @@ the thing being deleted.
 Nothing that worked was thrown away: `BaseTrainer`, the MLflow integration, the
 SHAP and gradient explainers, `src/device.py`, the structured logging, the Docker
 setup and the Next.js app all survive. The MPS autoencoder survives too, demoted
-from headline model to *unsupervised baseline* — which is the honest role for it,
+from headline model to *unsupervised baseline*, which is the honest role for it,
 and which lets the results table show what supervision actually buys.
 
 ## Alternatives considered
@@ -199,7 +199,7 @@ explanations whose `V1`–`V28` axes mean anything to a human. It is the right
 
 ## References
 
-- Retracted metric: `README.md` §"A correction, and why it's here"
+- Retired metric rationale: this ADR, including the historical result table
 - Enforcement: `src/config.py::_validate`, `src/training/tabular.py::_check_sanity_band`
 - Gates: `tests/test_quality_gates.py`, `tests/data/test_leakage_denylist.py`
 - Data provenance: [`data/README.md`](../../data/README.md)

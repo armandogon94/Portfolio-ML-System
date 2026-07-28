@@ -1,6 +1,6 @@
-# Portfolio ML System — Frontend
+# Portfolio ML System: Frontend
 
-Next.js 14 + shadcn/ui + TanStack Query + Tailwind v3. The web UI for the industry-specific ML demo system. Talks to FastAPI (`../src/serving/api.py`) via Next.js rewrites — no CORS, no backend middleware.
+Next.js 14 + shadcn/ui + TanStack Query + Tailwind v3. The web UI for the industry-specific ML demo system. Talks to FastAPI (`../src/serving/api.py`) via Next.js rewrites: no CORS, no backend middleware.
 
 > See the parent [README](../README.md), the current
 > [architecture notes](../docs/architecture.md), and
@@ -9,17 +9,17 @@ Next.js 14 + shadcn/ui + TanStack Query + Tailwind v3. The web UI for the indust
 ## Prerequisites
 
 - **Node 20 LTS** (`node --version` → `v20.x`)
-- **pnpm 10** — `npm install -g pnpm` or `brew install pnpm`
+- **pnpm 10**: `npm install -g pnpm` or `brew install pnpm`
 - **Docker + Docker Compose** (only if you want the containerized workflow)
 
-For the full-stack backend you also need the root project set up — see the root
+For the full-stack backend you also need the root project set up: see the root
 [README](../README.md#quickstart).
 
 ## Three ways to run
 
 Pick the one that matches what you're doing.
 
-### 1. Native dev (fastest — recommended for day-to-day work)
+### 1. Native dev (fastest, recommended for day-to-day work)
 
 Starts Next.js with hot-reload on http://localhost:3070 and proxies `/api/*` to FastAPI on `localhost:8070`.
 
@@ -53,7 +53,7 @@ Visit http://localhost:3070 (industry pages + `/dashboard`).
 make docker-dev-up
 ```
 
-Slower than native due to container filesystem overhead — only use when native dev isn't an option.
+Slower than native due to container filesystem overhead: only use when native dev isn't an option.
 
 ## Common commands
 
@@ -116,23 +116,23 @@ web/
 
 Copy `.env.example` → `.env.local` and set what you need. The proxy makes both optional in most setups.
 
-- `INTERNAL_API_URL` — server-side rewrite destination for `/api/*`.
+- `INTERNAL_API_URL`: server-side rewrite destination for `/api/*`.
   - Local dev: `http://localhost:8070` (FastAPI on host)
   - Docker:    `http://ml-api:8000` (FastAPI inside compose network)
-- `NEXT_PUBLIC_API_URL` — reserved for future direct client-side calls; currently unused.
+- `NEXT_PUBLIC_API_URL`: reserved for future direct client-side calls; currently unused.
 
 ## Adding a new model (Phases A.3–A.8 pattern)
 
 After A.2 ships, each new industry model follows the same pattern. Run through this checklist:
 
-1. **Schema** — append a Zod schema + `<Model>_DEFAULTS` to `web/lib/schemas.ts` under your industry section.
-2. **API function** — append `predict<Model>` (and optionally `explain<Model>`) to `web/lib/api.ts` using the `post()` helper with response Zod schemas.
-3. **Fields** — create `web/app/<industry>/<model>/fields.ts` exporting a `FieldConfig<Input>[]`.
-4. **Page** — create `web/app/<industry>/<model>/page.tsx` by copying `web/app/fintech/credit-risk/page.tsx` and swapping imports.
-5. **Registry** — flip `ready: true` on the corresponding entry in `web/lib/industries.ts` (or add a new one).
-6. **Tests** — Vitest smoke test under `__tests__/app/<model>.test.tsx` mocking lib/api.
+1. **Schema**: append a Zod schema + `<Model>_DEFAULTS` to `web/lib/schemas.ts` under your industry section.
+2. **API function**: append `predict<Model>` (and optionally `explain<Model>`) to `web/lib/api.ts` using the `post()` helper with response Zod schemas.
+3. **Fields**: create `web/app/<industry>/<model>/fields.ts` exporting a `FieldConfig<Input>[]`.
+4. **Page**: create `web/app/<industry>/<model>/page.tsx` by copying `web/app/fintech/credit-risk/page.tsx` and swapping imports.
+5. **Registry**: flip `ready: true` on the corresponding entry in `web/lib/industries.ts` (or add a new one).
+6. **Tests**: Vitest smoke test under `__tests__/app/<model>.test.tsx` mocking lib/api.
 
-The shared `IndustryIndex` component picks up new `ready` models automatically — no edits to industry-index pages required.
+The shared `IndustryIndex` component picks up new `ready` models automatically: no edits to industry-index pages required.
 
 ## Troubleshooting
 
@@ -143,7 +143,7 @@ ESLint got bumped to v10 (incompatible with Next 14's `next lint`). Pin it: `pnp
 Already polyfilled in `vitest.setup.ts` for shadcn Slider/Switch. If a new Radix component needs more, add the polyfill there.
 
 **Dark mode flashes light on load**
-Expected on first page load before next-themes applies the class. `disableTransitionOnChange` is set; a more aggressive solution is the flicker-free script — revisit if it bothers the demo experience.
+Expected on first page load before next-themes applies the class. `disableTransitionOnChange` is set; a more aggressive solution is the flicker-free script: revisit if it bothers the demo experience.
 
 **Proxy fails with 502/504**
 FastAPI isn't running. Start it with `make serve` (native) or ensure `ml-api` is healthy in Docker (`docker compose ps`).

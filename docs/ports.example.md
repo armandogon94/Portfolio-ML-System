@@ -13,7 +13,7 @@ For a project numbered `NN`:
 |---|---|---|
 | Frontend / web UI | `3NN0`–`3NN9` | `3070` |
 | Backend API | `8NN0`–`8NN9` | `8070` |
-| PostgreSQL | `54NN` | `5407` *(unused — this project has no database)* |
+| PostgreSQL | `54NN` | `5407` *(unused: this project has no database)* |
 | Redis | `63NN` | `6307` *(unused)* |
 | Extra services | see below | `5070` (MLflow) |
 
@@ -25,7 +25,7 @@ published is the allocation for every other project on the author's machine.
 
 | Port | Why |
 |---|---|
-| `5000`, `7000` | macOS **AirPlay Receiver** binds both. A container appears to start and is then unreachable — a debugging session spent on a non-bug. |
+| `5000`, `7000` | macOS **AirPlay Receiver** binds both. A container appears to start and is then unreachable: a debugging session spent on a non-bug. |
 | `11434` | Ollama. |
 | `5432`, `6379` | Postgres and Redis defaults. They collide with any local install and with every other project that lazily took the default. |
 | `3000`, `8000` | Next.js and FastAPI/uvicorn defaults. Same reason. |
