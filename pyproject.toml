@@ -18,7 +18,7 @@ dependencies = [
     "pyarrow>=15.0",
 
     # Real dataset acquisition. kagglehub>=0.3.4 is the floor for
-    # competition_download() — IEEE-CIS is a competition, not a dataset,
+    # competition_download(): IEEE-CIS is a competition, not a dataset,
     # and dataset_download() physically cannot fetch it.
     "kagglehub>=0.3.4",
 
@@ -79,7 +79,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 # NOTE: no `-m` filter here. The previous version hid `-m 'not network and not
 # parity'` in this line, which silently deselected the Kaggle canary AND the
-# pre-ship gate — 360 green tests, two of which never ran. Network exclusion now
+# pre-ship gate: 360 green tests, two of which never ran. Network exclusion now
 # lives visibly in .github/workflows/ci.yml as `-m "not network"`.
 addopts = "--cov=src --cov-report=term-missing --tb=short -q"
 markers = [

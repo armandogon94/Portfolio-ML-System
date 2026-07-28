@@ -1,4 +1,4 @@
-/** A.2.5 — ModelForm component tests. */
+/** A.2.5: ModelForm component tests. */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,7 +47,7 @@ describe("ModelForm", () => {
     // Input-backed fields expose their native labels
     expect(screen.getByLabelText("Age")).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
-    // Slider is a role="slider" element — label text rendered separately
+    // Slider is a role="slider" element, with label text rendered separately
     expect(screen.getByText("Rate")).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeInTheDocument();

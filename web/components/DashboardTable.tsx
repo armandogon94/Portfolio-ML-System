@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * DashboardTable — sortable, filterable table of every model in the
+ * DashboardTable: sortable, filterable table of every model in the
  * 20-entry catalog. Pure data-in: receives a DashboardRow[] from the
  * /dashboard Server Component and owns only the local sort + filter
  * state. No data fetching here.
@@ -81,8 +81,8 @@ function statusRank(s: DashboardRow["status"]): number {
 }
 
 function formatMetric(metric: DashboardRow["keyMetric"]): string {
-  if (!metric || metric.value == null) return "—";
-  // Heuristic: AUC, R², probability-like scores live in [0, 1] — show
+  if (!metric || metric.value == null) return "n/a";
+  // Heuristic: AUC, R², probability-like scores live in [0, 1], so show
   // as percentage with one decimal. Larger magnitudes (RMSE, MAE,
   // dollar predictions) get 4 significant figures.
   if (metric.unit === "%" || (metric.value >= 0 && metric.value <= 1)) {
@@ -92,7 +92,7 @@ function formatMetric(metric: DashboardRow["keyMetric"]): string {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "n/a";
   // ISO → YYYY-MM-DD for table density. The full timestamp is
   // available on hover via the title attribute.
   const d = new Date(iso);

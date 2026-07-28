@@ -1,5 +1,5 @@
 /**
- * PredictionResult — the shared right-column result card for all three models.
+ * PredictionResult: the shared right-column result card for all three models.
  *
  * One component, three problems. Each page supplies a decision label, a
  * probability and its rows; the semantics of the decision differ but the visual
@@ -8,10 +8,10 @@
  * Two things this card always shows, and the reason it exists as a shared
  * component rather than three bespoke ones:
  *
- * `model_version` — the git SHA of the commit that trained the checkpoint. A
+ * `model_version`: the git SHA of the commit that trained the checkpoint. A
  *   score with no provenance is unreviewable, and this repository exists because
  *   an unreviewable score was published.
- * `caveat` — free text the API attaches to a score (small n, illustrative
+ * `caveat`: free text the API attaches to a score (small n, illustrative
  *   thresholds). It is rendered, not swallowed.
  */
 

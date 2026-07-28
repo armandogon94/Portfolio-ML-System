@@ -1,4 +1,4 @@
-/** A.2.6 — ExplainabilityChart component tests. */
+/** A.2.6: ExplainabilityChart component tests. */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 

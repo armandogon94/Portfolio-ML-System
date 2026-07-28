@@ -140,7 +140,7 @@ else
   # -m 'not network' matches what CI runs. No credentials, no downloads.
   if uv run pytest -m "not network" >"$WORK/pytest.log" 2>&1; then
     SUMMARY="$(grep -oE '[0-9]+ passed[^=]*' "$WORK/pytest.log" | tail -1 | sed 's/ *$//')"
-    pass "pytest — ${SUMMARY:-completed}"
+    pass "pytest: ${SUMMARY:-completed}"
     echo "    NOTE: checkpoint-dependent tests in tests/test_quality_gates.py"
     echo "          skip on a fresh clone because checkpoints are intentionally untracked."
     echo "          Their skip is not counted as an executed model-quality gate."

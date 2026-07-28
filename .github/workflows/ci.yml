@@ -157,7 +157,7 @@ jobs:
       # Matches a MODULE or an IMPORT, not prose. ADR-0003 and the fixture
       # script both name the deleted generators in explanatory comments, and
       # forbidding the words would push the project toward not explaining
-      # itself — which is the opposite of the point.
+      # itself, which is the opposite of the point.
       - name: No synthetic data generator has returned
         run: |
           set -e

@@ -1,6 +1,6 @@
 /**
  * A fresh clone has no trained checkpoints. That state must read as "not trained
- * yet", never as "something went wrong" — the API is behaving exactly as
+ * yet", never as "something went wrong": the API is behaving exactly as
  * documented and its 503 detail carries the commands that fix it.
  */
 import { describe, expect, it } from "vitest";

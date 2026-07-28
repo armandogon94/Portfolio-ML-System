@@ -10,7 +10,7 @@ export default function Home() {
           Portfolio ML System
         </h1>
         <p className="max-w-2xl text-muted-foreground">
-          Explore payment fraud, consumer credit risk, and card attrition — the
+          Explore payment fraud, consumer credit risk, and card attrition: the
           three fintech problems implemented in this system.
         </p>
       </header>

@@ -1,5 +1,5 @@
 /**
- * DashboardTable — pure data-in / DOM-out. The join and the fetching live in
+ * DashboardTable: pure data-in / DOM-out. The join and the fetching live in
  * lib/dashboard.ts; this only covers rendering, sorting, filtering and the
  * empty state.
  *

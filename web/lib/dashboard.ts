@@ -10,7 +10,7 @@
  * The original spec planned Next.js Route Handlers under
  * `web/app/api/models/route.ts` and `/api/mlflow-history/route.ts`.
  * That can't work because `next.config.mjs` already wholesale
- * rewrites `/api/*` → FastAPI — route handlers under that path
+ * rewrites `/api/*` → FastAPI, so route handlers under that path
  * would never receive requests. Instead this function fetches
  * directly from `${INTERNAL_API_URL}/models` server-side and calls
  * `getRunHistory` from `lib/mlflow.ts` directly. Net effect: same
@@ -28,7 +28,7 @@ export type DashboardKeyMetric = {
   label: string;
   /** Latest value, or null when no checkpoint exists. */
   value: number | null;
-  /** Optional unit suffix — e.g., "%" for percentages. Omit for unitless. */
+  /** Optional unit suffix, e.g., "%" for percentages. Omit for unitless. */
   unit?: string;
   /** Used by sort + recommendation logic; mirrors scripts/train.py RECOMMENDATION_KEY. */
   higherIsBetter: boolean;
@@ -45,7 +45,7 @@ export type DashboardRow = {
   modelTitle: string;
   /** One-line description from industries.ts. */
   modelDescription: string;
-  /** Lifecycle state — drives the badge color + sort key. */
+  /** Lifecycle state: drives the badge color + sort key. */
   status: ModelStatus;
   /** Link to the model demo page when ready, else null. */
   href: string | null;
@@ -53,7 +53,7 @@ export type DashboardRow = {
   keyMetric: DashboardKeyMetric | null;
   /** ISO timestamp of last training run, or null. */
   lastTrained: string | null;
-  /** Sparkline series — oldest first. Empty array when no MLflow history. */
+  /** Sparkline series: oldest first. Empty array when no MLflow history. */
   history: number[];
 };
 
@@ -116,7 +116,7 @@ async function fetchModelInfo(): Promise<ModelInfoMap> {
   const baseUrl = process.env.INTERNAL_API_URL ?? "http://localhost:8070";
   try {
     const res = await fetch(`${baseUrl}/models`, {
-      // ISR: 30s — same cadence as the /dashboard page revalidate.
+      // ISR: 30s, the same cadence as the /dashboard page revalidate.
       next: { revalidate: 30 },
     });
     if (!res.ok) return {};
@@ -136,7 +136,7 @@ async function safeGetRunHistory(
   problem: string,
   config: string,
 ): Promise<number[]> {
-  // The dashboard sparklines are decorative — never let an MLflow
+  // The dashboard sparklines are decorative, so never let an MLflow
   // outage take down the whole page. Fall back to empty history.
   try {
     const points = await getRunHistory(experimentName, metricKey, {
@@ -197,7 +197,7 @@ export async function getDashboardRows(): Promise<DashboardRow[]> {
   );
 
   // Second pass: fetch MLflow histories for ready rows in parallel.
-  // Untrained rows skip the call entirely — saves on round-trips.
+  // Untrained rows skip the call entirely, which saves on round-trips.
   const histories = await Promise.all(
     baseRows.map((row) => {
       const key = `${row.industrySlug}/${row.modelSlug}`;
@@ -205,7 +205,7 @@ export async function getDashboardRows(): Promise<DashboardRow[]> {
       if (row.status !== "ready" || !spec) return Promise.resolve([] as number[]);
       // All three problems log into ONE MLflow experiment so their runs are
       // directly comparable in the UI. See training.mlflow_experiment in
-      // configs/<problem>.yaml — if that value changes, change this constant.
+      // configs/<problem>.yaml. If that value changes, change this constant.
       return safeGetRunHistory(MLFLOW_EXPERIMENT, spec.metricName, spec.problem, spec.problem);
     }),
   );

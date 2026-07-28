@@ -1,4 +1,4 @@
-# Consumer credit risk — LendingClub accepted loans 2007-2018Q4 (CC0 / public domain).
+# Consumer credit risk: LendingClub accepted loans 2007-2018Q4 (CC0 / public domain).
 #
 # Target is derived from `loan_status`, filtered to TERMINAL statuses only:
 # "Fully Paid" -> 0, "Charged Off" -> 1. `Current` loans have no outcome yet and
@@ -17,7 +17,7 @@ data:
   target: is_default
 
   # ─────────────────────────────────────────────────────────────────────────
-  # LEAKAGE DENYLIST — enforced by tests/data/test_leakage_denylist.py
+  # LEAKAGE DENYLIST, enforced by tests/data/test_leakage_denylist.py
   #
   # Every column below is recorded AFTER origination. A model that sees
   # `recoveries` or `total_rec_prncp` reveals post-outcome information and makes

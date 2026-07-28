@@ -1,4 +1,4 @@
-# web.Dockerfile — production image for the Next.js frontend.
+# web.Dockerfile: production image for the Next.js frontend.
 #
 # Uses Next.js `output: "standalone"` (see web/next.config.mjs) so the
 # runner stage only carries the files `next start` actually needs.
@@ -11,7 +11,7 @@
 
 # ───── 1. Base image ─────────────────────────────────────────────────
 FROM node:20.19-alpine AS base
-# corepack ships with node 20 — pin the pnpm version matching
+# corepack ships with node 20, so pin the pnpm version matching
 # web/package.json's packageManager field so local + container agree.
 RUN apk add --no-cache libc6-compat \
  && corepack enable \
@@ -43,7 +43,7 @@ ENV NODE_ENV=production \
     PORT=3070 \
     HOSTNAME=0.0.0.0
 
-# Non-root user — standard Next.js convention (uid 1001).
+# Non-root user, the standard Next.js convention (uid 1001).
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 
@@ -63,7 +63,7 @@ EXPOSE 3070
 # 127.0.0.1, not localhost. This image's /etc/hosts maps localhost to ::1 only,
 # while the Next standalone server binds IPv4 0.0.0.0. wget resolved ::1, got
 # ECONNREFUSED, and the container sat "unhealthy" forever while serving 200 to
-# the host — which is what kept stage 7 of scripts/verify_fresh_clone.sh red and
+# the host, which is what kept stage 7 of scripts/verify_fresh_clone.sh red and
 # had `docs/PROGRESS.md` recording the Docker stage as NOT COMPLETED.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget --quiet --spider http://127.0.0.1:3070/ || exit 1

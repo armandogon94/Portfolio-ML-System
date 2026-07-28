@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 
 // `output: "standalone"` keeps the Docker image small (`next start`
-// can ship with only the files Next.js actually uses — see
+// can ship with only the files Next.js actually uses; see
 // Dockerfile.web landing in A.2.10). `rewrites` proxies /api/* to
 // the FastAPI backend server-side, so the browser never leaves the
 // Next.js origin and we don't need CORS middleware on the Python side.

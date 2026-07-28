@@ -3,11 +3,11 @@
 Three sources, in order of precedence:
 
 1. Environment variables ``KAGGLE_USERNAME`` and ``KAGGLE_KEY``.
-2. ``~/.kaggle/kaggle.json`` — the classic API token.
-3. ``~/.kaggle/access_token`` — the OAuth token written by ``kagglehub login``.
+2. ``~/.kaggle/kaggle.json``, the classic API token.
+3. ``~/.kaggle/access_token``, the OAuth token written by ``kagglehub login``.
 
 The third case exports nothing: kagglehub reads that file itself. This module
-only has to stop refusing. That refusal was a real bug — measured on this
+only has to stop refusing. That refusal was a real bug, measured on this
 machine on 2026-07-25, ``kagglehub.auth.whoami()`` and
 ``kagglehub.dataset_download('sakshigoyal7/credit-card-customers')`` both
 succeed with only ``access_token`` present, while this loader raised and the
@@ -45,7 +45,7 @@ def kagglehub_token_path() -> Path:
 
     Resolved on every call rather than bound at import. As a module-level
     constant this was evaluated once, against whatever ``Path.home()`` returned
-    the first time the module happened to be imported — so a caller that
+    the first time the module happened to be imported, so a caller that
     redirects the home directory (the test suite does, to assert the
     no-credentials path) permanently pinned the constant to a temporary
     directory, and every later credential check in the same process reported
@@ -96,8 +96,8 @@ def ensure_kaggle_env() -> None:
     """Make sure kagglehub will find *some* credential, or raise with instructions.
 
     Env vars and ``kaggle.json`` are exported into ``os.environ`` because that is
-    how kagglehub discovers them. An ``access_token`` needs no export — kagglehub
-    reads it itself — so this function simply returns without raising.
+    how kagglehub discovers them. An ``access_token`` needs no export (kagglehub
+    reads it itself), so this function simply returns without raising.
 
     Raises:
         RuntimeError: No credential of any of the three kinds is available.

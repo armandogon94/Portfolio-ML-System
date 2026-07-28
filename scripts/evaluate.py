@@ -89,17 +89,17 @@ def main() -> int:
             print("\n<!-- Every cell is empty because no model has been trained yet. -->")
         return 0
 
-    table = Table(title="Results — read from reports/*_metrics.csv, never typed by hand")
+    table = Table(title="Results, read from reports/*_metrics.csv and never typed by hand")
     table.add_column("problem", style="cyan")
     for _, label in COLUMNS:
         table.add_column(label, justify="right")
     for problem in RESULT_ROWS:
-        table.add_row(problem, *[_pick(rows[problem], bare) or "—" for bare, _ in COLUMNS])
+        table.add_row(problem, *[_pick(rows[problem], bare) or "n/a" for bare, _ in COLUMNS])
     console.print(table)
 
     if not measured:
         console.print(
-            "\n[yellow]No metrics CSV exists for any problem — nothing has been "
+            "\n[yellow]No metrics CSV exists for any problem. Nothing has been "
             "trained on real data yet.[/yellow]\n"
             "  1. uv run python scripts/download_data.py --dataset all\n"
             "  2. uv run python scripts/train.py --model all\n"

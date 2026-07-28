@@ -33,7 +33,7 @@ registry = CheckpointRegistry()
 #: than one dataset config (``fraud.yaml`` for IEEE-CIS, ``fraud_ulb.yaml`` for OpenML
 #: 1597). The gates must follow the **configs that have a trained checkpoint**, because
 #: those are the ones whose figures reach the README. Parametrising over ``PROBLEMS``
-#: left `fraud_ulb` — the measured result that replaced the retracted 0.964 — ungated.
+#: left `fraud_ulb`, the measured result that replaced the retracted 0.964, ungated.
 #: Derived, not hardcoded, so a newly trained run is gated the moment it exists.
 GATED_RUNS = (
     tuple(
@@ -73,7 +73,7 @@ def _metadata(problem: str) -> dict:
             f"No checkpoint for {problem!r}. Quality gates need a real trained model:\n"
             f"  uv run python scripts/download_data.py --dataset all\n"
             f"  uv run python scripts/train.py --model {problem}\n"
-            f"See docs/PROGRESS.md — this is BLOCKED on Kaggle credentials."
+            f"See docs/PROGRESS.md: this is BLOCKED on Kaggle credentials."
         )
     return json.loads(path.read_text())
 

@@ -1,4 +1,4 @@
-"""Categorical schema capture and replay — the other half of skew prevention.
+"""Categorical schema capture and replay: the other half of skew prevention.
 
 LightGBM encodes a pandas ``category`` column by its *codes*, and it refuses to
 predict when the category set differs from the one it trained on:
@@ -12,7 +12,7 @@ the score is nonsense that looks plausible.
 
 So the exact ``CategoricalDtype`` of every categorical column is captured at
 training time, stored in the checkpoint alongside the feature columns, and replayed
-verbatim at serving time. Both sides call the functions here — as with
+verbatim at serving time. Both sides call the functions here; as with
 ``engineer_features``, one implementation is the only real defence.
 """
 

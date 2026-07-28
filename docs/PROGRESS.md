@@ -33,8 +33,12 @@ Do not push.
   the regenerable capture script. `scripts/make_figures.py` no longer creates an
   empty image directory. The remaining tracked path reference is the capture
   script's runtime output message.
-- The exact tracked-Markdown count moved from 138 to 0:
-  `git ls-files '*.md' | xargs grep -c "$(printf '\u2014')"`.
+- The exact tracked-Markdown count moved from 138 to 0. That sweep was scoped to
+  Markdown and the reported zero was true only of Markdown. Measured across every
+  tracked text file, 103 files still carried 250 U+2014 characters in Python,
+  TypeScript, YAML, Dockerfiles, shell and dotfiles. They are removed in a
+  follow-up commit, and `tests/test_repo_hygiene.py` now walks `git ls-files -z`
+  so no file kind sits outside the check.
 - Exit 0: Ruff check, Ruff format check, mypy, non-network pytest with coverage,
   README link check, README claims check, Mermaid/SVG count, synthetic-generator
   check, static diagram text inspection of all committed SVGs, generated results

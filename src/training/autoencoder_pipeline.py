@@ -5,10 +5,10 @@ collapse into ``tabular.py``. It is also the **only** model here that uses MPS.
 
 What it is for: a *baseline*, not the headline. Trained on legitimate transactions
 only, it scores anomalies by reconstruction error. The value it adds to the results
-table is showing how much a supervised model gains over pure anomaly detection —
+table is showing how much a supervised model gains over pure anomaly detection,
 which on IEEE-CIS is a lot, and saying so is the point.
 
-Hardware facts that shaped this file (measured on the target machine — Apple
+Hardware facts that shaped this file (measured on the target machine: Apple
 Silicon, 4 performance + 6 efficiency cores, 32 GB, torch 2.13.0):
 
 * MPS is available for the six-linear-transform autoencoder, but this repository
@@ -17,7 +17,7 @@ Silicon, 4 performance + 6 efficiency cores, 32 GB, torch 2.13.0):
 * **torch 2.13.0 MPS bug, reproduced twice:** ``torch.nn.MultiheadAttention`` hangs
   on MPS, and a CPU tensor loop deadlocked at 0% CPU after a preceding MPS matmul
   in the *same* process. This module contains no attention layer so it does not
-  trip the bug — but it never mixes devices in one process either, and any future
+  trip the bug, but it never mixes devices in one process either, and any future
   sequence model here must run in its own process per device.
 """
 
@@ -53,7 +53,7 @@ class AutoencoderTrainer(TabularTrainer):
         config_name: Normally ``"fraud"``.
         use_wandb: See :class:`~src.training.trainer.BaseTrainer`.
         sample: Train on the CI fixture; suppresses checkpoint writes.
-        epochs: Training epochs. The default is small on purpose — this is a
+        epochs: Training epochs. The default is small on purpose: this is a
             baseline and the owner's machine is not a training cluster.
     """
 

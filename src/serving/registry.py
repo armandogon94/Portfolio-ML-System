@@ -1,7 +1,7 @@
 """Checkpoint discovery and lazy loading.
 
 Replaces the discovery half of the 573-line ``predictor.py`` monolith. Models are
-found by globbing ``checkpoints/*/metadata.json`` — adding a model requires no
+found by globbing ``checkpoints/*/metadata.json``, so adding a model requires no
 change to this file and no change to ``api.py``.
 
 Loading is lazy and cached. A cold ``/predict/fraud`` pays the joblib deserialise
@@ -62,7 +62,7 @@ class CheckpointRegistry:
         """Return every checkpoint's ``metadata.json``, keyed by problem.
 
         Corrupt or partially-written metadata is skipped rather than crashing the
-        ``/models`` endpoint — a half-flushed checkpoint during a training run
+        ``/models`` endpoint: a half-flushed checkpoint during a training run
         should not take the API down.
         """
         info: dict[str, dict[str, Any]] = {}

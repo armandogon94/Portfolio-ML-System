@@ -1,5 +1,5 @@
 /**
- * DashboardContent — synchronous, data-in renderer for the
+ * DashboardContent: synchronous, data-in renderer for the
  * /dashboard page. Split out from page.tsx so the async
  * Server Component layer is a thin wrapper around the fetch
  * + this component handles purely deterministic rendering.
@@ -28,7 +28,7 @@ export function DashboardContent({ rows }: { rows: DashboardRow[] }) {
         </p>
       </header>
 
-      {/* Industry summary tiles — one per industry, joined client-side. */}
+      {/* Industry summary tiles, one per industry, joined client-side. */}
       <section
         aria-labelledby="industries-heading"
         className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"

@@ -1,4 +1,4 @@
-/** A.9.7 — ModelStatusBadge component tests.
+/** A.9.7: ModelStatusBadge component tests.
  *
  * Maps a 3-value enum (ready / training / not_built) to a colored
  * label badge for the dashboard table. Display labels are

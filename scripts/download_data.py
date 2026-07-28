@@ -5,8 +5,8 @@ Downloads to ``~/.cache/kagglehub`` (outside the repository and outside the Dock
 build context), records row counts and SHA-256, compares them when provenance is
 pinned, and prints a block you can paste into ``data/README.md``.
 
-On failure it prints the exact remediation — the URL to accept competition rules,
-or where to put ``kaggle.json`` — and exits non-zero. **There is no synthetic
+On failure it prints the exact remediation (the URL to accept competition rules,
+or where to put ``kaggle.json``) and exits non-zero. **There is no synthetic
 fallback.** If the real data cannot be obtained, nothing is trained and no number
 is published. See ``docs/adr/0003-real-data-over-synthetic.md``.
 
@@ -102,7 +102,7 @@ def _fetch(name: str) -> dict:
         expected_rows = provenance.get("expected_rows")
         if expected_rows is not None and len(frame) != expected_rows:
             console.print(
-                "[bold yellow]    WARNING: ROW COUNT MISMATCH — "
+                "[bold yellow]    WARNING: ROW COUNT MISMATCH. "
                 f"expected {expected_rows}, observed {len(frame)}. The vendor may "
                 "have re-uploaded the frame; inspect it before training.[/bold yellow]"
             )
@@ -161,7 +161,7 @@ def _fetch(name: str) -> dict:
         expected_rows = provenance.get("expected_rows")
         if expected_rows is not None and rows != expected_rows:
             console.print(
-                "[bold yellow]    WARNING: ROW COUNT MISMATCH — "
+                "[bold yellow]    WARNING: ROW COUNT MISMATCH. "
                 f"expected {expected_rows}, observed {rows}. The vendor may have "
                 "re-uploaded the file; inspect it before training.[/bold yellow]"
             )
@@ -193,7 +193,7 @@ def _check_only() -> int:
         table.add_row(name, f"{spec['approx_mb']} MB", needs, provenance["licence"])
     console.print(table)
     console.print(
-        "\n[bold]ulb-creditcard needs no account at all[/bold] — a reviewer with zero "
+        "\n[bold]ulb-creditcard needs no account at all[/bold]: a reviewer with zero "
         "Kaggle presence can still reproduce a real-data fraud result end to end."
     )
     return 0
@@ -236,7 +236,7 @@ def main() -> int:
             failures.append(name)
 
     if records:
-        console.print("\n[bold]Provenance — paste into data/README.md:[/bold]")
+        console.print("\n[bold]Provenance, paste into data/README.md:[/bold]")
         console.print_json(json.dumps(records, indent=2))
         if args.out:
             with open(args.out, "a") as handle:

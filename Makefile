@@ -1,4 +1,4 @@
-# Fintech ML System — one entrypoint per stage.
+# Fintech ML System: one entrypoint per stage.
 #
 # The default target is `help`, so `make` on its own tells you what exists
 # instead of silently running the first rule.

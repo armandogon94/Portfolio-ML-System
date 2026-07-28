@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ExplainabilityChart — horizontal bar chart of feature importances
+ * ExplainabilityChart: horizontal bar chart of feature importances
  * from a SHAP or gradient-based explainer. Bars colored by sign:
  * positive (raises predicted value) in red-ish, negative (reduces
  * predicted value) in green-ish. Sorted by |importance| descending
@@ -57,7 +57,7 @@ export function ExplainabilityChart({
             No features to display.
           </p>
         ) : (
-          // Fixed dimensions (vs ResponsiveContainer) — jsdom has no layout,
+          // Fixed dimensions (vs ResponsiveContainer): jsdom has no layout,
           // and fixed width/height makes the chart testable under Vitest.
           // 340px is a reasonable default for a card body; callers can
           // wrap in a container if they need responsive behavior.

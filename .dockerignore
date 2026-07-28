@@ -40,7 +40,7 @@ reports/
 .claude/
 .handoff/
 
-# Checkpoints are NOT baked into the image — they arrive at runtime through the
+# Checkpoints are NOT baked into the image. They arrive at runtime through the
 # read-only bind mount in infra/compose/base.yml. Excluding them here keeps the
 # build context small and stops a stale local model from being frozen into an
 # image that then disagrees with what MLflow has on record.

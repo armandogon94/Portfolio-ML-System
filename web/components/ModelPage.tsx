@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ModelPage — the shared layout every model demo page renders.
+ * ModelPage: the shared layout every model demo page renders.
  *
  * The three fintech pages were previously ~200 lines each of near-identical
  * form/mutation/result plumbing that had already drifted (two spelled the error

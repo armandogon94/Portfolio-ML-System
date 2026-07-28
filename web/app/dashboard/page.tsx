@@ -1,14 +1,14 @@
 /**
- * /dashboard — async Server Component that fetches the joined data
+ * /dashboard: async Server Component that fetches the joined data
  * and hands it to the synchronous DashboardContent for rendering.
  *
- * ISR via `export const revalidate = 30` — both the FastAPI /models
+ * ISR via `export const revalidate = 30`: both the FastAPI /models
  * call and the MLflow REST calls cache for 30 seconds. This keeps
  * the dashboard responsive (no per-request fan-out to MLflow on
  * every page load) while still surfacing fresh metrics within a
  * minute of a new training run completing.
  *
- * Pure server-side fetching — no client-side data loading lib,
+ * Pure server-side fetching: no client-side data loading lib,
  * no TanStack Query at this layer. Read-only surface, low
  * cardinality, perfect fit for Server Components + ISR.
  */

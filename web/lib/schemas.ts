@@ -1,5 +1,5 @@
 /**
- * Zod input schemas — one per FastAPI endpoint.
+ * Zod input schemas: one per FastAPI endpoint.
  *
  * Every field name is a **real column from the real dataset**, mirroring
  * `src/serving/schemas.py` exactly. A mismatch here is a 422 from FastAPI, so
@@ -7,7 +7,7 @@
  *
  * They are deliberate subsets: IEEE-CIS has 394 columns and a 394-input form is
  * not a demo. Unsupplied columns arrive at the model as NaN, which LightGBM
- * handles natively as "unknown" — see `src/serving/preprocessing.py`.
+ * handles natively as "unknown"; see `src/serving/preprocessing.py`.
  *
  * Defaults are seeded demo values, never real customer data.
  */
@@ -61,7 +61,7 @@ export const FRAUD_DEFAULTS: FraudInput = {
 
 // ─── Consumer credit risk (LendingClub) ────────────────────────────────────
 // Every field is available at origination. No post-origination field appears
-// here — that is the leak configs/credit_risk.yaml's denylist exists to prevent.
+// here. That is the leak configs/credit_risk.yaml's denylist exists to prevent.
 
 export const CreditRiskInputSchema = z.object({
   loan_amnt: z.number().positive(),

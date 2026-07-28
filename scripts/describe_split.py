@@ -3,7 +3,7 @@
 
 Every claim a results document makes about *how* a dataset was divided should be
 regenerable rather than remembered. This script loads a problem exactly as
-``scripts/train.py`` does — same adapter, same config, same split function — and
+``scripts/train.py`` does (same adapter, same config, same split function) and
 prints the resulting partition geometry. It trains nothing and writes no metric.
 
 It exists because a time-ordered split on real data is never as clean as the
@@ -125,7 +125,7 @@ def main() -> int:
         return 0
 
     console.print(
-        f"[bold]{report['config']}[/bold] — {report['split_type']} split on "
+        f"[bold]{report['config']}[/bold]: {report['split_type']} split on "
         f"{column!r}; {report['n_rows']:,} rows, overall positive rate "
         f"{report['overall_positive_rate']:.4f}"
     )
@@ -142,8 +142,8 @@ def main() -> int:
             f"{record['n']:,}",
             f"{record.get('n_positive', 0):,}",
             f"{record.get('positive_rate', float('nan')):.4f}",
-            record.get("min", "—"),
-            record.get("max", "—"),
+            record.get("min", "n/a"),
+            record.get("max", "n/a"),
         )
     console.print(table)
 

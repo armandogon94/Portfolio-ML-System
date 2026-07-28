@@ -11,7 +11,7 @@ def test_health_is_ok_with_a_checkpoint_present(api_client):
 
 
 def test_health_reports_untrained_models_as_unavailable(api_client):
-    """A fresh clone must not look broken — it must look untrained."""
+    """A fresh clone must not look broken; it must look untrained."""
     body = api_client.get("/health").json()
     assert body["models"]["fraud"]["available"] is False
     assert body["models"]["credit_risk"]["available"] is False

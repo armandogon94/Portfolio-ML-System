@@ -4,10 +4,10 @@
  * Client-side provider tree for the app.
  *
  * Wraps children in:
- * 1. QueryClientProvider — exposes the singleton TanStack Query client
+ * 1. QueryClientProvider: exposes the singleton TanStack Query client
  *    to every component via context. Mutations + queries read from the
  *    same cache.
- * 2. ThemeProvider (next-themes) — class-based light/dark theme with
+ * 2. ThemeProvider (next-themes): class-based light/dark theme with
  *    localStorage persistence. `attribute="class"` toggles `.dark` on
  *    <html>, matching our tailwind.config.ts `darkMode: ["class"]`.
  *    `disableTransitionOnChange` avoids a flash of mid-transition
@@ -34,7 +34,7 @@ export function Providers({ children }: { children: ReactNode }) {
         disableTransitionOnChange
       >
         {children}
-        {/* Toast portal — mounted once at the provider tree root so any
+        {/* Toast portal, mounted once at the provider tree root so any
             page can call `toast.error(...)` (sonner) without worrying
             about local containers. */}
         <Toaster richColors closeButton position="top-right" />

@@ -1,5 +1,5 @@
 /**
- * Nav — top bar for every page.
+ * Nav: top bar for every page.
  *
  * Layout: project title on the left (links to /), Dashboard link in
  * the middle (added in A.9.9), ThemeToggle on the right. Sticky to

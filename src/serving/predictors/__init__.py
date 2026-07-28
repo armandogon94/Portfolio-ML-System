@@ -2,7 +2,7 @@
 
 Each module exposes ``predict(loaded, payload) -> dict``. The probability comes
 from ``src/serving/preprocessing.score``; what each module adds is the threshold
-policy — the part a domain expert would argue about and an ML engineer should not
+policy: the part a domain expert would argue about and an ML engineer should not
 bury in a route handler.
 
 Thresholds here are **documented conventions, not calibrated policy.** Calibrating

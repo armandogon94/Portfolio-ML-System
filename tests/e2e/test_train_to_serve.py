@@ -37,7 +37,7 @@ def test_fixtures_to_http_prediction(tmp_path, monkeypatch):
     # A model trained on independent-noise labels must be near chance. Anything
     # much better means the fixture generator leaked the label into a feature.
     assert 0.25 <= metrics["test_roc_auc"] <= 0.75, (
-        f"fixture ROC-AUC {metrics['test_roc_auc']:.3f} is too good — the CI fixture "
+        f"fixture ROC-AUC {metrics['test_roc_auc']:.3f} is too good: the CI fixture "
         f"has a label leak. Regenerate with scripts/make_fixtures.py."
     )
 

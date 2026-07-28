@@ -1,7 +1,7 @@
 """Request logging middleware, split out so ``api.py`` holds routes and nothing else.
 
 The access log is structured (see ``src/logging_config.py``, ``LOG_FORMAT=json``)
-because the container's stdout is the only observability this project has — there
+because the container's stdout is the only observability this project has. There
 is no APM, no tracing backend and no cloud budget for one. Latency and status code
 per request is the minimum that makes a running container debuggable.
 """

@@ -86,7 +86,7 @@ describe("response validation", () => {
   });
 
   it("rejects a response missing provenance", async () => {
-    // A score with no model_version is unreviewable — that is the whole point.
+    // A score with no model_version is unreviewable, and that is the whole point.
     const { model_version: _omitted, ...withoutProvenance } = FRAUD_RESPONSE;
     mockFetch(withoutProvenance);
     await expect(predictFraud(FRAUD_DEFAULTS)).rejects.toThrow();

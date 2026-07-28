@@ -81,7 +81,7 @@ def test_predict_returns_the_model_version(registry, trained_churn):
 
 # ── the constant-predictor guard ─────────────────────────────────────────────
 # The old suite asserted only key presence and 0 <= score <= 1, which a predictor
-# hardcoded to 0.5 passes. tests/test_quality_gates.py catches that — but it
+# hardcoded to 0.5 passes. tests/test_quality_gates.py catches that, but it
 # needs a real checkpoint and SKIPS on a fresh clone, so on a machine with no
 # Kaggle credentials nothing was catching it at all.
 #
@@ -93,8 +93,8 @@ def test_the_predictor_is_sensitive_to_its_input(registry, trained_churn):
     """Different inputs must produce different scores.
 
     This is the weakest true statement that a constant predictor violates. It
-    cannot assert a *direction* — the CI fixture's label is independent noise, so
-    there is no real relationship to be monotonic about — but "the output varies
+    cannot assert a *direction*: the CI fixture's label is independent noise, so
+    there is no real relationship to be monotonic about. But "the output varies
     with the input" holds for any working model and fails for any constant one.
     """
     _, problem = trained_churn
@@ -109,7 +109,7 @@ def test_the_predictor_is_sensitive_to_its_input(registry, trained_churn):
     scores = [churn.predict(loaded, payload)["attrition_probability"] for payload in payloads]
 
     assert len(set(scores)) > 1, (
-        f"every input scored {scores[0]} — the predictor is ignoring its input. "
+        f"every input scored {scores[0]}, so the predictor is ignoring its input. "
         f"A constant scorer passes any test that only checks 0 <= p <= 1."
     )
 
@@ -130,5 +130,5 @@ def test_the_score_comes_from_the_model_not_from_a_literal(registry, trained_chu
 
     assert returned == pytest.approx(expected), (
         f"serving returned {returned} but the model computes {expected} on the "
-        f"same feature frame — something between them is substituting a value."
+        f"same feature frame; something between them is substituting a value."
     )

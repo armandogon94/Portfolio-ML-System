@@ -38,7 +38,7 @@ class SHAPExplainer:
         # For binary classification (XGBoost), shap_values may be 2D (n_samples, n_features)
         # For LightGBM regression, same shape. Take the first (and only) sample.
         if isinstance(shap_values, list):
-            # Multi-class or binary with separate arrays per class — use class 1
+            # Multi-class or binary with separate arrays per class, so use class 1
             values = np.array(shap_values[1]).flatten()
         else:
             values = np.array(shap_values).flatten()

@@ -26,7 +26,7 @@ export const CREDIT_RISK_FIELDS: FieldConfig<CreditRiskInput>[] = [
     label: "Grade",
     type: "select",
     options: ["A", "B", "C", "D", "E", "F", "G"],
-    description: "Ordinal, not nominal — A is best.",
+    description: "Ordinal, not nominal; A is best.",
   },
   { name: "sub_grade", label: "Sub-grade", type: "text", description: "Grade letter + 1-5, e.g. C1." },
   {

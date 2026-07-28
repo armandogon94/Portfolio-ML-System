@@ -15,7 +15,7 @@ is documented in ``data/README.md`` rather than written as a comment row because
 the adapters read them with the standard CSV header parser.
 
 Why synthetic fixtures at all, when the whole point of this rebuild was to stop
-using synthetic data? Because IEEE-CIS competition data is not redistributable —
+using synthetic data? Because IEEE-CIS competition data is not redistributable:
 committing 500 real rows would violate the competition rules. This is the one
 place synthetic data survives, and it survives for a licensing reason, not a
 convenience one. See docs/adr/0003-real-data-over-synthetic.md.
@@ -48,7 +48,7 @@ def _rng() -> np.random.Generator:
 def make_ieee_cis_fixture() -> pd.DataFrame:
     """A 500-row frame with IEEE-CIS's column names and plausible dtypes.
 
-    The label is drawn INDEPENDENTLY of the features — a Bernoulli(0.035) draw
+    The label is drawn INDEPENDENTLY of the features, a Bernoulli(0.035) draw
     with no relationship to any column. That is deliberate and it is the opposite
     of what the deleted ``generate_fraud.py`` did. A model trained on this fixture
     should score ~0.5 AUC. If a test ever reports a good score here, the test is
@@ -158,7 +158,7 @@ def make_churn_fixture() -> pd.DataFrame:
     """A 500-row attrition-shaped frame, including the two Naive-Bayes leak columns.
 
     The leak columns are present so ``tests/data/test_leakage_denylist.py`` has
-    something real to assert against — the test proves the denylist removes them.
+    something real to assert against: the test proves the denylist removes them.
     """
     rng = _rng()
     attrited = rng.binomial(1, 0.1607, N_ROWS)
@@ -205,7 +205,7 @@ def make_churn_fixture() -> pd.DataFrame:
 
 
 #: Positives placed in the ULB fixture. The real dataset's rate is 0.172%, which
-#: over 500 rows is a single positive — and a chronological split then leaves the
+#: over 500 rows is a single positive, and a chronological split then leaves the
 #: training partition single-class, so LightGBM emits a one-column ``predict_proba``
 #: and the run dies. The fixture therefore carries a deliberately inflated,
 #: evenly-spaced set of positives so every partition of a 70/10/20 time split has

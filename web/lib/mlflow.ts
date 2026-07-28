@@ -4,7 +4,7 @@
  * Hits MLflow's official REST API directly (no Python SDK needed) so the
  * Next.js dashboard (task A.9.9) can fetch run history from Server
  * Components / Route Handlers. Every response is Zod-validated at the
- * boundary — a shape change on MLflow's side surfaces as a typed error
+ * boundary, so a shape change on MLflow's side surfaces as a typed error
  * rather than a `cannot read property of undefined` at render time.
  *
  * Endpoints used:
@@ -106,7 +106,7 @@ async function parseOrThrow<T>(res: Response, schema: z.ZodSchema<T>): Promise<T
  * containing `endTime` (ms since epoch) and `metric` (the value of `metricKey`).
  *
  * Behavior:
- * - Returns an empty array if the experiment doesn't exist yet — this is a
+ * - Returns an empty array if the experiment doesn't exist yet. This is a
  *   normal state for models that haven't been trained, and we don't want a
  *   missing experiment to crash the dashboard.
  * - Skips runs that don't contain `metricKey` (e.g. failed runs, or runs from
@@ -126,7 +126,7 @@ export async function getRunHistory(
   const limit = options?.limit ?? 10;
 
   // Step 1: resolve experiment_id from name. Treat RESOURCE_DOES_NOT_EXIST as
-  // "no history yet" rather than an error — untrained models shouldn't break
+  // "no history yet" rather than an error; untrained models shouldn't break
   // the dashboard.
   const expUrl = `${baseUrl}/api/2.0/mlflow/experiments/get-by-name?experiment_name=${encodeURIComponent(
     experimentName,

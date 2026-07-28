@@ -1,7 +1,7 @@
 """Download layer: credential handling, competition path, actionable errors.
 
 Every test here mocks kagglehub. The single real-network canary is marked
-``network`` and deselected in CI explicitly — see .github/workflows/ci.yml, not a
+``network`` and deselected in CI explicitly; see .github/workflows/ci.yml, not a
 hidden addopts setting.
 """
 
@@ -60,7 +60,7 @@ def test_competition_failure_points_at_the_rules_page(fake_credentials):
 
 
 def test_competition_download_is_used_for_competitions(fake_credentials, tmp_path):
-    """dataset_download cannot fetch a competition — the old code only had that."""
+    """dataset_download cannot fetch a competition, and the old code only had that."""
     fake = MagicMock()
     fake.competition_download.return_value = str(tmp_path)
     with patch.dict("sys.modules", {"kagglehub": fake}):

@@ -55,7 +55,7 @@ def explain(loaded: LoadedModel, matrix: pd.DataFrame, *, top_n: int = 10) -> di
     raise NotImplementedError(
         f"No explainer for model_type {model_type!r} (problem {loaded.problem!r}). "
         f"Wire one up in src/serving/explain.py rather than returning an empty "
-        f"explanation — a UI cannot tell those apart."
+        f"explanation: a UI cannot tell those apart."
     )
 
 

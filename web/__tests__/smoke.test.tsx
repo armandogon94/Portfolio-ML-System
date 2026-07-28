@@ -1,4 +1,4 @@
-/** A.2.3 smoke tests — Vitest + jsdom + providers scaffold. */
+/** A.2.3 smoke tests: Vitest + jsdom + providers scaffold. */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
@@ -19,7 +19,7 @@ describe("lib/query-client", () => {
 
   it("singleton has sane defaults", () => {
     const opts = queryClient.getDefaultOptions();
-    // retry is either a number or a function — verify it's defined
+    // retry is either a number or a function; verify it's defined
     expect(opts.queries?.retry).toBeDefined();
   });
 });

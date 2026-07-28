@@ -10,7 +10,7 @@ loading), ``preprocessing.py`` (payload -> features), ``predictors/`` (probabili
 ``middleware.py`` (access log).
 
 Port: ``8070`` inside the container is ``8000``; the compose file maps
-``${BACKEND_PORT:-8070}:8000``. Never bind 8000 on the host — see
+``${BACKEND_PORT:-8070}:8000``. Never bind 8000 on the host; see
 ``docs/ports.example.md``.
 """
 

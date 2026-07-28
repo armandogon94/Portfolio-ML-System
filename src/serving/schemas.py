@@ -8,7 +8,7 @@ training used, with no translation layer to drift out of sync.
 
 These are deliberate *subsets*. IEEE-CIS has 394 columns; a form with 394 inputs is
 not a demo. Unsupplied columns arrive at the model as NaN, which LightGBM handles
-natively as "unknown" — see ``src/serving/preprocessing.py``.
+natively as "unknown"; see ``src/serving/preprocessing.py``.
 
 Defaults are seeded demo values, never real customer data.
 """
@@ -50,7 +50,7 @@ class LoanApplicationRequest(BaseModel):
     """A loan application, in LendingClub column names.
 
     Every field is available at origination. No post-origination field appears
-    here or anywhere in the serving path — that is the leak
+    here or anywhere in the serving path. That is the leak
     ``configs/credit_risk.yaml``'s denylist exists to prevent.
     """
 

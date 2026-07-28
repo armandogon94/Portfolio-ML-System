@@ -1,4 +1,4 @@
-# Credit-card customer attrition — sakshigoyal7/credit-card-customers.
+# Credit-card customer attrition: sakshigoyal7/credit-card-customers.
 #
 # n = 10,127. That is small. A single hold-out number on this dataset is noise
 # dressed as a result, so evaluation is 5-fold STRATIFIED CV and every metric is

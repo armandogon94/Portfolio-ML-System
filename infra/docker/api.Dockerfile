@@ -1,5 +1,5 @@
 # =============================================================================
-# api.Dockerfile — FastAPI inference server.
+# api.Dockerfile: FastAPI inference server.
 # Multi-stage: builder installs deps, runtime carries only what serving needs.
 #
 # Build context is the REPOSITORY ROOT:
@@ -11,7 +11,7 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage 1: Builder — install Python dependencies with uv
+# Stage 1: Builder, installs Python dependencies with uv
 # ---------------------------------------------------------------------------
 FROM python:3.11.15-slim AS builder
 
@@ -28,7 +28,7 @@ WORKDIR /app
 # Copy dependency files first (cache layer)
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies only (not the project itself — source copied in runtime)
+# Install dependencies only (not the project itself; source is copied in runtime)
 RUN uv sync --frozen --no-dev --no-install-project
 
 # CPU-only PyTorch. MPS is macOS-only and cannot exist in a Linux container;
@@ -40,7 +40,7 @@ RUN uv pip install "torch==2.11.0" \
     --no-deps
 
 # ---------------------------------------------------------------------------
-# Stage 2: Runtime — minimal image with only what's needed
+# Stage 2: Runtime, the minimal image with only what's needed
 # ---------------------------------------------------------------------------
 FROM python:3.11.15-slim AS runtime
 
@@ -69,7 +69,7 @@ COPY --chown=mluser:mluser configs/ ./configs/
 COPY --chown=mluser:mluser scripts/serve.py ./scripts/serve.py
 
 # The committed CI fixtures. Small, synthetic, and never used for a published
-# number — see data/README.md. They let the container's e2e path run offline.
+# number; see data/README.md. They let the container's e2e path run offline.
 COPY --chown=mluser:mluser data/sample/ ./data/sample/
 
 # Checkpoints are NOT copied. They are gitignored, so on a fresh clone the

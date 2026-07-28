@@ -3,7 +3,7 @@
  *
  * These are IEEE-CIS's own column names, kept verbatim so a reviewer can look
  * any of them up in the competition's data description. Most are anonymised by
- * Vesta — `card1` is a card identifier whose meaning is not published, `C1`/`C13`
+ * Vesta: `card1` is a card identifier whose meaning is not published, `C1`/`C13`
  * are counting features, `D1`/`D15` are day-deltas. The descriptions say so
  * rather than inventing a friendlier meaning.
  *
@@ -20,7 +20,7 @@ export const FRAUD_FIELDS: FieldConfig<FraudInput>[] = [
     type: "number",
     min: 0.01,
     step: 0.01,
-    description: "The cents portion is itself a signal — bots produce round amounts.",
+    description: "The cents portion is itself a signal; bots produce round amounts.",
   },
   {
     name: "TransactionDT",

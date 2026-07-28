@@ -1,4 +1,4 @@
-/** A.9.2 — MLflow REST client tests. External fetch is mocked. */
+/** A.9.2: MLflow REST client tests. External fetch is mocked. */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { MlflowError, getRunHistory } from "@/lib/mlflow";
@@ -23,7 +23,7 @@ describe("MlflowError", () => {
   });
 });
 
-describe("getRunHistory — happy path", () => {
+describe("getRunHistory: happy path", () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
 
   beforeEach(() => {
@@ -60,7 +60,7 @@ describe("getRunHistory — happy path", () => {
               metrics: [{ key: "auc", value: 0.88, timestamp: 1000, step: 0 }],
             },
           },
-          // A run that's missing the requested metric — should be skipped silently.
+          // A run that's missing the requested metric is skipped silently.
           {
             info: { run_id: "no-metric", end_time: 1500, status: "FAILED" },
             data: { metrics: [{ key: "loss", value: 0.5, timestamp: 1500, step: 0 }] },
@@ -114,7 +114,7 @@ describe("getRunHistory — happy path", () => {
   });
 });
 
-describe("getRunHistory — graceful empty cases", () => {
+describe("getRunHistory: graceful empty cases", () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
 
   beforeEach(() => {
@@ -122,7 +122,7 @@ describe("getRunHistory — graceful empty cases", () => {
   });
 
   it("returns empty array when experiment does not exist", async () => {
-    // MLflow's documented "not found" shape — 404 + RESOURCE_DOES_NOT_EXIST.
+    // MLflow's documented "not found" shape: 404 + RESOURCE_DOES_NOT_EXIST.
     fetchSpy.mockResolvedValueOnce(
       jsonResponse(
         {
@@ -152,7 +152,7 @@ describe("getRunHistory — graceful empty cases", () => {
   });
 });
 
-describe("getRunHistory — error handling", () => {
+describe("getRunHistory: error handling", () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
 
   beforeEach(() => {
@@ -160,7 +160,7 @@ describe("getRunHistory — error handling", () => {
   });
 
   it("throws MlflowError on non-2xx response", async () => {
-    // 500 from MLflow is not the "missing experiment" path — should bubble up.
+    // 500 from MLflow is not the "missing experiment" path, so it should bubble up.
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({ error_code: "INTERNAL_ERROR", message: "boom" }, 500),
     );
@@ -179,7 +179,7 @@ describe("getRunHistory — error handling", () => {
   });
 
   it("throws MlflowError on invalid response shape (Zod failure)", async () => {
-    // 200 OK but the experiment field is missing — Zod must reject.
+    // 200 OK but the experiment field is missing, so Zod must reject.
     fetchSpy.mockResolvedValueOnce(jsonResponse({ totally_wrong: true }));
 
     await expect(

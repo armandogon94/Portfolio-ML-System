@@ -36,7 +36,7 @@ def test_double_registration_is_refused():
 
 
 def test_lightgbm_drops_early_stopping_from_the_constructor():
-    """LightGBM 4.x ignores the constructor kwarg — you get 2000 trees, silently."""
+    """LightGBM 4.x ignores the constructor kwarg: you get 2000 trees, silently."""
     model = create_model("lightgbm", {"n_estimators": 5, "early_stopping_rounds": 10})
     assert "early_stopping_rounds" not in model.get_params()
 
@@ -66,7 +66,7 @@ def test_every_model_survives_nan_and_unscaled_columns(name):
 
 
 def test_prior_baseline_is_exactly_uninformative():
-    """The prior baseline must give ROC-AUC 0.5 — that is what makes it a floor."""
+    """The prior baseline must give ROC-AUC 0.5, which is what makes it a floor."""
     from sklearn.metrics import roc_auc_score
 
     rng = np.random.default_rng(1)

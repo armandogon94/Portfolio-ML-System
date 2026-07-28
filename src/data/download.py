@@ -5,7 +5,7 @@ Three access paths, in decreasing order of friction:
 ``kaggle_competition_cached``
     Kaggle *competitions* (IEEE-CIS). Needs a free account **and** a one-click
     acceptance of the competition rules on the web. ``kagglehub.dataset_download``
-    cannot fetch a competition — that is why this function exists.
+    cannot fetch a competition, which is why this function exists.
 
 ``kaggle_dataset_cached``
     Kaggle *datasets* (LendingClub, credit-card attrition). Needs a free account,
@@ -16,7 +16,7 @@ Three access paths, in decreasing order of friction:
     here, so a reviewer with zero Kaggle presence can still reproduce a real-data
     fraud result end to end.
 
-Everything lands in ``~/.cache/kagglehub`` / scikit-learn's OpenML cache —
+Everything lands in ``~/.cache/kagglehub`` / scikit-learn's OpenML cache,
 outside the repository and outside the Docker build context, so ``data/raw/``
 stays small.
 
@@ -52,7 +52,7 @@ def _require_credentials(slug: str, *, kind: str) -> None:
             "  1. https://www.kaggle.com/settings/account -> 'Create New Token'\n"
             "  2. mkdir -p ~/.kaggle && mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json\n"
             "  3. chmod 600 ~/.kaggle/kaggle.json\n"
-            "No synthetic fallback is provided on purpose — see "
+            "No synthetic fallback is provided on purpose; see "
             "docs/adr/0003-real-data-over-synthetic.md."
         ) from exc
 

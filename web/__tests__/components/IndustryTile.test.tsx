@@ -1,4 +1,4 @@
-/** A.2.8 — IndustryTile component tests. */
+/** A.2.8: IndustryTile component tests. */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { DollarSign } from "lucide-react";

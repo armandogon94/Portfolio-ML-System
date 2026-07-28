@@ -3,8 +3,8 @@
 /**
  * Card-attrition demo page.
  *
- * The API attaches a caveat to every score here — n = 10,127 and the dataset is
- * easy — and this page renders it rather than dropping it. A high number on this
+ * The API attaches a caveat to every score here (n = 10,127 and the dataset is
+ * easy) and this page renders it rather than dropping it. A high number on this
  * problem is a property of the data, not evidence of a strong model.
  */
 

@@ -9,8 +9,8 @@ ever sees.
 Two operational metrics matter more than either AUC to a fintech reviewer:
 
 ``precision_at_k``
-    Of the top k% of transactions by score — the ones a human review team would
-    actually look at — what fraction are truly fraud? The queue's hit rate.
+    Of the top k% of transactions by score, the ones a human review team would
+    actually look at, what fraction are truly fraud? The queue's hit rate.
 
 ``recall_at_fpr``
     At a false-positive rate the business will tolerate (1%), what fraction of

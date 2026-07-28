@@ -1,5 +1,5 @@
 /**
- * IndustrySummaryTile — at-a-glance card per industry on the dashboard.
+ * IndustrySummaryTile: at-a-glance card per industry on the dashboard.
  *
  * Shows the industry's icon + title (linked to the index page),
  * how many of its planned models are ready (e.g., "3/4 ready"),
@@ -25,7 +25,7 @@ function avgReadyMetric(rows: DashboardRow[]): { value: number; sample: Dashboar
   // Average across rows that are both ready AND have a numeric metric
   // value. Mixing different metrics (AUC vs RMSE) would be nonsense,
   // but within an industry the per-model metrics tend to share a
-  // family (classifiers → AUC, regressors → R²) — close enough for
+  // family (classifiers → AUC, regressors → R²), close enough for
   // a tile-level summary. We still return one of the matching
   // keyMetric objects so the tile can label correctly.
   const ready = rows.filter(

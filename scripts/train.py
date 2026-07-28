@@ -57,7 +57,7 @@ def _summary_table(results: dict[str, dict[str, float]]) -> Table:
         row = [problem]
         for name in _HEADLINE:
             value = metrics.get(name)
-            row.append(f"{value:.4f}" if isinstance(value, float) else "—")
+            row.append(f"{value:.4f}" if isinstance(value, float) else "n/a")
         table.add_row(*row)
     return table
 
@@ -76,7 +76,7 @@ def main() -> int:
         action="store_true",
         help=(
             "Train on the committed CI fixtures. Writes NO checkpoint and NO metrics "
-            "CSV — fixture numbers must never become published numbers."
+            "CSV: fixture numbers must never become published numbers."
         ),
     )
     parser.add_argument("--wandb", action="store_true", help="Also log to W&B if a key is set.")
@@ -122,7 +122,7 @@ def main() -> int:
         console.print(_summary_table(results))
     if args.sample:
         console.print(
-            "\n[yellow]SAMPLE MODE — nothing was checkpointed. These numbers are "
+            "\n[yellow]SAMPLE MODE: nothing was checkpointed. These numbers are "
             "from synthetic fixtures and are meaningless as model results.[/yellow]"
         )
 

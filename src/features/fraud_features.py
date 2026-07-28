@@ -8,7 +8,7 @@ produce identical frames on a fixture batch.
 
 Every function here is a pure function of the input frame. Nothing reads the
 target and nothing uses a global. Frequency encodings are fitted on TRAIN ONLY and
-passed forward as ``artifacts`` — fitting them on train+test is a subtle leak.
+passed forward as ``artifacts``: fitting them on train+test is a subtle leak.
 
 The fitted counts and ``uid_amt_mean`` are **not point-in-time features within the
 training window**: an early training row can benefit from transactions that occur
@@ -55,7 +55,7 @@ def engineer_features(
         ``(engineered_frame, artifacts)``.
 
     Raises:
-        ValueError: ``fit=False`` without artifacts — that combination silently
+        ValueError: ``fit=False`` without artifacts. That combination silently
             produces all-NaN frequency features, so it is an error, not a default.
     """
     if not fit and artifacts is None:
@@ -115,7 +115,7 @@ def engineer_features(
             artifacts["uid_amt_mean"] = amount.groupby(uid).mean().to_dict()
         uid_mean = uid.map(artifacts.get("uid_amt_mean", {})).astype("float32")
         out["uid_amt_mean"] = uid_mean
-        # "How unusual is this amount for this account" — a ratio, so it stays
+        # "How unusual is this amount for this account", a ratio, so it stays
         # comparable across accounts of very different typical spend.
         out["uid_amt_ratio"] = (amount / uid_mean.replace(0, np.nan)).astype("float32")
 

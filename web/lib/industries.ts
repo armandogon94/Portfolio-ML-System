@@ -1,5 +1,5 @@
 /**
- * Industry registry — the single source of truth for landing tiles, nav and the
+ * Industry registry: the single source of truth for landing tiles, nav and the
  * dashboard.
  *
  * One industry. Three models. Every entry is `ready: true` and every tagline is
@@ -20,7 +20,7 @@ export type IndustryModel = {
   /** One line on what this model does and what it is trained on. */
   description: string;
   /**
-   * Whether the model page exists. Every entry here is true — an unbuilt model
+   * Whether the model page exists. Every entry here is true: an unbuilt model
    * does not get a catalogue row. Whether a *checkpoint* exists is a separate,
    * runtime question answered by the FastAPI `/models` endpoint.
    */

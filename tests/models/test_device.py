@@ -1,7 +1,7 @@
 """Device selection prefers MPS, then CUDA, then CPU.
 
 The session-wide MPS mock in conftest is overridden here explicitly, so this is the
-only place that asserts the MPS branch — and it never allocates an MPS tensor.
+only place that asserts the MPS branch, and it never allocates an MPS tensor.
 """
 
 from __future__ import annotations

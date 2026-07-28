@@ -1,4 +1,4 @@
-# dev.yml — override layer for local development.
+# dev.yml: override layer for local development.
 #
 # Applied on top of base.yml:
 #   make docker-dev-up
@@ -10,7 +10,7 @@
 # as often during frontend iteration.
 #
 # Primary dev flow is native `make web-dev` (fastest, no container
-# filesystem overhead). This override is the offline fallback — use
+# filesystem overhead). This override is the offline fallback; use
 # it when you don't have Node installed locally, or want to verify
 # the containerized HMR path specifically.
 
@@ -19,7 +19,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
-      target: builder  # stop before runner — we need the full deps tree for dev
+      target: builder  # stop before runner; dev needs the full deps tree
     command: pnpm dev -p 3070
     environment:
       - NODE_ENV=development

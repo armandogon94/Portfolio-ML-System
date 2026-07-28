@@ -2,13 +2,13 @@
 
 Two environment facts set before any import, both load-bearing on macOS:
 
-* ``KMP_DUPLICATE_LIB_OK`` — XGBoost, LightGBM and PyTorch each vendor their own
+* ``KMP_DUPLICATE_LIB_OK``: XGBoost, LightGBM and PyTorch each vendor their own
   libomp. Importing two of them in one process aborts without this.
-* ``OMP_NUM_THREADS=1`` — deterministic tree building, and it keeps a full test
+* ``OMP_NUM_THREADS=1``: deterministic tree building, and it keeps a full test
   run from saturating all 10 cores.
 
 MPS is forced off for the whole session. torch 2.13.0 on this hardware deadlocked a
-CPU tensor loop that followed an MPS matmul **in the same process** — a pytest
+CPU tensor loop that followed an MPS matmul **in the same process**. A pytest
 session is exactly that shape, since one test can touch MPS and the next CPU. The
 device-selection logic itself is tested separately with an explicit mock.
 """
@@ -81,7 +81,7 @@ def trained_churn(tmp_path_factory):
     Churn is used for the serving and e2e tests because it is the smallest of the
     three (24 columns) and trains in well under a second. The checkpoint is written
     to a tmp ``checkpoints/`` tree so ``CheckpointRegistry`` can discover it exactly
-    as it would in production — no monkeypatching of the loader.
+    as it would in production, with no monkeypatching of the loader.
 
     Returns:
         ``(checkpoints_root, problem_name)``.

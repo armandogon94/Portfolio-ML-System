@@ -1,8 +1,8 @@
-/** A.9.7 — MetricSparkline component tests.
+/** A.9.7: MetricSparkline component tests.
  *
  * The sparkline is a tiny inline LineChart (no axes, no tooltip)
  * used by the dashboard's per-row "metric history" cell. Pure
- * presentational Client Component — accepts data, optional color,
+ * presentational Client Component: accepts data, optional color,
  * optional height/width. No data fetching inside.
  */
 import { describe, it, expect } from "vitest";

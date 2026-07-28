@@ -1,6 +1,6 @@
 """LendingClub accepted loans 2007-2018Q4 adapter.
 
-Source file: ``accepted_2007_to_2018Q4.csv.gz`` — ~2.26M rows x 151 columns,
+Source file: ``accepted_2007_to_2018Q4.csv.gz``, ~2.26M rows x 151 columns,
 ~648 MB gzipped. **Never read all 151 columns.** ``usecols`` keeps the load to the
 ~30 origination-time fields the model is allowed to see, which is the difference
 between a 3 GB frame and a 300 MB one.
@@ -40,7 +40,7 @@ PROVENANCE: dict[str, Any] = {
     "slug": "wordsforthewise/lending-club",
     "filename": "accepted_2007_to_2018Q4.csv.gz",
     "url": "https://www.kaggle.com/datasets/wordsforthewise/lending-club",
-    "licence": ("Uploader tags CC0; upstream authority unverified — do not redistribute rows"),
+    "licence": ("Uploader tags CC0; upstream authority unverified. Do not redistribute rows"),
     "access": "Free Kaggle account. No rules gate.",
     "expected_rows": 2_260_701,
     "expected_rows_raw": 2_260_701,
@@ -179,7 +179,7 @@ def _fixture() -> Path:
 def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
     """Filter to terminal statuses, derive the label, apply canonical dtypes."""
     if "loan_status" not in frame.columns:
-        raise ValueError("loan_status absent — cannot derive is_default without it.")
+        raise ValueError("loan_status absent: cannot derive is_default without it.")
 
     before = len(frame)
     frame = frame[frame["loan_status"].isin(TERMINAL_STATUS)].copy()
@@ -205,7 +205,7 @@ def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
 
     if frame[TARGET].nunique() < 2:
         raise ValueError(
-            "is_default has a single class after filtering — the source file is "
+            "is_default has a single class after filtering; the source file is "
             "probably truncated or the wrong split."
         )
 

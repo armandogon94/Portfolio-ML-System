@@ -6,7 +6,7 @@ Never 8000: that is a framework default and it collides with every other project
 on this machine. Override with BACKEND_PORT.
 
 Inside Docker the container listens on 8000 and compose maps
-${BACKEND_PORT:-8070}:8000 — the host-side port is the same either way.
+${BACKEND_PORT:-8070}:8000, so the host-side port is the same either way.
 
 Usage:
     uv run python scripts/serve.py

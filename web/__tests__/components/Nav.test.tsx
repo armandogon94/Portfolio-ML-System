@@ -1,4 +1,4 @@
-/** A.2.9 — Nav component tests. */
+/** A.2.9: Nav component tests. */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 

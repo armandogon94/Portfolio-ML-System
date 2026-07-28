@@ -4,8 +4,8 @@
  *
  * The dependencies are mocked so the test is hermetic. What it actually asserts
  * is degradation behaviour: with no checkpoints, or with MLflow down, the
- * dashboard must still render rather than 500. On a fresh clone — which is the
- * current state of this repository — every row is `not_built`, and that is the
+ * dashboard must still render rather than 500. On a fresh clone, which is the
+ * current state of this repository, every row is `not_built`, and that is the
  * honest display, not a bug.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

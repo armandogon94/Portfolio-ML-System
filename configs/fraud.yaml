@@ -1,4 +1,4 @@
-# Payment fraud — IEEE-CIS Fraud Detection (Vesta Corporation real e-commerce payments).
+# Payment fraud: IEEE-CIS Fraud Detection (Vesta Corporation real e-commerce payments).
 #
 # The label `isFraud` comes with the dataset. Nothing in this repo generates it.
 # The split is TIME-BASED on TransactionDT: a random split puts the same card and
@@ -11,7 +11,7 @@ data:
     kind: kaggle_competition          # requires one-click rules acceptance, see data/README.md
     slug: ieee-fraud-detection
     adapter: src.data.adapters.ieee_cis
-  sample_path: data/sample/ieee_cis_sample.csv   # CI fixture only — never a published number
+  sample_path: data/sample/ieee_cis_sample.csv   # CI fixture only, never a published number
   processed_path: data/processed/fraud.parquet
   target: isFraud
 
@@ -57,7 +57,7 @@ baselines:
       class_weight: balanced
 
 metrics:
-  primary: pr_auc        # 3.5% positives — average precision, not ROC-AUC
+  primary: pr_auc        # 3.5% positives, so average precision, not ROC-AUC
   report:
     - pr_auc
     - roc_auc

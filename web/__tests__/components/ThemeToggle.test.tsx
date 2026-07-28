@@ -1,4 +1,4 @@
-/** A.2.9 — ThemeToggle component tests.
+/** A.2.9: ThemeToggle component tests.
  *
  * next-themes persistence to localStorage is exercised by the library's
  * own tests; here we only verify our button calls `setTheme` with the

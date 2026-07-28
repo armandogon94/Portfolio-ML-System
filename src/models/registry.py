@@ -2,7 +2,7 @@
 
 ``configs/<problem>.yaml`` names a model by string (``model.type: lightgbm``) and
 ``create_model`` turns that string into an estimator. An unknown name raises a
-``KeyError`` that lists the valid names — it never returns ``None``, because a
+``KeyError`` that lists the valid names. It never returns ``None``, because a
 ``None`` model fails 40 lines later with a meaningless ``AttributeError``.
 
 Every registered estimator satisfies the same three-method contract used by
@@ -107,13 +107,13 @@ def _logreg(params: dict[str, Any], *, seed: int):
     A bare ``LogisticRegression`` cannot consume this repo's frames at all. They
     contain NaN by design (IEEE-CIS is heavily missing), unscaled columns spanning
     six orders of magnitude, and pandas ``category`` columns. Handing it the raw
-    frame raises ``could not convert string to float`` — so the "baseline" would be
+    frame raises ``could not convert string to float``, so the "baseline" would be
     a crash, and a leaderboard with a crashed baseline row is worse than one with
     no baseline at all.
 
     Numeric columns: median impute then standardise.
     Categorical columns: most-frequent impute then one-hot, capped at
-    ``max_categories=20``. The cap matters — ``card1`` has ~17,000 levels and an
+    ``max_categories=20``. The cap matters: ``card1`` has ~17,000 levels and an
     uncapped one-hot would produce a matrix wider than the dataset is tall.
     Unseen levels at predict time are ignored rather than raising.
     """

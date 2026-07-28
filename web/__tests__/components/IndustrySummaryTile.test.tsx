@@ -1,4 +1,4 @@
-/** A.9.8 — IndustrySummaryTile component tests. */
+/** A.9.8: IndustrySummaryTile component tests. */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
@@ -35,7 +35,7 @@ describe("IndustrySummaryTile", () => {
     const tile = render(
       <IndustrySummaryTile industry={FINTECH} rows={[row("credit-risk", "ready", 0.85)]} />,
     );
-    // shadcn CardTitle renders as <div> — assert text presence instead of heading role.
+    // shadcn CardTitle renders as <div>, so assert text presence instead of heading role.
     expect(tile.getByText("Fintech")).toBeInTheDocument();
     expect(tile.getByRole("link", { name: /fintech/i })).toHaveAttribute("href", "/fintech");
   });
@@ -52,7 +52,7 @@ describe("IndustrySummaryTile", () => {
   });
 
   it("reports 0/3 on a fresh clone with no checkpoints at all", () => {
-    // The repository's real current state — see docs/PROGRESS.md.
+    // The repository's real current state; see docs/PROGRESS.md.
     const rows = [
       row("fraud", "not_built", null),
       row("credit-risk", "not_built", null),

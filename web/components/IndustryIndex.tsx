@@ -1,11 +1,11 @@
 /**
- * IndustryIndex — shared layout for every /<industry> stub page.
+ * IndustryIndex: shared layout for every /<industry> stub page.
  *
  * The six industry-level pages (`app/<slug>/page.tsx`) delegate to
  * this component so we have a single source of truth for how each
  * industry's model list renders. As A.3–A.8 ship model pages and
  * flip `ready: true` in lib/industries.ts, this component picks up
- * the change automatically — no edits here required.
+ * the change automatically, with no edits here required.
  */
 import Link from "next/link";
 import { notFound } from "next/navigation";

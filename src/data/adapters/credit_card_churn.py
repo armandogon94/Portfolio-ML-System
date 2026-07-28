@@ -4,7 +4,7 @@
 hold-out split is noise: evaluation is 5-fold stratified CV throughout.
 
 Two columns in the published CSV are traps. The dataset ships
-``Naive_Bayes_Classifier_Attrition_Flag_...1`` and ``...2`` — pre-computed
+``Naive_Bayes_Classifier_Attrition_Flag_...1`` and ``...2``, which are pre-computed
 posterior probabilities of the target, which the dataset's own author tells you to
 delete. They are the label, laundered through a classifier. This adapter keeps
 them in the returned frame *on purpose* so that ``reports/RESULTS.md`` can report
@@ -34,7 +34,7 @@ PROVENANCE: dict[str, Any] = {
     "slug": "sakshigoyal7/credit-card-customers",
     "filename": "BankChurners.csv",
     "url": "https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers",
-    "licence": ("Uploader tags CC0; upstream authority unverified — do not redistribute rows"),
+    "licence": ("Uploader tags CC0; upstream authority unverified. Do not redistribute rows"),
     "access": "Free Kaggle account. No rules gate.",
     "expected_rows": 10_127,
     "expected_positive_rate": 0.1607,
@@ -132,7 +132,7 @@ def _fixture() -> Path:
 def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
     """Derive the label and apply canonical dtypes."""
     if "Attrition_Flag" not in frame.columns:
-        raise ValueError("Attrition_Flag absent — cannot derive is_attrited without it.")
+        raise ValueError("Attrition_Flag absent: cannot derive is_attrited without it.")
 
     unknown = set(frame["Attrition_Flag"].unique()) - set(ATTRITION_MAP)
     if unknown:

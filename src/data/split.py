@@ -122,7 +122,7 @@ def stratified_kfold_indices(
         seed: Shuffle seed.
 
     Returns:
-        One :class:`Split` per fold, with an empty ``val`` array — early stopping
+        One :class:`Split` per fold, with an empty ``val`` array: early stopping
         is disabled for this problem, the trees are few and fixed.
     """
     from sklearn.model_selection import StratifiedKFold

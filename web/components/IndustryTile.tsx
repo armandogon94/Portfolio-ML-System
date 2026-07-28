@@ -1,5 +1,5 @@
 /**
- * IndustryTile — landing-page card linking to one industry's model index.
+ * IndustryTile: landing-page card linking to one industry's model index.
  *
  * Kept intentionally minimal: shadcn Card + lucide icon + title + tagline
  * + a "Try models →" CTA. The whole card becomes a single clickable

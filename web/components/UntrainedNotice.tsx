@@ -1,12 +1,12 @@
 /**
- * UntrainedNotice — what a reviewer sees when no checkpoint exists.
+ * UntrainedNotice: what a reviewer sees when no checkpoint exists.
  *
  * A fresh clone has no trained models, and the API returns 503 with the exact
  * commands that fix it. Rendering that message verbatim is the honest behaviour:
  * the alternative is a generic "something went wrong", which suggests a bug in a
  * system that is working exactly as documented.
  *
- * This is also the state the demo is in until the datasets are downloaded — see
+ * This is also the state the demo is in until the datasets are downloaded; see
  * docs/PROGRESS.md.
  */
 

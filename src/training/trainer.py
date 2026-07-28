@@ -1,4 +1,4 @@
-"""``BaseTrainer`` — config loading, experiment tracking, and the MLflow registry.
+"""``BaseTrainer``: config loading, experiment tracking, and the MLflow registry.
 
 Kept deliberately small. It owns what every trainer needs and knows nothing about
 tabular data, splits or metrics: those belong to ``tabular.py`` and
@@ -6,7 +6,7 @@ tabular data, splits or metrics: those belong to ``tabular.py`` and
 
 MLflow is primary for real runs (local file store by default, HTTP when
 ``MLFLOW_TRACKING_URI`` points at the container). Sample runs are deliberately
-untracked. W&B is optional and off unless a real API key is present — see
+untracked. W&B is optional and off unless a real API key is present; see
 ``docs/adr/0002-experiment-tracking.md``.
 """
 
@@ -76,7 +76,7 @@ class BaseTrainer(ABC):
 
         ``PYTHONHASHSEED`` is set for completeness but only takes effect in a
         fresh interpreter. PyTorch weight initialisation, dropout and shuffling
-        use their own generator and must be seeded explicitly — but see
+        use their own generator and must be seeded explicitly, but see
         :meth:`seed_torch`, which is why that does not happen here.
 
         This makes repeated initialisation reproducible; it does not promise
@@ -106,8 +106,8 @@ class BaseTrainer(ABC):
             python -c "import torch; import pandas as pd, lightgbm as lgb; ...; m.fit(X, y)"
                 -> Segmentation fault: 11
 
-        So the tabular path must never pull torch in, and the autoencoder path —
-        which imports torch for its own reasons and never touches LightGBM —
+        So the tabular path must never pull torch in, and the autoencoder path,
+        which imports torch for its own reasons and never touches LightGBM,
         calls this after that import and gets a properly seeded RNG.
 
         Returns:
@@ -132,7 +132,7 @@ class BaseTrainer(ABC):
     def _init_wandb(self) -> bool:
         api_key = os.environ.get("WANDB_API_KEY")
         if not api_key or api_key == _WANDB_PLACEHOLDER:
-            logger.info("No W&B API key — MLflow only.")
+            logger.info("No W&B API key; MLflow only.")
             return False
         try:
             import wandb

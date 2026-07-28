@@ -1,7 +1,7 @@
 /**
  * Form fields for the card-attrition model.
  *
- * Labels are the human reading of the dataset's real column names — the `name`
+ * Labels are the human reading of the dataset's real column names. The `name`
  * values must stay byte-identical to `ChurnInput` in lib/schemas.ts and to
  * `CardholderRequest` in src/serving/schemas.py, or FastAPI returns 422.
  */

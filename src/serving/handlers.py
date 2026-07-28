@@ -3,12 +3,12 @@
 Split out of ``api.py`` so that file is route declarations and nothing else. The
 non-obvious content here is the status mapping, which is a deliberate choice:
 
-``503`` — no checkpoint on disk.
+``503``: no checkpoint on disk.
     The service is healthy; the model simply has not been trained. A ``500`` would
     say "bug" and send a reviewer reading tracebacks for a fresh clone that is
     behaving exactly as documented. The detail carries the command to fix it.
 
-``501`` — the model type has no explainer wired up.
+``501``: the model type has no explainer wired up.
     "Not implemented" is the truth. Returning an empty explanation instead would
     render in the UI as "this prediction had no important features", which is a
     different and false statement.

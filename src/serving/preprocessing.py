@@ -9,7 +9,7 @@ The frame that reaches the model is built in three steps:
 
 1. The request dict becomes a one-row DataFrame in the *canonical adapter schema*,
    with every column the adapter would have produced. Missing keys become NaN
-   rather than 0 — LightGBM treats NaN as "unknown" and 0 as "zero", and those are
+   rather than 0: LightGBM treats NaN as "unknown" and 0 as "zero", and those are
    very different statements about a transaction amount.
 2. The problem's ``engineer_features`` runs with ``fit=False`` and the frequency
    maps saved at training time.
@@ -31,7 +31,7 @@ from src.serving.registry import LoadedModel
 
 logger = logging.getLogger(__name__)
 
-#: Cached per problem — reading and validating YAML on every request is wasteful.
+#: Cached per problem: reading and validating YAML on every request is wasteful.
 _CONFIG_CACHE: dict[str, dict[str, Any]] = {}
 
 
@@ -103,7 +103,7 @@ def build_features(loaded: LoadedModel, payload: dict[str, Any]) -> pd.DataFrame
             matrix[column] = matrix[column].astype("category")
 
     # Replay the exact training category sets. Without this LightGBM either
-    # refuses to predict or — worse — predicts on permuted category codes.
+    # refuses to predict or, worse, predicts on permuted category codes.
     return apply_category_dtypes(matrix, loaded.category_dtypes)
 
 
@@ -111,7 +111,7 @@ def score(loaded: LoadedModel, payload: dict[str, Any]) -> tuple[float, pd.DataF
     """Return ``(positive_class_probability, feature_frame)`` for one request.
 
     The feature frame is returned alongside the score so the explainability path
-    can reuse it instead of recomputing — which would also risk the two disagreeing.
+    can reuse it instead of recomputing, which would also risk the two disagreeing.
     """
     matrix = build_features(loaded, payload)
     probability = float(loaded.model.predict_proba(matrix)[0][1])

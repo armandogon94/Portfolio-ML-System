@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * ThemeToggle — flips between light and dark themes via next-themes.
+ * ThemeToggle: flips between light and dark themes via next-themes.
  *
  * next-themes handles localStorage persistence + the <html class>
  * update automatically; we just call setTheme with the opposite of
  * the current resolved value. During SSR/pre-hydration resolvedTheme
- * is undefined — we render an aria-labeled button regardless so the
+ * is undefined, so we render an aria-labeled button regardless and the
  * markup is stable (prevents hydration mismatch).
  */
 import { useTheme } from "next-themes";

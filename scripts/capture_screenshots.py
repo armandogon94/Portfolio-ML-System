@@ -9,7 +9,7 @@ that the captures be reproducible rather than hand-taken one-offs.
 real transaction, no real borrower, no real cardholder, and nothing personal ever
 appears in an image committed to this repository.
 
-Prerequisites — both services running, and at least one trained checkpoint:
+Prerequisites (both services running, and at least one trained checkpoint):
 
     make docker-up                 # or: make serve  &&  make web-dev
     uv run python scripts/train.py --model all
@@ -131,7 +131,7 @@ def capture(base_url: str, mlflow_url: str, *, timeout_ms: int) -> int:
             console.print(f"    [green]{path.relative_to(get_project_root())}[/green]")
             captured += 1
         except PlaywrightTimeout:
-            console.print("    [yellow]MLflow not reachable — skipped.[/yellow]")
+            console.print("    [yellow]MLflow not reachable, skipped.[/yellow]")
 
         browser.close()
 
@@ -155,7 +155,7 @@ def main() -> int:
             "  2. uv run python scripts/train.py --model all\n"
             "Every documented application view and the MLflow UI must be captured in "
             "one run.\n"
-            "Screenshots of empty states are not worth committing — see docs/PROGRESS.md."
+            "Screenshots of empty states are not worth committing; see docs/PROGRESS.md."
         )
         return 1
 

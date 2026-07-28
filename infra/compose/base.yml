@@ -6,7 +6,7 @@
 # Dockerfiles copy src/, configs/ and data/sample/. Hence `context: ../..`.
 #
 # Host ports come from .env with the values in docs/ports.example.md. The
-# container-internal ports are the framework defaults (8000, 3070) — container
+# container-internal ports are the framework defaults (8000, 3070). Container
 # network namespaces are isolated, so only the host side needs allocating.
 
 services:
@@ -49,7 +49,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PYTORCH_ENABLE_MPS_FALLBACK=1
     volumes:
-      # Checkpoints are gitignored and are NOT baked into the image — training
+      # Checkpoints are gitignored and are NOT baked into the image. Training
       # happens on the host (where LightGBM has all the cores) and the API picks
       # the result up through this mount. A fresh clone with no checkpoints
       # starts fine and reports every model as unavailable.
@@ -66,8 +66,8 @@ services:
       retries: 3
       start_period: 30s
 
-  # ML Demo UI (Next.js + shadcn/ui) — three fintech model pages
-  # plus the live /dashboard. Replaced the Gradio prototype — see
+  # ML Demo UI (Next.js + shadcn/ui): three fintech model pages
+  # plus the live /dashboard. Replaced the Gradio prototype; see
   # docs/adr/0001-gradio-to-nextjs.md. Proxies /api/* to
   # ml-api via next.config.mjs rewrites so the browser stays on a
   # single origin (no CORS preflight, no backend middleware).

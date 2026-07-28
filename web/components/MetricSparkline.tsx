@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * MetricSparkline — minimal Recharts LineChart styled as an inline
+ * MetricSparkline: minimal Recharts LineChart styled as an inline
  * sparkline (no axes, no grid, no tooltip). Used by the dashboard's
  * per-model "metric history" column to surface how the key metric
  * has trended across the most recent training runs.
  *
- * Pure presentational Client Component — accepts pre-fetched data
+ * Pure presentational Client Component: accepts pre-fetched data
  * and renders. No fetching or transformation inside; the dashboard
  * lib/dashboard.ts joins MLflow history into the row shape and
  * passes the numeric series in.
@@ -19,7 +19,7 @@ const DEFAULT_WIDTH = 120;
 const DEFAULT_HEIGHT = 30;
 
 type Props = {
-  /** Ordered series — oldest first, newest last (left → right). */
+  /** Ordered series: oldest first, newest last (left → right). */
   data: number[];
   /** Stroke color. Defaults to Tailwind blue-500. */
   color?: string;
@@ -36,7 +36,7 @@ export function MetricSparkline({
   height = DEFAULT_HEIGHT,
 }: Props) {
   if (data.length === 0) {
-    // Don't draw an empty axis-less chart — a "No history" pill is
+    // Don't draw an empty axis-less chart. A "No history" pill is
     // both more honest and avoids a Recharts warning about an
     // empty data prop.
     return (
@@ -53,7 +53,7 @@ export function MetricSparkline({
   // hide the axes. Use the index as a synthetic x-value.
   const series = data.map((value, idx) => ({ idx, value }));
 
-  // Fixed width/height (no ResponsiveContainer) — jsdom tests can't
+  // Fixed width/height (no ResponsiveContainer): jsdom tests can't
   // measure parent dimensions, and dashboard sparklines live in a
   // table cell with predictable size anyway.
   return (

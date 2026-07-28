@@ -1,5 +1,5 @@
 /**
- * IndustryIndex — the shared layout for `/<industry>`.
+ * IndustryIndex: the shared layout for `/<industry>`.
  *
  * Every catalogued model is now `ready: true`, so this component should never
  * render a "Coming soon" state. That is asserted explicitly: a placeholder row

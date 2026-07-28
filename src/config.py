@@ -18,7 +18,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-#: Problem names with a config in ``configs/``. Deliberately closed —
+#: Problem names with a config in ``configs/``. Deliberately closed:
 #: the repo is three fintech problems, not an open catalogue.
 PROBLEMS = ("fraud", "credit_risk", "churn")
 
@@ -96,7 +96,7 @@ def _validate(config: dict[str, Any], path: Path) -> None:
     if "source" not in data:
         raise ConfigError(
             f"{path}: data.source is required. Every config must name a real, "
-            f"downloadable dataset — synthetic generators were removed in ADR-0003."
+            f"downloadable dataset. Synthetic generators were removed in ADR-0003."
         )
     source = data["source"]
     if not isinstance(source, dict):

@@ -62,7 +62,7 @@ class TabularTrainer(BaseTrainer):
         config_name: A problem name resolving to ``configs/<name>.yaml``.
         use_wandb: Enable W&B logging when ``WANDB_API_KEY`` is set.
         sample: Train on the committed CI fixture instead of the real dataset.
-            Opens no tracking run and **forces checkpointing off** — see
+            Opens no tracking run and **forces checkpointing off**; see
             :meth:`save_artifacts`.
     """
 
@@ -335,7 +335,7 @@ class TabularTrainer(BaseTrainer):
                 "platform": platform.platform(),
                 "machine": platform.machine(),
                 "note": (
-                    "LightGBM/XGBoost have CPU-only wheels on macOS arm64 — no Metal "
+                    "LightGBM/XGBoost have CPU-only wheels on macOS arm64; no Metal "
                     "backend exists. Only src/models/autoencoder.py uses MPS."
                 ),
             },
@@ -398,7 +398,7 @@ class TabularTrainer(BaseTrainer):
         """Everything serving needs to rebuild the training feature frame.
 
         Written to ``features.joblib`` next to the model. Serving must never
-        recompute any of it — see ``src/serving/preprocessing.py``.
+        recompute any of it; see ``src/serving/preprocessing.py``.
         """
         return {
             "feature_columns": self.feature_columns,
@@ -508,7 +508,7 @@ def _positive_scores(model: Any, matrix: pd.DataFrame) -> np.ndarray:
         raise ValueError(
             "The estimator was fitted on a single class, so there is no "
             "positive-class probability to score. The training partition "
-            "contains no positive rows — check the split boundaries and the "
+            "contains no positive rows. Check the split boundaries and the "
             "positive rate of the data this run was given."
         )
     return proba[:, 1]

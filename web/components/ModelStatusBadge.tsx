@@ -1,5 +1,5 @@
 /**
- * ModelStatusBadge — colored pill summarizing a model's lifecycle state.
+ * ModelStatusBadge: colored pill summarizing a model's lifecycle state.
  *
  * 3-value enum (ready / training / not_built) → green / amber / muted
  * palette. Used by the dashboard table's "Status" column. Inlined

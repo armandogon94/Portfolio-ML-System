@@ -2,7 +2,7 @@
 """Run the documented pipeline end to end: download -> train -> evaluate.
 
 A thin orchestrator over the three scripts that do the work, so the README can
-say "make all" and mean it. Each stage's exit code is honoured — a failed download
+say "make all" and mean it. Each stage's exit code is honoured: a failed download
 does not silently proceed to training on nothing.
 
 Usage:

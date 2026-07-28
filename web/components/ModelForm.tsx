@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ModelForm — reusable wrapper for all industry model-input forms.
+ * ModelForm: reusable wrapper for all industry model-input forms.
  *
  * Renders each field declared in `fields` using shadcn/ui Form primitives,
  * with inline Zod validation errors and a submit button at the bottom.
@@ -148,7 +148,7 @@ function renderControl<TValues extends FieldValues>(
         />
       );
     case "select":
-      // Native <select> styled like the shadcn Input — keeps zero new
+      // Native <select> styled like the shadcn Input, which keeps zero new
       // dependencies and matches the muted-foreground, ring-on-focus
       // look of the other controls. Each option's display value is
       // the raw option string with underscores → spaces and title

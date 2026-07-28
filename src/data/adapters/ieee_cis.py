@@ -5,7 +5,7 @@ is ~144k rows x 41 columns. About 3.5% of transactions are fraudulent.
 
 Memory: the full transaction table in float32 is 590,540 x 393 x 4 B ~= 0.93 GB,
 which is comfortable in 32 GB. Everything numeric is downcast to float32 on read
-and object columns become pandas ``category`` — without that, the naive float64 +
+and object columns become pandas ``category``. Without that, the naive float64 +
 object load is roughly 4x larger.
 
 The competition's ``test_transaction.csv`` ships **without labels**, so it cannot
@@ -36,7 +36,7 @@ PROVENANCE: dict[str, Any] = {
     "kind": "kaggle_competition",
     "slug": "ieee-fraud-detection",
     "url": "https://www.kaggle.com/competitions/ieee-fraud-detection/data",
-    "licence": "Kaggle competition rules — not redistributable",
+    "licence": "Kaggle competition rules, not redistributable",
     "access": (
         "Free Kaggle account PLUS a one-click acceptance of the competition "
         "rules. Not anonymous-curl-able."
@@ -202,7 +202,7 @@ def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
     if TARGET not in frame.columns:
         raise ValueError(
             f"{TARGET!r} absent. The competition's test_transaction.csv is "
-            "unlabelled and cannot be used for evaluation — see reports/RESULTS.md."
+            "unlabelled and cannot be used for evaluation; see reports/RESULTS.md."
         )
     for column in frame.columns:
         target_dtype = CANONICAL_COLUMNS.get(column)

@@ -26,7 +26,7 @@ def engineer_features(
 
     Args:
         frame: Canonical attrition frame.
-        artifacts: Unused — kept for signature parity across feature modules.
+        artifacts: Unused, kept for signature parity across feature modules.
         fit: Unused, same reason.
 
     Returns:

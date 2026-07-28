@@ -1,7 +1,7 @@
 """The unsupervised fraud baseline trainer.
 
-Runs on the IEEE-CIS CI fixture with two epochs. It proves the pipeline wiring —
-fit on legitimate rows, threshold from train error, raw reconstruction scores —
+Runs on the IEEE-CIS CI fixture with two epochs. It proves the pipeline wiring
+(fit on legitimate rows, threshold from train error, raw reconstruction scores)
 and never claims a metric: the fixture's label is independent noise.
 
 CPU only. The session-wide MPS mock in conftest is what makes that true, and it is
@@ -103,7 +103,7 @@ def test_the_fixture_result_is_near_chance(trained):
     _, metrics = trained
     assert 0.2 <= metrics["test_roc_auc"] <= 0.8, (
         f"autoencoder scored {metrics['test_roc_auc']:.3f} on independent-noise "
-        f"labels — regenerate the fixture with scripts/make_fixtures.py"
+        f"labels. Regenerate the fixture with scripts/make_fixtures.py"
     )
 
 

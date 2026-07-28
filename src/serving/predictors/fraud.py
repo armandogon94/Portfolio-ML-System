@@ -3,7 +3,7 @@
 The bands mirror how a payments review team actually works: almost everything is
 approved automatically, a thin slice goes to a human queue, and a thinner slice is
 declined outright. The cut points below are **conventions chosen for a readable
-demo**, not a calibrated policy — calibrating them requires the cost of a
+demo**, not a calibrated policy. Calibrating them weighs the cost of a
 false decline (a lost customer) against the cost of a missed fraud (a chargeback),
 and this repository has no such business input. ``reports/RESULTS.md`` reports
 ``precision_at_1pct`` precisely so a reader can pick their own cut point.
