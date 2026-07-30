@@ -1,8 +1,8 @@
 %%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart LR
-    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
-    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
-    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 × 23")]
+    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>scale not measured locally")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>source rows measured")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 rows")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
     K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256<br/>compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/<br/>adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]

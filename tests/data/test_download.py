@@ -7,6 +7,7 @@ hidden addopts setting.
 
 from __future__ import annotations
 
+import gzip
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,7 @@ import pandas as pd
 import pytest
 
 from scripts import download_data
+from src.data import download
 from src.data.download import (
     DatasetAccessError,
     kaggle_competition_cached,
@@ -70,13 +72,32 @@ def test_competition_download_is_used_for_competitions(fake_credentials, tmp_pat
     assert result == tmp_path
 
 
-def test_dataset_download_is_used_for_datasets(fake_credentials, tmp_path):
+def test_dataset_download_is_used_for_datasets(fake_credentials, monkeypatch, tmp_path):
+    monkeypatch.setenv("KAGGLEHUB_CACHE", str(tmp_path / "empty-cache"))
     fake = MagicMock()
     fake.dataset_download.return_value = str(tmp_path)
     with patch.dict("sys.modules", {"kagglehub": fake}):
         result = kaggle_dataset_cached("wordsforthewise/lending-club")
     fake.dataset_download.assert_called_once()
     assert result == tmp_path
+
+
+def test_cached_dataset_is_reused_without_credentials_or_network(monkeypatch, tmp_path):
+    cache_root = tmp_path / "kagglehub"
+    cached_version = cache_root / "datasets" / "owner" / "slug" / "versions" / "3"
+    cached_version.mkdir(parents=True)
+    expected = cached_version / "dataset.csv"
+    expected.write_text("label\n1\n")
+    monkeypatch.setenv("KAGGLEHUB_CACHE", str(cache_root))
+    monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+    monkeypatch.delenv("KAGGLE_KEY", raising=False)
+    fake = MagicMock()
+
+    with patch.dict("sys.modules", {"kagglehub": fake}):
+        found = kaggle_dataset_cached("owner/slug", filename="dataset.csv")
+
+    assert found == expected
+    fake.dataset_download.assert_not_called()
 
 
 def test_missing_named_file_lists_what_is_actually_there(fake_credentials, tmp_path):
@@ -185,6 +206,38 @@ def test_openml_download_reports_shape_positive_rate_and_no_file_digest(monkeypa
     output = capsys.readouterr().out
     assert "positive rate 0.333333" in output
     assert "sha256: n/a" in output
+
+
+def test_openml_cache_restores_the_documented_row_id(tmp_path):
+    details = {
+        "row_id_attribute": "Time",
+        "url": "https://openml.org/data/v1/download/42/tiny.arff",
+    }
+    cached = tmp_path / "openml" / "openml.org" / "data" / "v1" / "download" / "42"
+    cached.mkdir(parents=True)
+    with gzip.open(cached / "tiny.arff.gz", "wt") as handle:
+        handle.write(
+            "@relation tiny\n"
+            "@attribute Time numeric\n"
+            "@attribute V1 numeric\n"
+            "@attribute Amount numeric\n"
+            "@attribute Class {'0','1'}\n"
+            "@data\n"
+            "10,1.5,20,'0'\n"
+            "20,2.5,30,'1'\n"
+        )
+    sklearn_frame = pd.DataFrame(
+        {
+            "V1": [1.5, 2.5],
+            "Amount": [20.0, 30.0],
+            "Class": ["0", "1"],
+        }
+    )
+
+    restored = download._restore_openml_row_id(sklearn_frame, details, data_home=tmp_path)
+
+    assert restored.columns[0] == "Time"
+    assert restored["Time"].tolist() == [10.0, 20.0]
 
 
 @pytest.mark.network

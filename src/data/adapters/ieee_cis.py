@@ -1,16 +1,12 @@
 """IEEE-CIS Fraud Detection adapter (Vesta Corporation real e-commerce payments).
 
-Scale: ``train_transaction.csv`` is 590,540 rows x 394 columns; ``train_identity.csv``
-is ~144k rows x 41 columns. About 3.5% of transactions are fraudulent.
+Scale, class rate, and peak memory are not measured locally because the
+competition download is blocked. Numeric columns are downcast to float32 on read
+and object columns become pandas ``category`` to keep the eventual load bounded.
 
-Memory: the full transaction table in float32 is 590,540 x 393 x 4 B ~= 0.93 GB,
-which is comfortable in 32 GB. Everything numeric is downcast to float32 on read
-and object columns become pandas ``category``. Without that, the naive float64 +
-object load is roughly 4x larger.
-
-The competition's ``test_transaction.csv`` ships **without labels**, so it cannot
-be used for evaluation. That is why the split is temporal *within* the training
-file. See ``reports/RESULTS.md``.
+The configured evaluation uses a temporal split within the training file.
+Competition test labels are not available through this repository. See
+``reports/RESULTS.md``.
 
 Licence: Kaggle competition data. **Not redistributable.** No real row from this
 dataset is ever committed to this repository.

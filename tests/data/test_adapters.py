@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from src.config import load_config
 from src.data.adapters import (
     ADAPTERS,
     credit_card_churn,
@@ -77,14 +78,7 @@ def test_churn_rejects_unknown_attrition_values():
 
 
 def test_ulb_adapter_uses_openml_1597_for_the_real_path(monkeypatch):
-    # The repository fixture also exercises the Kaggle mirror's optional Time
-    # column. OpenML 1597 does not provide it, so the real-path mock must not
-    # smuggle that different schema into this test.
-    raw = (
-        ulb_creditcard.load(sample=True)
-        .drop(columns=[ulb_creditcard.TIME_COLUMN])
-        .rename(columns={"is_fraud": "Class"})
-    )
+    raw = ulb_creditcard.load(sample=True).rename(columns={"is_fraud": "Class"})
     called: list[int] = []
 
     def fake_openml_cached(data_id: int):
@@ -96,7 +90,17 @@ def test_ulb_adapter_uses_openml_1597_for_the_real_path(monkeypatch):
 
     assert called == [1597]
     assert list(loaded.columns) == list(ulb_creditcard.CANONICAL_COLUMNS)
-    assert loaded.shape == (500, 30)
+    assert loaded.shape == (500, 31)
+
+
+def test_ulb_publication_uses_the_documented_time_row_id():
+    split = load_config("fraud_ulb")["split"]
+    assert split == {
+        "type": "time",
+        "column": "Time",
+        "test_size": 0.2,
+        "val_size": 0.1,
+    }
 
 
 def test_get_adapter_resolves_every_registered_path():

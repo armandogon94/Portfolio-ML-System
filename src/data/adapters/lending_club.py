@@ -1,9 +1,8 @@
 """LendingClub accepted loans 2007-2018Q4 adapter.
 
-Source file: ``accepted_2007_to_2018Q4.csv.gz``, ~2.26M rows x 151 columns,
-~648 MB gzipped. **Never read all 151 columns.** ``usecols`` keeps the load to the
-~30 origination-time fields the model is allowed to see, which is the difference
-between a 3 GB frame and a 300 MB one.
+Source file: ``accepted_2007_to_2018Q4.csv.gz``. The pinned source record contains
+2,260,701 rows. ``usecols`` keeps the load to the origination-time fields the model
+is allowed to see instead of loading the full source schema.
 
 Target construction: ``loan_status`` filtered to TERMINAL outcomes only.
 
@@ -44,8 +43,8 @@ PROVENANCE: dict[str, Any] = {
     "access": "Free Kaggle account. No rules gate.",
     "expected_rows": 2_260_701,
     "expected_rows_raw": 2_260_701,
-    # Unrecorded because the download has not been run on this machine.
-    "expected_sha256": None,
+    # Measured from Kaggle dataset version 3 on 2026-07-26.
+    "expected_sha256": "55c16f75120f897683f02e7aabcf080d0e4a20c4832feb1d592cfa941bd62a2d",
     "note": "Row count after filtering to terminal statuses is recorded in data/README.md",
 }
 

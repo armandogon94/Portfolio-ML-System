@@ -1,15 +1,15 @@
 """Credit-card customer attrition adapter (``sakshigoyal7/credit-card-customers``).
 
-10,127 rows x 23 columns, ~16.07% attrited, under 2 MB. Small enough that a single
-hold-out split is noise: evaluation is 5-fold stratified CV throughout.
+The public run record measures 10,127 rows and a 16.07% attrition rate. Evaluation
+uses five-fold stratified cross-validation rather than a single hold-out split.
 
 Two columns in the published CSV are traps. The dataset ships
 ``Naive_Bayes_Classifier_Attrition_Flag_...1`` and ``...2``, which are pre-computed
 posterior probabilities of the target, which the dataset's own author tells you to
 delete. They are the label, laundered through a classifier. This adapter keeps
-them in the returned frame *on purpose* so that ``reports/RESULTS.md`` can report
-the AUC with and without as an explicit leakage demonstration; the denylist in
-``configs/churn.yaml`` is what stops them reaching the model.
+them in the returned frame *on purpose* so a future controlled comparison is
+possible; that comparison is not measured. The denylist in ``configs/churn.yaml``
+is what stops them reaching the published model.
 
 Licence: Kaggle dataset, free account, no rules gate.
 """
@@ -38,8 +38,8 @@ PROVENANCE: dict[str, Any] = {
     "access": "Free Kaggle account. No rules gate.",
     "expected_rows": 10_127,
     "expected_positive_rate": 0.1607,
-    # Unrecorded because the download has not been run on this machine.
-    "expected_sha256": None,
+    # Measured from Kaggle dataset version 1 on 2026-07-30.
+    "expected_sha256": "c91b525a2a6755a1b0b80dad1d0d008ca97ec4df34552c8f47ffa12b6184b779",
 }
 
 #: The two pre-computed posterior columns. Present in the frame, excluded by the

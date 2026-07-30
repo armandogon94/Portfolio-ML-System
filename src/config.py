@@ -175,20 +175,17 @@ def _validate(config: dict[str, Any], path: Path) -> None:
         raise ConfigError(f"{path}: model.type is required.")
 
     band = config.get("sanity_band")
-    if not isinstance(band, dict):
-        raise ConfigError(
-            f"{path}: sanity_band is required and must be a mapping with "
-            "metric, min, and an optional max. It is an expected-range smoke "
-            "alarm, not a leakage test."
-        )
-    if band.get("metric") not in {"pr_auc", "roc_auc"}:
-        raise ConfigError(f"{path}: sanity_band.metric must be 'pr_auc' or 'roc_auc'.")
-    if not isinstance(band.get("min"), (int, float)):
-        raise ConfigError(f"{path}: sanity_band.min must be numeric.")
-    if "max" in band and not isinstance(band["max"], (int, float)):
-        raise ConfigError(f"{path}: sanity_band.max must be numeric when present.")
-    if "max" in band and band["min"] >= band["max"]:
-        raise ConfigError(f"{path}: sanity_band.min must be less than sanity_band.max.")
+    if band is not None:
+        if not isinstance(band, dict):
+            raise ConfigError(f"{path}: sanity_band must be a mapping when present.")
+        if band.get("metric") not in {"pr_auc", "roc_auc"}:
+            raise ConfigError(f"{path}: sanity_band.metric must be 'pr_auc' or 'roc_auc'.")
+        if not isinstance(band.get("min"), (int, float)):
+            raise ConfigError(f"{path}: sanity_band.min must be numeric.")
+        if "max" in band and not isinstance(band["max"], (int, float)):
+            raise ConfigError(f"{path}: sanity_band.max must be numeric when present.")
+        if "max" in band and band["min"] >= band["max"]:
+            raise ConfigError(f"{path}: sanity_band.min must be less than sanity_band.max.")
 
     # A denylist that does not contain the target is a footgun: the target column
     # would otherwise be eligible for selection as a feature.

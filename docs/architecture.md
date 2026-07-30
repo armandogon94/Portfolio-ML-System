@@ -38,8 +38,9 @@ flowchart TB
 
 **Design decision this encodes.** The API discovers models by globbing
 `checkpoints/*/metadata.json`. Adding a model requires no change to `api.py` and
-no redeploy. A fresh clone with zero checkpoints reports `status: ok` with three
-unavailable models without entering a crash loop.
+the new checkpoint must still be mounted and the service deployment refreshed.
+A fresh clone with zero checkpoints reports `status: ok` with three unavailable
+models without entering a crash loop.
 
 **Why the browser only ever talks to Next.js.** `next.config.mjs` rewrites
 `/api/*` to the FastAPI container server-side. One origin means no CORS
@@ -102,9 +103,9 @@ service state.
 ```mermaid
 %%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart LR
-    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
-    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
-    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 × 23")]
+    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>scale not measured locally")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>source rows measured")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 rows")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
     K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256<br/>compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/<br/>adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
@@ -134,6 +135,8 @@ For stratified cross-validation, the model edge has two distinct outputs:
 out-of-fold predictions grade the model and feed performance figures, while a
 separate estimator refit on all rows becomes the serving checkpoint. Keeping
 those roles separate prevents an all-row refit from evaluating itself.
+Chronological runs instead persist the final test rows and report variation
+across five adjacent, tie-safe blocks of that test.
 
 ---
 

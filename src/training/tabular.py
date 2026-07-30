@@ -26,6 +26,7 @@ Guardrails that are code, not documentation:
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import logging
@@ -45,9 +46,11 @@ from src.data.split import Split, make_splits
 from src.evaluation.classification_metrics import (
     aggregate_folds,
     compute_classification_metrics,
+    temporal_block_spread,
 )
 from src.features.schema import apply_category_dtypes, capture_category_dtypes
 from src.models.registry import create_model
+from src.training.publication import write_run_record
 from src.training.trainer import BaseTrainer
 
 logger = logging.getLogger(__name__)
@@ -92,7 +95,10 @@ class TabularTrainer(BaseTrainer):
         self._fold_metrics: list[dict[str, float]] = []
         self._last_scores: dict[str, np.ndarray] = {}
         self._oof_predictions: list[pd.DataFrame] = []
+        self._held_out_predictions: pd.DataFrame | None = None
         self.checkpoint_fit: dict[str, Any] = {}
+        self.dataset_summary: dict[str, Any] = {}
+        self.source_integrity: dict[str, Any] = {}
 
     # ── pipeline steps ───────────────────────────────────────────────────────
 
@@ -100,6 +106,11 @@ class TabularTrainer(BaseTrainer):
         """Load the canonical frame through the adapter named in the config."""
         source = self.config["data"]["source"]
         adapter = get_adapter(source["adapter"])
+        self.source_integrity = {
+            key: adapter.PROVENANCE.get(key)
+            for key in ("expected_rows", "expected_sha256", "expected_md5")
+            if adapter.PROVENANCE.get(key) is not None
+        }
         if self.sample:
             logger.warning(
                 "SAMPLE MODE: reading %s. These are synthetic CI fixtures. "
@@ -210,11 +221,19 @@ class TabularTrainer(BaseTrainer):
         started = time.time()
         self._fold_metrics = []
         self._oof_predictions = []
+        self._held_out_predictions = None
         logger.info("=" * 68)
         logger.info("Training %s (sample=%s, seed=%d)", self.problem, self.sample, self.seed)
         logger.info("=" * 68)
 
         frame = self.load_data()
+        target = self.config["data"]["target"]
+        self.dataset_summary = {
+            "n_rows": int(len(frame)),
+            "n_columns": int(len(frame.columns)),
+            "positive_count": int(frame[target].sum()),
+            "positive_rate": float(frame[target].mean()),
+        }
         splits = make_splits(frame, self.config["split"], self.config["data"]["target"], self.seed)
         logger.info("%d split(s) from strategy %r", len(splits), self.config["split"]["type"])
 
@@ -225,6 +244,9 @@ class TabularTrainer(BaseTrainer):
             data = self.build_matrix(frame, split)
             model = self.train(data)
             fold_metrics = self.evaluate(model, data)
+            if len(splits) == 1 and self.config["split"]["type"] == "time" and not self.sample:
+                fold_metrics.update(self._temporal_spread(frame, split, data))
+                self._record_held_out_predictions(split, data)
             self._fold_metrics.append(fold_metrics)
             if len(splits) > 1:
                 self._record_oof_predictions(split, data, fold=index + 1)
@@ -310,10 +332,14 @@ class TabularTrainer(BaseTrainer):
             "model_type": self.config["model"]["type"],
             "seed": self.seed,
             "git_sha": _git_sha(),
+            "source_tree_sha256": _source_tree_sha256(),
+            "worktree_dirty_at_training": _worktree_dirty(),
             # ISO-8601 UTC. Read by the dashboard's "last trained" column and by
             # anyone asking whether a published number predates a code change.
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "dataset": self.config["data"]["source"],
+            "dataset_summary": self.dataset_summary,
+            "source_integrity": self.source_integrity,
             "split": self.config["split"],
             "feature_columns": self.feature_columns,
             "n_features": len(self.feature_columns),
@@ -329,7 +355,11 @@ class TabularTrainer(BaseTrainer):
                     "note": "Each row was scored only by the fold that held it out.",
                 }
                 if self._oof_predictions
-                else {"kind": "held_out_test_partition"}
+                else {
+                    "kind": "held_out_test_partition",
+                    "path": f"reports/{self.config_name}_test_predictions.csv",
+                    "note": "Every score comes from the final chronological test partition.",
+                }
             ),
             "hardware": {
                 "platform": platform.platform(),
@@ -360,7 +390,18 @@ class TabularTrainer(BaseTrainer):
                 oof_path, index=False
             )
             logger.info("Wrote held-out OOF predictions to %s", oof_path)
-        logger.info("Wrote %s and %s", checkpoint_dir / "metadata.json", csv_path)
+        if self._held_out_predictions is not None:
+            test_path = reports_dir / f"{self.config_name}_test_predictions.csv"
+            self._held_out_predictions.sort_values("row_index").to_csv(test_path, index=False)
+            logger.info("Wrote temporal test predictions to %s", test_path)
+        run_record_path = reports_dir / f"{self.config_name}_run.json"
+        write_run_record(metadata, csv_path, run_record_path)
+        logger.info(
+            "Wrote %s, %s and %s",
+            checkpoint_dir / "metadata.json",
+            csv_path,
+            run_record_path,
+        )
 
         return checkpoint_dir
 
@@ -373,6 +414,58 @@ class TabularTrainer(BaseTrainer):
         }
         rows.update({f"score_{name}": values for name, values in self._last_scores.items()})
         self._oof_predictions.append(pd.DataFrame(rows))
+
+    def _record_held_out_predictions(self, split: Split, data: dict[str, Any]) -> None:
+        """Persist one score per final test row for figure and uncertainty audits."""
+        rows: dict[str, Any] = {
+            "row_index": split.test,
+            "y_true": data["y_test"],
+        }
+        rows.update({f"score_{name}": values for name, values in self._last_scores.items()})
+        self._held_out_predictions = pd.DataFrame(rows)
+
+    def _temporal_spread(
+        self,
+        frame: pd.DataFrame,
+        split: Split,
+        data: dict[str, Any],
+    ) -> dict[str, float]:
+        """Report standard deviations across five adjacent, tie-safe test blocks."""
+        split_column = self.config["split"]["column"]
+        times = frame.iloc[split.test][split_column].to_numpy()
+        baseline_pr = {
+            name: self.baseline_metrics[name][f"baseline_{name}_pr_auc"]
+            for name in self._last_scores
+            if name != "model"
+        }
+        best_baseline = (
+            max(baseline_pr, key=lambda name: baseline_pr[name]) if baseline_pr else None
+        )
+        out = temporal_block_spread(
+            data["y_test"],
+            self._last_scores["model"],
+            times,
+            prefix="test",
+            comparison_score=(
+                self._last_scores[best_baseline] if best_baseline is not None else None
+            ),
+        )
+        for name, scores in self._last_scores.items():
+            if name == "model":
+                continue
+            out.update(
+                temporal_block_spread(
+                    data["y_test"],
+                    scores,
+                    times,
+                    prefix=f"baseline_{name}",
+                )
+            )
+        if best_baseline is not None:
+            out["test_pr_auc_baseline_temporal_block_std"] = out[
+                f"baseline_{best_baseline}_pr_auc_temporal_block_std"
+            ]
+        return out
 
     def _refit_on_all_rows(self, frame: pd.DataFrame) -> Any:
         """Fit the checkpoint estimator on all rows after CV evaluation."""
@@ -525,3 +618,49 @@ def _git_sha() -> str:
         ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
+
+
+def _source_tree_sha256() -> str:
+    """Digest the exact config and executable source bytes used for training."""
+    root = get_project_root()
+    paths: list[Path] = []
+    for relative in ("configs", "src"):
+        paths.extend(
+            path
+            for path in (root / relative).rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        )
+    paths.extend(
+        path
+        for path in (
+            root / "scripts" / "train.py",
+            root / "pyproject.toml",
+            root / "uv.lock",
+        )
+        if path.is_file()
+    )
+
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        relative_path_bytes = path.relative_to(root).as_posix().encode()
+        digest.update(len(relative_path_bytes).to_bytes(4, "big"))
+        digest.update(relative_path_bytes)
+        content = path.read_bytes()
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def _worktree_dirty() -> bool:
+    """Record whether the base commit alone can reproduce this run's source."""
+    try:
+        return bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain", "--untracked-files=normal"],
+                cwd=get_project_root(),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return True

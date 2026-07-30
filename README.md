@@ -1,16 +1,16 @@
 # Fintech ML System: Fraud, Credit Risk, and Attrition on Real Public Data
 
 [![CI](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml/badge.svg)](https://github.com/armandogon94/Portfolio-ML-System/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Three real-money fintech problems are covered: payment fraud, consumer credit
-risk, and card attrition. Three accepted real-data training runs are tracked in
-MLflow and served behind a FastAPI inference API with SHAP explanations.
+risk, and card attrition. Three accepted real-data runs have committed aggregate
+metrics and generated provenance records; their checkpoints and MLflow store stay
+local, and FastAPI serves them when those artifacts are present.
 
 - **Focus:** payment fraud · consumer credit risk · card attrition
-- **Data:** [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (590,540 × 394, 3.5% fraud) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (2.26M × 151; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 × 23; uploader tags CC0, upstream authority unverified)
+- **Data:** [IEEE-CIS](https://www.kaggle.com/competitions/ieee-fraud-detection/data) (competition-gated, not measured locally) · [LendingClub](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (1,345,310 terminal-status rows in the measured frame; uploader tags CC0, upstream authority unverified) · [Credit Card Customers](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) (10,127 measured rows; uploader tags CC0, upstream authority unverified)
 - **Stack:** Python 3.11 · LightGBM · PyTorch (MPS) · SHAP · MLflow · FastAPI · Next.js 14 · Docker
 - **Output:** a results table where every measured cell traces to a CSV written by a training run. Three of five rows are measured: `fraud_ulb`, `credit_risk`, and `churn`. The `fraud` and `fraud_autoencoder` rows are not measured because both need the IEEE-CIS competition data.
 
@@ -34,13 +34,15 @@ commands to unblock it.
 ## Key Findings
 
 - **The credential-free fraud result beat its logistic baseline on PR-AUC.**
-  ULB/OpenML 1597 measured PR-AUC **0.8569 ± 0.0331** against
-  **0.7300 ± 0.0279** for logistic regression, all out of fold.
+  A chronological ULB/OpenML 1597 test measured PR-AUC
+  **0.8073 ± 0.1357** against **0.7461 ± 0.1993** for logistic regression.
+  Here and for credit risk, `±` is the standard deviation across five adjacent
+  test-time blocks, not a confidence interval.
 - **Gradient boosting was barely better than logistic regression on
-  LendingClub.** LightGBM measured **0.3935 PR-AUC** against **0.3720**, a
-  **+0.0215** margin. The test partition is censored by terminal-status
-  filtering at the 2018Q4 data cut, so this is not an unbiased estimate of
-  forward default risk.
+  LendingClub.** LightGBM measured **0.3935 ± 0.0529 PR-AUC** against
+  **0.3720 ± 0.0569**, a **+0.0215 ± 0.0062** margin across temporal blocks.
+  The test partition is censored by terminal-status filtering at the 2018Q4
+  data cut, so this is not an unbiased estimate of forward default risk.
 - **The churn score is not prospective.** Its **0.9735 ± 0.0078 PR-AUC**
   substantially detects an attrition that already happened because current
   status and trailing-activity features describe the same period.
@@ -53,11 +55,11 @@ uv run python scripts/evaluate.py --markdown
 
 | Problem | Dataset (rows × cols, % positive) | Split | Model | PR-AUC ↑ | ROC-AUC ↑ | Baseline PR-AUC | Δ vs baseline | Source |
 |---|---|---|---|---|---|---|---|---|
-| Fraud | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | LightGBM | not measured | not measured | not measured | not measured | `reports/fraud_metrics.csv` |
-| Fraud (`fraud_ulb`, credential-free) | ULB / OpenML 1597 · 284,807 × 30 · 0.1727% | 5-fold stratified CV | LightGBM | **0.8569 ± 0.0331** | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 | [`reports/fraud_ulb_metrics.csv`](reports/fraud_ulb_metrics.csv) |
-| Fraud (unsup. baseline) | IEEE-CIS · 590,540 × 394 · 3.50% | time (`TransactionDT` 80/20) | Autoencoder (MPS) | not measured | not measured | not measured | not measured | `reports/fraud_autoencoder_metrics.csv` |
-| Credit risk | LendingClub · 1,345,310 terminal-status rows × 32 features · 19.96% default | time (`issue_d`, actual 71.6/8.8/19.6) | LightGBM | **0.3935** | 0.7160 | 0.3720 | 0.0215 | [`reports/credit_risk_metrics.csv`](reports/credit_risk_metrics.csv) |
-| Churn | CC attrition · 10,127 × 23 · 16.07% | 5-fold stratified CV | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | [`reports/churn_metrics.csv`](reports/churn_metrics.csv) |
+| Fraud | IEEE-CIS · scale and class rate not measured locally | configured time split on `TransactionDT` | LightGBM | not measured | not measured | not measured | not measured | blocked; no result artifact |
+| Fraud (`fraud_ulb`, credential-free) | ULB / OpenML 1597 · 284,807 rows · 29 features · 0.1727% | chronological 70/10/20 on `Time` | LightGBM | **0.8073 ± 0.1357** | 0.9828 ± 0.0194 | 0.7461 ± 0.1993 | 0.0612 ± 0.0781 | [`metrics`](reports/fraud_ulb_metrics.csv) · [`run provenance`](reports/fraud_ulb_run.json) |
+| Fraud (unsup. baseline) | IEEE-CIS · scale and class rate not measured locally | configured time split on `TransactionDT` | Autoencoder (MPS) | not measured | not measured | not measured | not measured | blocked; no result artifact |
+| Credit risk | LendingClub · 1,345,310 terminal-status rows · 32 features · 19.96% default | time on `issue_d` | LightGBM | **0.3935 ± 0.0529** | 0.7160 ± 0.0076 | 0.3720 ± 0.0569 | 0.0215 ± 0.0062 | [`metrics`](reports/credit_risk_metrics.csv) · [`run provenance`](reports/credit_risk_run.json) |
+| Churn | CC attrition · 10,127 rows · 23 features · 16.07% | 5-fold stratified CV | LightGBM | **0.9735 ± 0.0078** | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 | [`metrics`](reports/churn_metrics.csv) · [`run provenance`](reports/churn_run.json) |
 
 The `fraud` and `fraud_autoencoder` rows need the IEEE-CIS competition data, which requires Kaggle credentials that are not available here.
 
@@ -65,29 +67,36 @@ The `fraud` and `fraud_autoencoder` rows need the IEEE-CIS competition data, whi
 `reports/*_metrics.csv`; it computes nothing. Full config, caveats, and provenance:
 [`reports/RESULTS.md`](reports/RESULTS.md).</sub>
 
-<sub>For stratified cross-validation, the displayed and gated result is the CV
-mean ± standard deviation. The serving checkpoint is refit on all rows, and the
-curves/calibration/confusion matrix come from one persisted out-of-fold score per
-row. The autoencoder uses raw reconstruction error for ranking metrics and its
-training-set 95th-percentile threshold for hard decisions; it reports no Brier
-score because that error is not a calibrated probability.</sub>
+<sub>For churn, the displayed and gated result is the stratified-CV mean ± fold
+standard deviation; its serving checkpoint is refit on all rows. For the two
+chronological runs, the point estimate uses the final held-out test partition and
+`±` is the standard deviation across five adjacent, tie-safe test-time blocks.
+That spread is descriptive, not a confidence interval. Figures use the same
+persisted held-out rows. The autoencoder uses raw reconstruction error for ranking
+metrics and reports no Brier score because the error is not a calibrated
+probability.</sub>
 
-<img src="reports/figures/calibration_curves.png" alt="Log-scale calibration plots with ten equal-count bins and 95% Wilson intervals. ULB fraud has a Brier score of 0.00039 with 3 of 10 bins containing no observed positives; card attrition has a Brier score of 0.02096 with 4 of 10 bins containing no observed positives.">
+<img src="reports/figures/calibration_curves.png" alt="Log-scale calibration plots with ten equal-count bins and 95% Wilson intervals. ULB fraud has a held-out Brier score of 0.00041 with 6 of 10 bins containing no observed positives; consumer credit risk has a held-out Brier score of 0.15507 with 0 of 10 bins containing no observed positives; card attrition has a mean fold Brier score of 0.02096 with 4 of 10 bins containing no observed positives.">
 
-Predicted and observed rates are closest in the highest-score bins for both
+Observed event rates rise across the ordered score bins in all three measured
 datasets. The whiskers are 95% Wilson intervals; zero-event bins show only their
-measured upper limit down to a data-derived axis floor.
+measured upper limit down to a data-derived axis floor. This does not support
+calibration claims for future data, a policy threshold, or causal interpretation.
 
-**PR-AUC is the primary metric.** On ULB, ROC-AUC **0.9810 ± 0.0092** is inflated by the
-**0.1727%** positive rate; the prior baseline gets **0.5000 ROC-AUC** but only
-**0.0017 PR-AUC**. The informative comparison is **0.8569 ± 0.0331 PR-AUC**
-against the logistic-regression baseline of **0.7300 ± 0.0279**.
+**PR-AUC is the primary metric.** On the chronological ULB test, ROC-AUC
+**0.9828 ± 0.0194** does not express positive predictive value at the source
+**0.1727%** base rate. The operationally informative comparison is
+**0.8073 ± 0.1357 PR-AUC** against the logistic-regression baseline of
+**0.7461 ± 0.1993**.
 
-<img src="reports/figures/precision_recall_curves.png" alt="Precision-recall curves from out-of-fold predictions. The published five-fold mean PR-AUC is 0.8569 ± 0.0331 for LightGBM versus 0.7300 ± 0.0279 for logistic regression on ULB fraud, and 0.9735 ± 0.0078 versus 0.7800 ± 0.0217 on card attrition.">
+<img src="reports/figures/precision_recall_curves.png" alt="Precision-recall curves from held-out predictions. Published PR-AUC values are 0.8073 ± 0.1357 versus 0.7461 ± 0.1993 on ULB fraud, 0.3935 ± 0.0529 versus 0.3720 ± 0.0569 on consumer credit risk, and 0.9735 ± 0.0078 versus 0.7800 ± 0.0217 on card attrition.">
 
-The curves pool one held-out prediction per row, while the headline values are
-the mean ± standard deviation of the five fold scores. LightGBM separates
-positives more effectively than the logistic baseline on both datasets.
+The curves pool one held-out prediction per row. The chronological spreads come
+from adjacent test-time blocks; the churn headline is the mean and standard
+deviation of five folds. LightGBM's PR point estimate exceeds logistic
+regression on all three measured sets, but the ULB delta spread includes zero.
+This does not support a causal claim, a deployment threshold, statistical
+significance, or prospective churn forecasting.
 
 **The churn result measures detection, not forecasting.** `Attrition_Flag` is current status while
 its strongest features summarise the same trailing activity window. With no
@@ -126,7 +135,8 @@ flowchart TB
 ```
 
 The API discovers models by globbing `checkpoints/*/metadata.json`. Adding a
-model needs no change to `api.py` and no redeploy. A fresh clone with zero
+model needs no route-code change, but its checkpoint still has to be mounted or
+deployed. A fresh clone with zero
 checkpoints reports `status: ok` with three unavailable models without entering
 a crash loop.
 [SVG](docs/diagrams/c4-container.svg) · [full notes](docs/architecture.md)
@@ -172,9 +182,9 @@ identical matrices. [SVG](docs/diagrams/sequence-predict.svg)
 ```mermaid
 %%{init: {'htmlLabels': false, 'fontFamily': 'arial, helvetica, sans-serif', 'flowchart': {'htmlLabels': false, 'padding': 16, 'nodeSpacing': 60, 'rankSpacing': 70, 'useMaxWidth': true}}}%%
 flowchart LR
-    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>590,540 × 394 · 3.5% fraud")]
-    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>2.26M × 151 · CC0")]
-    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 × 23")]
+    K1[("Kaggle competition<br/>ieee-fraud-detection<br/>scale not measured locally")]
+    K2[("Kaggle dataset<br/>wordsforthewise/lending-club<br/>source rows measured")]
+    K3[("Kaggle dataset<br/>sakshigoyal7/<br/>credit-card-customers<br/>10,127 rows")]
     OML[("OpenML 1597<br/>ULB fraud · NO ACCOUNT")]
     K1 & K2 & K3 & OML -->|"scripts/download_data.py<br/>rows recorded · file sha256<br/>compared when pinned"| C[("~/.cache/kagglehub/<br/>outside the repo")]
     C -->|"src/data/<br/>adapters/*"| P["canonical frame<br/>float32 · category · int8 label"]
@@ -347,13 +357,17 @@ Full provenance, per-dataset column notes and both leakage traps:
   metric, the checkpoint fit scope and row count, and the enforced leakage
   controls. Autoencoder checkpoints write the same fields and the same metrics
   CSV path as tabular checkpoints.
+- **Every published run has a committed record.**
+  `reports/*_run.json` is generated from checkpoint metadata and cross-checks the
+  aggregate metrics CSV byte source, seed, training commit, dataset identity,
+  split, and warning state without publishing model or row-level data.
 - **`/predict` returns `model_version`:** the short git SHA from that metadata is
   included in every response, linking the score to its training commit.
-- **No published result metric is typed by hand.** `scripts/evaluate.py` reads
-  `reports/*_metrics.csv`; it computes nothing. There is no code path from a
-  fixture to a published table: sample mode opens no MLflow/W&B run and writes
-  no checkpoint or metrics CSV, while dashboard history requires
-  `sample=false` plus matching problem/config tags.
+- **Published result cells are checked against generated records.**
+  `scripts/evaluate.py` validates `reports/*_metrics.csv`, while the test suite
+  cross-checks each measured CSV against its generated `reports/*_run.json`.
+  Sample mode opens no MLflow/W&B run and writes no checkpoint, run record, or
+  metrics CSV.
 
 ## Explainability
 
@@ -379,16 +393,15 @@ from, so the explanation always describes the number beside it.
 make test       # excludes the live-Kaggle canary
 make test-all   # includes it (needs credentials)
 make lint typecheck
+make publication-check
 make verify     # clone HEAD into a temp dir and run this README's quickstart
 ```
 
 Checkpoint-dependent quality gates skip with an explicit training command when a
 real checkpoint is absent. The fresh-clone verifier reports that skip separately.
-The **88%** coverage badge is the rounded **88.24%** reported by:
-
-```bash
-./.venv/bin/pytest -p no:cacheprovider -m "not network" --cov=src --cov-report=term-missing
-```
+The enforced coverage floor is defined in `pyproject.toml` and applied by both
+local pytest configuration and CI; no hand-maintained coverage result is
+published.
 
 The gates assert:
 
@@ -399,6 +412,7 @@ The gates assert:
 | [`tests/serving/test_skew.py`](tests/serving/test_skew.py) | Serving features == training features, row for row, on a fixture batch |
 | [`tests/test_quality_gates.py`](tests/test_quality_gates.py) | Expected-range smoke alarm, model beats its own baseline, monotonic direction |
 | [`tests/e2e/test_train_to_serve.py`](tests/e2e/test_train_to_serve.py) | Fixtures → train → checkpoint → HTTP predict in under 30s, and asserts the fixture result is **near chance** |
+| [`scripts/check_publication.py`](scripts/check_publication.py) | Active result cells, split counts, figure-caption measurements, metric digests, and PNG bytes match generated evidence |
 
 `pyproject.toml` contains no `-m 'not network and not parity'` filter in
 `addopts`. The network exclusion is defined in
@@ -419,10 +433,10 @@ The gates assert:
   features describe the same period. The source has no event timestamp, feature
   cutoff, or future outcome window, so the score substantially detects attrition
   that already happened.
-- **The churn checkpoint fails one directional serving gate.** On the existing
-  fixed probe, more inactivity lowers the score. The test remains enabled; the
-  out-of-fold ranking result is published, but the serving score is not a
-  monotonic retention policy.
+- **The churn score is not a monotonic retention policy.** The directional
+  serving gate checks only the empirically monotone one-to-four-month segment;
+  the source relationship reverses outside that segment. The out-of-fold
+  ranking result does not support monotonicity over the full input range.
 - **The credit-risk thresholds are illustrative, not a credit policy.** A real
   approve/decline cut point comes from expected loss at a target approval rate,
   which needs a pricing model this repository does not contain.

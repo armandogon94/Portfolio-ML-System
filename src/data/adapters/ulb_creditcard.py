@@ -2,22 +2,11 @@
 
 OpenML requires no account, so this is the credential-free real-data fraud path.
 
-**OpenML 1597 does not ship the ``Time`` column.** Measured on 2026-07-25:
-``fetch_openml(data_id=1597, as_frame=True).frame`` returns 284,807 rows and
-**30** columns -- ``V1``..``V28``, ``Amount``, ``Class`` -- with 492 positives
-(0.1727%). The Kaggle mirror ``mlg-ulb/creditcardfraud`` does carry ``Time``,
-but that path needs an account, which defeats the point of this adapter.
-
-The consequence is methodological and is stated rather than papered over: with
-no timestamp, a chronological split is impossible on this source, so
-``configs/fraud_ulb.yaml`` uses stratified k-fold. Row *position* is not used as
-a time proxy: OpenML's ordering is not documented as chronological and this
-repository does not assert facts it has not verified. The temporal-split
-demonstration lives on the IEEE-CIS path (``configs/fraud.yaml``).
-
-``Time`` is accepted if a caller supplies a source-shaped CSV that has it (the
-Kaggle mirror), in which case it is carried through as a split key and the
-feature module still excludes it from the model matrix.
+OpenML documents ``Time`` as the row-id attribute and as seconds since the first
+transaction. Scikit-learn omits row-id attributes from ``fetch_openml().frame``;
+the download layer restores that column from the exact cached ARFF rather than
+mistaking client-library behavior for a source limitation. The config uses
+``Time`` only as the chronological split key, never as a model feature.
 """
 
 from __future__ import annotations
@@ -33,12 +22,9 @@ from src.config import get_project_root
 logger = logging.getLogger(__name__)
 
 TARGET = "is_fraud"
-#: Present only in the Kaggle mirror, never in OpenML 1597. Optional throughout.
 TIME_COLUMN = "Time"
 _V_COLUMNS = [f"V{i}" for i in range(1, 29)]
-#: Columns OpenML 1597 always provides. ``Time`` is deliberately not among them.
 _REQUIRED_NUMERIC = [*_V_COLUMNS, "Amount"]
-_OPTIONAL_NUMERIC = [TIME_COLUMN]
 
 PROVENANCE: dict[str, Any] = {
     "name": "ULB Credit Card Fraud (OpenML id 1597)",
@@ -52,12 +38,13 @@ PROVENANCE: dict[str, Any] = {
     "access": "NO ACCOUNT REQUIRED. Fetched via sklearn.datasets.fetch_openml.",
     "expected_rows": 284_807,
     "expected_positive_rate": 0.001727,
-    # Unrecorded because the download has not been run on this machine.
+    "expected_md5": "178bcf9bb1f31a3dfe12d0e577884add",
     "expected_sha256": None,
 }
 
 CANONICAL_COLUMNS: dict[str, str] = {
     TARGET: "int8",
+    TIME_COLUMN: "float32",
     **{column: "float32" for column in _REQUIRED_NUMERIC},
 }
 
@@ -96,13 +83,14 @@ def _fixture() -> Path:
 
 def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
     """Derive ``is_fraud`` from ``Class`` and enforce the canonical dtypes."""
-    missing = [column for column in _REQUIRED_NUMERIC if column not in frame.columns]
+    required = [TIME_COLUMN, *_REQUIRED_NUMERIC]
+    missing = [column for column in required if column not in frame.columns]
     if missing:
         raise ValueError(
             f"ULB source is missing required columns: {missing}. Fetch OpenML data_id 1597 "
             "or pass its source-shaped CSV."
         )
-    present = [*_REQUIRED_NUMERIC, *(c for c in _OPTIONAL_NUMERIC if c in frame.columns)]
+    present = required
 
     label_column = "Class" if "Class" in frame.columns else TARGET
     if label_column not in frame.columns:
@@ -123,7 +111,7 @@ def _finalise(frame: pd.DataFrame) -> pd.DataFrame:
         "ULB canonical frame: %d rows x %d cols (Time %s), fraud rate %.6f",
         len(canonical),
         canonical.shape[1],
-        "present" if TIME_COLUMN in canonical.columns else "absent - OpenML omits it",
+        "present",
         canonical[TARGET].mean(),
     )
     return canonical

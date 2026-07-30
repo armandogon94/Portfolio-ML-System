@@ -1,8 +1,9 @@
 """Quality gates: the tests that would have caught the 0.964 incident.
 
-Everything in this file reads a **real** ``checkpoints/<problem>/metadata.json`` and
-skips with a clear reason when one is absent. Skipping is correct: a fresh clone has
-no checkpoints, and a gate that passes vacuously is worse than no gate.
+Aggregate metric gates read committed ``reports/<run>_run.json`` records first,
+so they stay live in a fresh clone. Serving-behavior gates still require the
+ignored model checkpoint and skip with a clear training command when it is
+absent.
 
 The expected-range sanity band is a smoke alarm, not a leakage test:
 
@@ -16,6 +17,7 @@ predictor hardcoded to a constant fails this suite.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -27,46 +29,52 @@ from src.serving.registry import CheckpointRegistry
 from src.training.tabular import TabularTrainer
 
 registry = CheckpointRegistry()
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: Every run whose numbers are *published*, which is not the same set as ``PROBLEMS``.
 #: ``PROBLEMS`` is the closed list of three business problems; a problem can have more
 #: than one dataset config (``fraud.yaml`` for IEEE-CIS, ``fraud_ulb.yaml`` for OpenML
-#: 1597). The gates must follow the **configs that have a trained checkpoint**, because
-#: those are the ones whose figures reach the README. Parametrising over ``PROBLEMS``
-#: left `fraud_ulb`, the measured result that replaced the retracted 0.964, ungated.
-#: Derived, not hardcoded, so a newly trained run is gated the moment it exists.
-GATED_RUNS = (
-    tuple(
-        sorted(
-            path.stem
-            for path in (registry.root.parent / "configs").glob("*.yaml")
-            if (registry.root / path.stem / "metadata.json").exists()
-        )
+#: 1597). The gates must follow both public run records and local checkpoints.
+#: Parametrising over ``PROBLEMS`` left ``fraud_ulb``, the measured result that
+#: replaced the retracted 0.964, ungated.
+PUBLISHED_RUNS = tuple(
+    sorted(
+        path.name.removesuffix("_run.json") for path in (REPO_ROOT / "reports").glob("*_run.json")
     )
-    or PROBLEMS
 )
+LOCAL_CHECKPOINT_RUNS = tuple(
+    sorted(
+        path.stem
+        for path in (REPO_ROOT / "configs").glob("*.yaml")
+        if (registry.root / path.stem / "metadata.json").exists()
+    )
+)
+GATED_RUNS = tuple(sorted(set(PUBLISHED_RUNS) | set(LOCAL_CHECKPOINT_RUNS))) or PROBLEMS
 
 #: Union of declared problems and published runs. Keeping ``PROBLEMS`` in the
 #: parametrisation preserves the loud, informative skip for ``fraud`` (blocked on Kaggle
 #: credentials) instead of silently dropping it from the suite.
 CHECKED_RUNS = tuple(sorted(set(PROBLEMS) | set(GATED_RUNS)))
 
+# Kept separate so the guard below can prove that the baseline gate covers the
+# same published-run set as the metric gates.
+BASELINE_GATED_RUNS = CHECKED_RUNS
+
 
 def _banded_metric(problem: str, metrics: dict, config: dict) -> tuple[str, float | None]:
     """Return the metric the sanity band actually names, and its measured value.
 
-    The band is declared per config: ``fraud_ulb`` bands **pr_auc** while the others band
-    **roc_auc**. Reading ROC-AUC unconditionally is what made this gate assert
-    ``0.9810 <= 0.90`` for ``fraud_ulb`` -- comparing a ROC-AUC against a PR-AUC bound.
-    The measured PR-AUC, 0.8569, sits inside its band; the gate was wrong, not the result.
-    Widening the bound to accommodate the mismatch is the move ADR-0003 forbids.
+    The band is declared per config. Reading ROC-AUC unconditionally previously
+    compared a secondary metric with a primary-metric bound. The corrected ULB
+    temporal run has no post hoc expected range; its degenerate-score and
+    baseline gates remain active.
     """
     metric = config["sanity_band"].get("metric", "roc_auc")
     key = f"cv_{metric}_mean" if config["split"]["type"] == "stratified_kfold" else f"test_{metric}"
     return metric, metrics.get(key)
 
 
-def _metadata(problem: str) -> dict:
+def _checkpoint_metadata(problem: str) -> dict:
     path = registry.root / problem / "metadata.json"
     if not path.exists():
         pytest.skip(
@@ -78,9 +86,28 @@ def _metadata(problem: str) -> dict:
     return json.loads(path.read_text())
 
 
-@pytest.mark.parametrize("problem", CHECKED_RUNS)
+def _gate_metadata(problem: str) -> dict:
+    """Load public aggregate evidence first, then a local checkpoint."""
+    public_path = REPO_ROOT / "reports" / f"{problem}_run.json"
+    if public_path.exists():
+        return json.loads(public_path.read_text())
+    return _checkpoint_metadata(problem)
+
+
+def test_public_run_record_is_used_when_a_checkpoint_is_absent(tmp_path, monkeypatch):
+    """Published aggregate gates must stay live in a fresh clone."""
+    monkeypatch.setattr(registry, "root", tmp_path / "checkpoints")
+    metadata = _gate_metadata("fraud_ulb")
+    assert metadata["run"] == "fraud_ulb"
+    assert metadata["metrics"]["test_pr_auc"] > 0
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [problem for problem in CHECKED_RUNS if "sanity_band" in load_config(problem)],
+)
 def test_metric_clears_the_configured_floor(problem):
-    metrics = _metadata(problem)["metrics"]
+    metrics = _gate_metadata(problem)["metrics"]
     config = load_config(problem)
     floor = config["sanity_band"]["min"]
     metric, measured = _banded_metric(problem, metrics, config)
@@ -93,7 +120,7 @@ def test_metric_clears_the_configured_floor(problem):
     [problem for problem in CHECKED_RUNS if "max" in load_config(problem).get("sanity_band", {})],
 )
 def test_metric_stays_inside_the_configured_sanity_band(problem):
-    metrics = _metadata(problem)["metrics"]
+    metrics = _gate_metadata(problem)["metrics"]
     config = load_config(problem)
     upper = config["sanity_band"]["max"]
     metric, measured = _banded_metric(problem, metrics, config)
@@ -113,15 +140,18 @@ def test_every_published_run_is_covered_by_the_metric_gates():
     """
     ungated = set(GATED_RUNS) - set(CHECKED_RUNS)
     assert not ungated, f"trained checkpoints outside the metric gates: {sorted(ungated)}"
-    assert "fraud_ulb" in CHECKED_RUNS, (
-        "fraud_ulb has a checkpoint and is published in the README; it must be gated"
-    )
+    assert "fraud_ulb" in CHECKED_RUNS, "fraud_ulb is published in the README; it must be gated"
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
+def test_every_checked_run_is_covered_by_the_baseline_gate():
+    missing = set(CHECKED_RUNS) - set(BASELINE_GATED_RUNS)
+    assert not missing, f"published runs outside the baseline gate: {sorted(missing)}"
+
+
+@pytest.mark.parametrize("problem", BASELINE_GATED_RUNS)
 def test_model_beats_its_own_baseline(problem):
     """Without this, a PR-AUC number means nothing at all."""
-    metrics = _metadata(problem)["metrics"]
+    metrics = _gate_metadata(problem)["metrics"]
     config = load_config(problem)
     if config["split"]["type"] == "stratified_kfold":
         model_pr = metrics.get("cv_pr_auc_mean")
@@ -134,25 +164,42 @@ def test_model_beats_its_own_baseline(problem):
     assert model_pr > baseline_pr, f"{problem}: model {model_pr} <= baseline {baseline_pr}"
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
+@pytest.mark.parametrize("problem", CHECKED_RUNS)
 def test_metadata_carries_full_provenance(problem):
     """A metric you cannot trace to a commit and a dataset is not evidence."""
-    metadata = _metadata(problem)
-    for key in ("git_sha", "seed", "dataset", "split", "feature_columns", "metrics"):
+    metadata = _gate_metadata(problem)
+    for key in (
+        "git_sha",
+        "source_tree_sha256",
+        "worktree_dirty_at_training",
+        "seed",
+        "dataset",
+        "dataset_summary",
+        "source_integrity",
+        "split",
+        "n_features",
+        "metrics",
+    ):
         assert key in metadata, f"{problem}: metadata.json missing {key!r}"
     assert metadata["git_sha"] != "unknown"
     assert metadata["seed"] == 42
 
 
-@pytest.mark.parametrize("problem", PROBLEMS)
-def test_no_sanity_band_warning_was_recorded(problem):
-    warning = _metadata(problem).get("sanity_band_warning")
-    assert warning is None, f"{problem}: the trainer flagged a problem: {warning}"
+@pytest.mark.parametrize("problem", CHECKED_RUNS)
+def test_recorded_sanity_warning_has_public_adjudication(problem):
+    """A warning may be accepted only when the report names the post-run decision."""
+    warning = _gate_metadata(problem).get("sanity_band_warning")
+    if warning is None:
+        return
+    report = (REPO_ROOT / "reports" / "RESULTS.md").read_text()
+    marker = f"**Sanity-band adjudication (`{problem}`).**"
+    assert marker in report, f"{problem}: warning is public but has no {marker!r} section"
+    assert "post-run threshold change" in report
 
 
 def test_churn_reports_a_standard_deviation_not_a_single_number():
     """n = 10,127. A single hold-out figure on this dataset is noise."""
-    metrics = _metadata("churn")["metrics"]
+    metrics = _gate_metadata("churn")["metrics"]
     assert "cv_roc_auc_std" in metrics
     assert metrics.get("cv_n_folds", 0) >= 5
 
@@ -168,7 +215,7 @@ def _score(problem: str, payload: dict) -> float:
 
 def test_a_higher_fico_score_does_not_raise_default_risk():
     """Directional sanity. A model that inverts this is wired backwards."""
-    _metadata("credit_risk")
+    _checkpoint_metadata("credit_risk")
     base = {
         "loan_amnt": 15000.0,
         "annual_inc": 72000.0,
@@ -205,7 +252,7 @@ def test_more_inactive_months_does_not_lower_churn_risk():
     what this gate now checks. Widening it back to 0..6 requires new data, not a
     new model.
     """
-    _metadata("churn")
+    _checkpoint_metadata("churn")
     base = {
         "Customer_Age": 45.0,
         "Credit_Limit": 12000.0,

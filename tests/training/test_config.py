@@ -40,12 +40,13 @@ def test_every_config_names_a_real_downloadable_dataset(problem):
 
 
 @pytest.mark.parametrize("config_name", CONFIG_PROBLEMS)
-def test_every_config_declares_a_seed_and_a_sanity_band(config_name):
+def test_every_config_declares_a_seed_and_any_sanity_band_is_bounded(config_name):
     config = load_config(config_name)
     assert config["seed"] == 42
     assert "expected" not in config
-    assert config["sanity_band"]["metric"] in {"pr_auc", "roc_auc"}
-    assert "min" in config["sanity_band"]
+    if "sanity_band" in config:
+        assert config["sanity_band"]["metric"] in {"pr_auc", "roc_auc"}
+        assert "min" in config["sanity_band"]
 
 
 def test_config_files_cover_three_problems_and_two_real_fraud_datasets(project_root):
@@ -55,10 +56,8 @@ def test_config_files_cover_three_problems_and_two_real_fraud_datasets(project_r
     assert PROBLEMS == ("fraud", "credit_risk", "churn")
 
 
-def test_ulb_sanity_band_is_pr_auc_not_roc_auc():
-    band = load_config("fraud_ulb")["sanity_band"]
-    assert band["metric"] == "pr_auc"
-    assert band["max"] == 0.90
+def test_ulb_has_no_posthoc_temporal_sanity_range():
+    assert "sanity_band" not in load_config("fraud_ulb")
 
 
 def test_churn_has_no_vacuous_upper_bound():

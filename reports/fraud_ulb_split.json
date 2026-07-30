@@ -1,0 +1,36 @@
+{
+  "config": "configs/fraud_ulb.yaml",
+  "split_type": "time",
+  "split_column": "Time",
+  "n_rows": 284807,
+  "overall_positive_rate": 0.001727485630620034,
+  "n_splits": 1,
+  "partitions": [
+    {
+      "partition": "train",
+      "n": 199368,
+      "positive_rate": 0.0019260864331286866,
+      "n_positive": 384,
+      "min": "0.0",
+      "max": "132929.0"
+    },
+    {
+      "partition": "val",
+      "n": 28478,
+      "positive_rate": 0.001158789240817473,
+      "n_positive": 33,
+      "min": "132930.0",
+      "max": "145248.0"
+    },
+    {
+      "partition": "test",
+      "n": 56961,
+      "positive_rate": 0.0013166903670932743,
+      "n_positive": 75,
+      "min": "145249.0",
+      "max": "172792.0"
+    }
+  ],
+  "split_key_values_in_multiple_partitions": [],
+  "split_key_leak": false
+}

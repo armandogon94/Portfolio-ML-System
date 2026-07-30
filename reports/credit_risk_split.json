@@ -1,0 +1,36 @@
+{
+  "config": "configs/credit_risk.yaml",
+  "split_type": "time",
+  "split_column": "issue_d",
+  "n_rows": 1345310,
+  "overall_positive_rate": 0.19962610848057324,
+  "n_splits": 1,
+  "partitions": [
+    {
+      "partition": "train",
+      "n": 962641,
+      "positive_rate": 0.18829968804569927,
+      "n_positive": 181265,
+      "min": "2007-06-01 00:00:00",
+      "max": "2016-04-01 00:00:00"
+    },
+    {
+      "partition": "val",
+      "n": 118689,
+      "positive_rate": 0.25141335759842953,
+      "n_positive": 29840,
+      "min": "2016-05-01 00:00:00",
+      "max": "2016-10-01 00:00:00"
+    },
+    {
+      "partition": "test",
+      "n": 263980,
+      "positive_rate": 0.21764527615728466,
+      "n_positive": 57454,
+      "min": "2016-11-01 00:00:00",
+      "max": "2018-12-01 00:00:00"
+    }
+  ],
+  "split_key_values_in_multiple_partitions": [],
+  "split_key_leak": false
+}

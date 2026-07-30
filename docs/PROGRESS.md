@@ -1,475 +1,282 @@
-# PROGRESS: fintech real-data rebuild
+# PROGRESS: adversarial publication repair
 
-HEAD: `653629a` on `main`
-NEXT ACTION: **Push.** The two commits this file previously listed as pending were
-created: `8e037e4` swept tracked Markdown and the figure generator, and `653629a`
-swept tracked source, config and tests and added the repository-wide guard. Only
-`8e037e4` has been pushed, so the typography commits after it are local.
+Base HEAD: `9ea52c8` on `main`
 
-## CI green repair: VERIFIED, COMMIT BLOCKED
+Working-tree status: intentionally uncommitted. The task explicitly forbids
+`git add`, `git commit`, `git checkout`, branch creation, tags, and pushes.
+There is therefore no commit SHA for this repair batch.
 
-- The removed README correction heading produced the focused RED result:
-  `grep -q "A correction, and why it's here" README.md` exited 1.
-- README contains no `0.964`; the replacement negative assertion and the
-  existing ADR-link assertion both pass.
-- The workflow comment and fresh-clone hygiene check now describe and enforce
-  the current contract. The docs gate also found a retired placeholder token in
-  a TypeScript comment; the comment was corrected and the unchanged gate passes.
-- The limitation text now says that no screenshots are tracked and points to
-  the regenerable capture script. `scripts/make_figures.py` no longer creates an
-  empty image directory. The remaining tracked path reference is the capture
-  script's runtime output message.
-- The exact tracked-Markdown count moved from 138 to 0. That sweep was scoped to
-  Markdown and the reported zero was true only of Markdown. Measured across every
-  tracked text file, 103 files still carried 250 U+2014 characters in Python,
-  TypeScript, YAML, Dockerfiles, shell and dotfiles. They are removed in a
-  follow-up commit, and `tests/test_repo_hygiene.py` now walks `git ls-files -z`
-  so no file kind sits outside the check.
-- Exit 0: Ruff check, Ruff format check, mypy, non-network pytest with coverage,
-  README link check, README claims check, Mermaid/SVG count, synthetic-generator
-  check, static diagram text inspection of all committed SVGs, generated results
-  Markdown, shell syntax, web lint, web typecheck, web tests, and web build.
-- Pytest result: 262 passed, 5 skipped, 1 deselected, 88.26% coverage.
-- Web result: 18 files and 98 tests passed; the production build completed.
-- Exit 0: `uv lock --check --offline` and the pnpm frozen lockfile-only check.
-- Not run by task rule: Docker builds, full fresh-clone verification, live
-  services, screenshot capture, training, and browser-based diagram rendering.
+NEXT ACTION: Armando reviews the complete working-tree diff. After he commits it,
+run `./scripts/verify_fresh_clone.sh` from an environment with Docker Desktop and
+package-network access. Do not weaken or skip a stage.
 
-## Typography guard widened to every encoding route
+## Current outcome
 
-- Re-measured the tree rather than trusting the previous commit message. At the
-  pushed commit `8e037e4`: 250 U+2014 characters on 245 lines across 103 tracked
-  text files, plus one backslash escape of the same code point in this file, in a
-  documented shell command. At `653629a`: zero of both.
-  Counts are occurrences, not lines containing one.
-- Binary exclusion is real but changed nothing here. Three tracked files are
-  binary by git's NUL-in-first-8000 heuristic: the two report figures and the web
-  favicon. None contained the byte sequence, so there were no false positives to
-  discard in either measurement.
-- The guard was proven able to fail before being trusted. Injecting the glyph
-  into `src/config.py` and the escape into `web/lib/industries.ts` turned it red;
-  narrowing its walk back to `git ls-files '*.md'` left both glyph assertions
-  green and failed `test_the_scan_reaches_beyond_documentation`, which is the
-  gate-that-cannot-fail defect the test exists to catch.
-- The check still had a blind spot. It read the literal glyph and the four-digit
-  backslash escape only. An HTML entity in a `.tsx` component or in a generated
-  SVG diagram renders to a reader as a real em dash and neither assertion could
-  see it. `ENCODED_SPELLINGS` now covers six routes: the four- and eight-digit
-  backslash escapes, the Python name escape, and the named, decimal and
-  hexadecimal HTML entities, the last three matched case-folded.
-- Each of the nine injected spellings, including the uppercase entity variants,
-  was confirmed to fail the matching case before the widened guard was accepted.
-  The guard also caught the literal entity in its own module docstring, which was
-  rewritten to describe the pattern instead of spelling it.
-- An empty `parametrize` list collects one case and reports it SKIPPED rather
-  than failed, so the spelling table could have been emptied without a red run.
-  `test_every_known_encoding_route_is_still_covered` pins the routes; emptying
-  the table was verified to fail it.
-- Exit 0: Ruff check, Ruff format check, mypy, non-network pytest with the 80%
-  coverage gate, README link check, README claims check, Mermaid/SVG count,
-  synthetic-generator check, web lint, web typecheck, web tests, and web build.
-- Pytest result: 271 passed, 5 skipped, 1 deselected, 88.26% coverage.
-- Web result: 18 files and 98 tests passed; the production build completed.
-- No generator emits the character. `scripts/make_figures.py` was fixed at
-  `8e037e4` and is unchanged since. No source constructs the code point
-  programmatically, by `chr`, by entity, or by escape.
-- Not run by task rule: Docker builds, full fresh-clone verification, live
-  services, screenshot capture, training, and browser-based diagram rendering.
-- Exact dependency installs were not repeated because the sandbox blocks package
-  network access and writes to the existing user caches.
-- BLOCKED: `git add` cannot create `.git/index.lock` in this session and exits
-  with `Operation not permitted`. The required path-scoped commands are above.
+- [x] Published claim ledger audited against metrics CSVs, run records, source
+  integrity, split reports, row-level prediction evidence, and figure bytes.
+- [x] Invalid ULB stratified result retracted and replaced with a chronological
+  result derived from the source's documented `Time` field.
+- [x] Every accepted summary cell generated from a training-written metrics CSV.
+- [x] Every accepted run has a public record with the base commit, exact training
+  source-tree digest, dirty-worktree flag, seed, split, source integrity, dataset
+  summary, metric digest, and evaluation scope.
+- [x] Both published figures regenerated from held-out predictions and bound to
+  their inputs and output PNG hashes in `reports/figures/manifest.json`.
+- [x] Result tables and figure captions now show fold or temporal-block spread.
+- [x] Publication, hygiene, baseline, provenance, and fresh-clone gates repaired.
+- [x] Python and web suites pass in the working tree and in a projected clone
+  containing only tracked and intended new files.
+- [~] Browser-based Mermaid rerendering could not start Chromium in this sandbox.
+  The three committed SVGs pass the static text-containment checker.
+- [~] Docker verification could not run because no Docker daemon is reachable.
 
-## Diagram text containment slice: BLOCKED
+## Findings and repairs, worst first
 
-- [x] Copied `scripts/check_diagram_text.py` from the tested owner-provided
-  path.
-- [x] Added the required top-level `htmlLabels: false` directive to every
-  Mermaid source and every Markdown Mermaid block.
-- [x] Shortened and wrapped the C4, prediction sequence, and training pipeline
-  labels. The single-node C4 subgraphs were folded into their nodes.
-- [x] Added `make diagrams-check` and the Python 3.11 CI gate. Removed the
-  obsolete SVG label hardening step and script.
-- [x] Re-ran `.venv/bin/python scripts/evaluate.py --markdown`: exit 0 with
-  the accepted values unchanged.
-- [x] Re-ran `.venv/bin/pytest -m "not network"`: 262 passed, 5 skipped,
-  1 deselected, and 88.26% coverage.
-- [x] Re-ran Ruff and `git diff --check`: both exited 0.
-- BLOCKED Regeneration and rendered inspection. The owner-provided
-  Mermaid CLI 11.16.0 reached Chromium startup, then macOS denied its Mach port
-  rendezvous with `Permission denied`. The checker could not render any of the
-  12 source instances in this sandbox.
-- KNOWN ISSUE The current SVG exports are stale. Direct inspection with the
-  checker reports `foreignObject` labels in the C4 and pipeline SVGs, plus
-  overflowing sequence labels. No diagram has a PASS result yet.
-- COMMIT No commit exists for this incomplete slice. Committing source files
-  while their generated exports are stale would violate the repository
-  contract.
+### Critical: the fraud evaluation used the wrong split
 
-## Deferred next action: IEEE-CIS unblock
+OpenML metadata names `Time` as dataset 1597's row-id attribute, and the cached
+ARFF contains it. Scikit-learn omits row-id attributes from
+`fetch_openml(...).frame`. The prior adapter mistook that client behavior for a
+source limitation and used stratified five-fold cross-validation.
 
-Install a classic
-`~/.kaggle/kaggle.json` API token from
-<https://www.kaggle.com/settings/account>, set mode `600`, and re-run the two
-competition-download checks below. The OAuth token in
-`~/.kaggle/access_token` was re-confirmed on 2026-07-25 to return 403 for both
-`kagglehub.competition_download` and the `kaggle competitions download` CLI,
-although it still works for Kaggle datasets.
-SUCCESS: `uv run python scripts/download_data.py --dataset ieee-cis` completes;
-then run the two blocked fraud training commands without changing their rows in
-the results documents beforehand.
+Repair:
 
-**`./scripts/verify_fresh_clone.sh` PASSES: all seven stages, 2026-07-25 at
-`60ee15f`.** This is the first time stage 7 has ever completed. Verbatim tail:
+- `src/data/download.py` restores only the documented row-id field from the exact
+  cached ARFF and refuses to discard it silently.
+- `src/data/adapters/ulb_creditcard.py` requires `Time` and verifies the OpenML
+  source MD5.
+- `configs/fraud_ulb.yaml` now uses a tie-safe chronological 70/10/20 split.
+- `reports/fraud_ulb_split.json` records all partition counts, rates, boundaries,
+  and the absence of split-key overlap.
+- The old stratified result is explicitly retracted in `reports/RESULTS.md`.
 
-```
-==> [7/7] docker compose up + /health
-    PASS: docker build (API image)
-    PASS: GET /health
-    PASS: POST /predict/fraud -> 503 on an untrained clone (correct)
-    PASS: teardown
-PASS: every fresh-clone stage ran and the documented quickstart reproduced.
+Focused RED: the adapter/config test showed no `Time` and a stratified split.
+Focused GREEN: the restored source loaded 284,807 rows with 31 canonical columns,
+and the split audit reproduced byte-for-byte on two runs.
+
+### High: published claims were not mechanically closed
+
+The metrics CSVs existed, but the active tables, prose-only caption values,
+figure sample counts, and PNG bytes were not all checked against a generated
+artifact. A stale or hand-edited claim could pass CI.
+
+Repair:
+
+- Training writes a validated `reports/<run>_run.json`.
+- `scripts/check_publication.py` checks summary cells, dataset summaries, both
+  temporal split tables, metric digests, training-source digests, figure input
+  evidence, finding titles, caption-only Brier values, zero-event-bin counts,
+  and output PNG hashes.
+- `make publication-check` and CI run that checker.
+- Mutation tests prove a changed summary cell and a mismatched metrics digest
+  fail.
+
+### High: several quality gates could pass without guarding the publication
+
+Proved RED before repair:
+
+- The aggregate metric gates preferred ignored checkpoints, so a fresh clone
+  skipped published results.
+- `fraud_ulb` was outside the original problem parametrization.
+- The typography scan inspected only tracked files, so an intended untracked
+  publication file escaped.
+- Figure tests asserted hard-coded counts and did not require finding titles or
+  a generated evidence manifest.
+
+Repair:
+
+- Aggregate gates read public run records first and cover every published run.
+- Checkpoint-only serving probes retain explicit skips when a model is absent.
+- Hygiene scans tracked plus nonignored untracked files.
+- Figure tests derive counts from rows, require finding titles, and validate the
+  manifest.
+- Unit tests no longer depend on ignored local prediction CSVs.
+
+### High: temporal point estimates had no uncertainty
+
+Credit risk published bare test values. The corrected ULB run also needed a
+temporal variation view.
+
+Repair:
+
+- Chronological runs report the point estimate on the complete final test plus
+  the standard deviation across five adjacent, tie-safe test-time blocks.
+- This spread is labeled as descriptive, not a confidence interval. It does not
+  cover refitting, model selection, or alternative cut dates.
+- Churn retains its five-fold mean and fold standard deviation.
+- The ULB point-estimate delta spread includes zero, and the documents say so.
+
+### Medium: the documented sample quickstart crashed
+
+RED:
+
+```bash
+MPLCONFIGDIR=/tmp/portfolio-ml-mpl-cache \
+UV_CACHE_DIR=/tmp/portfolio-ml-uv-cache UV_OFFLINE=1 make train-sample
 ```
 
-Stage 7 had never passed because every container healthcheck fetched
-`http://localhost:<port>`, and those images resolve `localhost` to `::1` only
-while the servers bind IPv4 `0.0.0.0`. The healthchecks now use `127.0.0.1`.
+The sparse 100-row fraud fixture could not form five two-class temporal blocks,
+so publication uncertainty raised a `ValueError`. Sample mode is prohibited from
+publishing metrics or predictions.
 
-The verifier clones committed `HEAD`, so it verifies the last commit rather than
-the working tree.
+Repair: sample runs skip publication-only temporal spread while the real-data
+path still requires all five blocks. A regression test fails if sample mode calls
+that calculation. The documented command now exits zero for all four configs and
+writes no checkpoint, metrics CSV, run record, or prediction artifact.
 
-Status legend: `[x]` complete · `[~]` partial · `[ ]` not started · `BLOCKED`
-needs an external input. The credit-risk result batch is committed locally on
-`main`. **Nothing has been pushed**: the public remote still serves the
-pre-retraction tree, and pushing remains an owner decision.
+### Medium: a warm Kaggle cache still required the network
+
+The LendingClub source existed in kagglehub's versioned cache, but
+`dataset_download()` contacted the API before returning it. With network blocked,
+the local training command failed.
+
+Repair: the download layer resolves the newest complete cached version first.
+The adapter's pinned source digest and row-count checks still reject stale or
+wrong bytes. A regression test proves the cached path makes no network call.
+
+### Medium: Wilson intervals could exclude an exact boundary by rounding
+
+A calibration test with an all-positive bin produced a tiny negative error-bar
+length because floating-point rounding put the computed upper endpoint just
+below the observed proportion of one.
+
+Repair: Wilson endpoints are clamped to contain the observed proportion. Boundary
+tests cover zero and one.
 
 ## Accepted measured results
 
-The only accepted result rows are generated by these commands:
+Regeneration commands:
 
 ```bash
 uv run python scripts/train.py --model fraud_ulb
-uv run python scripts/train.py --model churn
-uv run python scripts/download_data.py --dataset lending-club
+uv run python scripts/describe_split.py --model fraud_ulb \
+  --out reports/fraud_ulb_split.json
 uv run python scripts/train.py --model credit_risk
-uv run python scripts/describe_split.py --model credit_risk
+uv run python scripts/describe_split.py --model credit_risk \
+  --out reports/credit_risk_split.json
+uv run python scripts/train.py --model churn
+uv run python scripts/make_figures.py --published-only
 uv run python scripts/evaluate.py --markdown
+uv run python scripts/check_publication.py
 ```
 
-| Run | PR-AUC | ROC-AUC | Baseline PR-AUC | Δ |
-|---|---|---|---|---|
-| `fraud_ulb` | 0.8569 ± 0.0331 | 0.9810 ± 0.0092 | 0.7300 ± 0.0279 | 0.1269 ± 0.0355 |
-| `credit_risk` | 0.3935 | 0.7160 | 0.3720 | 0.0215 |
+| Run | PR-AUC | ROC-AUC | Logistic PR-AUC | Delta |
+|---|---:|---:|---:|---:|
+| `fraud_ulb` | 0.8073 ± 0.1357 | 0.9828 ± 0.0194 | 0.7461 ± 0.1993 | 0.0612 ± 0.0781 |
+| `credit_risk` | 0.3935 ± 0.0529 | 0.7160 ± 0.0076 | 0.3720 ± 0.0569 | 0.0215 ± 0.0062 |
 | `churn` | 0.9735 ± 0.0078 | 0.9940 ± 0.0019 | 0.7800 ± 0.0217 | 0.1935 ± 0.0145 |
 
-Sources: `reports/fraud_ulb_metrics.csv`,
-`reports/credit_risk_metrics.csv`, `reports/churn_metrics.csv`, and the
-checkpoint metadata written by the three training commands. The fraud and churn
-metadata name training commit
-`05d32cae0d54dee97a70be575097182e9b5f8278`; credit risk names
-`052adab726b6dd5a176cfdc737110b172198a749`. All three use seed 42.
+For `fraud_ulb` and `credit_risk`, `±` is the standard deviation across five
+adjacent temporal test blocks. For `churn`, it is the fold standard deviation.
+The values come from `reports/*_metrics.csv`, and the source-tree digest recorded
+by all three final runs is
+`eb2b5342e08e7106b6dc6bb199ec66776ba7c5a41d6f8123c196d9f9f58f3531`.
 
-The `fraud` and `fraud_autoencoder` rows remain empty. No run has produced
-their tables. Their expected-performance bands are hand-entered config values
-and are not presented as measurements.
+The IEEE-CIS `fraud` and `fraud_autoencoder` rows remain not measured. No result
+is inferred or copied into their empty cells.
 
-## Historical slices and commit map
+## Verification
 
-- [x] **Slice 1: trust-signal repairs.** Commit `1def9ad` tracked `uv.lock`,
-  added the licence, and retracted the invalid synthetic results.
-- [x] **Slice 2: narrow to fintech.** Commits `75afe98`, `f50c1af`, and
-  `d3d9951` removed the non-fintech domains, narrowed the web routes, and
-  removed superseded process files.
-- [x] **Slice 3: real-data acquisition.** Commit `75afe98` contains the data
-  layer, configs, adapters, training refactor, serving split, and test rebuild.
-  Commit `e15842a` added and validated the credential-free ULB/OpenML path.
-- BLOCKED **Slice 4: IEEE-CIS fraud result.** The implementation is in
-  `75afe98`; no result commit exists because the competition download is still
-  blocked.
-- [x] **Slice 5: LendingClub credit risk result.** The implementation is in
-  `75afe98`; the real run completed on 2026-07-26 UTC with training SHA
-  `052adab726b6dd5a176cfdc737110b172198a749`. It measured **0.3935 PR-AUC**,
-  **0.7160 ROC-AUC**, a **0.3720 logistic-regression PR-AUC**, and a
-  **+0.0215 PR-AUC** margin. The run used:
-
-  ```bash
-  uv run python scripts/download_data.py --dataset lending-club
-  uv run python scripts/train.py --model credit_risk
-  uv run python scripts/describe_split.py --model credit_risk
-  uv run python scripts/evaluate.py --markdown
-  ```
-
-  `scripts/describe_split.py` is the new non-training audit command for
-  partition counts, positive rates, time bounds, and split-key overlap. The
-  result CSV, script, test, and publication edits are committed locally and
-  unpushed.
-- [x] **Slice 6: card attrition result.** Pipeline work is in `75afe98` and
-  `e15842a`; the accepted measured row was published in `4584c9b`.
-- [x] **Slice 7: config-driven trainer and split serving modules.** Commit
-  `75afe98`.
-- [x] **Slice 8: tests that can fail.** Core rebuild in `75afe98`,
-  constant-predictor repair in `57b4921`, methodology gates in `e15842a`.
-  The current port, screenshot, coverage, and web-test gate fixes are
-  uncommitted in this batch.
-- [x] **Slice 9: documentation, diagrams, ADRs, and results report.** Commit
-  `f80fec0`; measured result publication in `4584c9b`.
-- [~] **Slice 10: CI and fresh-clone verification.** Initial verifier/CI in
-  `f80fec0`, prior verifier repair in `57b4921`. This batch fixes the
-  unconditional PASS, adds fixture smoke training and web README link checks,
-  and wires the Python matrix; a full verifier run against the repaired script
-  requires an owner-created commit first.
-
-## BLOCKED and not run
-
-### IEEE-CIS competition download: BLOCKED
-
-`~/.kaggle/access_token` authenticates Kaggle dataset downloads but the
-competition downloads remain blocked. Both paths were re-confirmed on
-2026-07-25:
+Working-tree commands that pass:
 
 ```bash
-./.venv/bin/python -c "import kagglehub; kagglehub.competition_download('ieee-fraud-detection')"
-kaggle competitions download -c ieee-fraud-detection
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src/
+uv run pytest -m "not network" --cov=src --cov-report=term-missing \
+  --cov-fail-under=80
+uv run python scripts/check_publication.py
+uv run python scripts/check_diagram_text.py \
+  docs/diagrams/c4-container.svg \
+  docs/diagrams/pipeline-dag.svg \
+  docs/diagrams/sequence-predict.svg
+cd web
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-Observed error:
+The final working-tree Python run passed 292 tests, skipped 5
+checkpoint-dependent cases, deselected the one network canary, and measured
+86.86% source coverage against the 80% floor. Web verification passed 18 test
+files and 98 tests, and the production build completed.
 
-```text
-403 ... Please make sure you are authenticated and have accepted the competition rules
-```
-
-Install a classic API token from <https://www.kaggle.com/settings/account>, then
-run:
+A projected clone was assembled from:
 
 ```bash
-mkdir -p ~/.kaggle
-mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
-chmod 600 ~/.kaggle/kaggle.json
+git ls-files -z --cached --others --exclude-standard
+```
 
+This is a read-only Git query, not a Git write. In that projected tree:
+
+- the non-network Python suite passed without checkpoints or ignored prediction
+  files: 282 passed, 15 skipped, 1 deselected, and 87.07% source coverage;
+- all four sample configs trained without publishing artifacts;
+- web lint, typecheck, 98 tests, and the production build passed.
+
+Dependency installation itself was not repeated offline because the local caches
+lacked the locked Playwright, hatchling, and Base UI tarballs. Existing locked
+environments were reused only for executing the projected-tree code.
+
+## Public-safety audit
+
+- No API-key, access-token, or private-key signature was found in public files.
+- No personal email was found beyond third-party package metadata; the permitted
+  owner identity remains in the public profile and license.
+- No absolute author filesystem path appears in public files.
+- No restricted or derived real-data row, checkpoint, row-level prediction file,
+  or MLflow store is tracked.
+- Only the four generated synthetic CI fixtures are under `data/sample/`.
+- LendingClub and churn uploader license tags are described as unverified, and
+  the repository does not redistribute their rows.
+- ULB redistribution remains unresolved and no row is redistributed.
+- All README-relative links resolve; the CI badge names the existing workflow.
+- No literal or encoded U+2014 character is present in the publishable tree.
+
+## BLOCKED and known limits
+
+### IEEE-CIS data
+
+The competition download still needs an accepted competition account and a
+classic `~/.kaggle/kaggle.json` token. Exact unblock:
+
+```bash
 uv run python scripts/download_data.py --dataset ieee-cis
 uv run python scripts/train.py --model fraud
 uv run python scripts/train.py --model fraud --autoencoder
 ```
 
-### Screenshot success gate: BLOCKED on a runnable measured-model UI
+### Docker
 
-The screenshot command must install its browser, launch a browser, write real
-PNG files, and exit zero. Missing Playwright now produces zero captures and a
-non-zero command result instead of a false “screenshot written” message.
+`docker info` reports no reachable daemon in this environment. The Docker build,
+compose health check on port 8070, and untrained 503 response were not rerun.
+They remain required in the post-commit fresh-clone verifier.
 
-```bash
-make screenshots-install
-make docker-up
-make screenshots
-```
+### Browser-rendered Mermaid gate
 
-No screenshots are tracked. Do not mark the screenshot gate complete until the
-committed capture script has produced the dashboard, measured-model prediction,
-and MLflow views and they have been visually inspected.
+The locked Mermaid CLI 11.16.0 is cached, but Chromium launch is denied by this
+sandbox before any diagram renders. All three committed SVGs pass the static
+geometry checker. Browser rerendering remains required outside the sandbox.
 
-## Current audit repair
+### Actual fresh-clone script
 
-- [x] Unsupported magnitudes removed: MPS speedup, full-frame encoding AUC
-  effect, random-split inflation magnitude, remembered leaderboard range, and
-  machine load average.
-- [x] Source counts corrected: the credit-risk denylist has 29 entries and the
-  autoencoder has six `nn.Linear` transforms with a 16-unit bottleneck.
-- [x] Ports 80 and 443 added to the native launcher refusal set, with a
-  parameterized test covering every documented reserved port.
-- [x] Web tests no longer pass when the test directory is empty; local coverage
-  now enforces the same threshold as CI; the CI placeholder-copy check can fail.
-- [x] The fresh-clone verifier records every skipped stage. Default skips end
-  `INCOMPLETE` with non-zero status; `--allow-skips` ends `PARTIAL PASS`.
-- [x] The verifier runs `make train-sample`, checks both onboarding READMEs, and
-  states that checkpoint-dependent quality gates skip on a fresh clone.
-- [x] The broken `docker-test` target and stale production compose file were
-  removed rather than left as non-working commands.
-- [x] Screenshot dependencies and the Chromium install target were added; figure
-  generation already exits non-zero with the exact train command when no
-  checkpoint exists.
-- [x] Docker dependencies are version-pinned, the CI Python matrix selects its
-  declared interpreter, and `uv` is documented as a prerequisite.
-- [x] Python/Kaggle credential behavior is documented honestly: Python
-  entrypoints read process environment variables and Kaggle files, not `.env`.
-- [x] The Kaggle OAuth precheck gap was fixed on 2026-07-25 in `e15842a`.
-  `ensure_kaggle_env()` accepts env vars, `kaggle.json`, or
-  `~/.kaggle/access_token`; the three fake-home tests remain in
-  `tests/data/test_download.py` and are re-verified in this batch.
-- [x] The fake no-run provenance footer is absent. Because real runs were later
-  completed, `reports/RESULTS.md` retains their past-tense provenance and
-  clearly separates the rows no run has produced.
+The task forbids every Git command that writes, so
+`scripts/verify_fresh_clone.sh` was not run because its first stage executes
+`git clone`. The projected-tree verification above exercised the repaired files
+without violating that rule. After the owner commits, run the actual verifier
+with network access and Docker available.
 
-Source-audit and focused-test commands for the counts above:
+## Decisions
 
-```bash
-./.venv/bin/python - <<'PY'
-import torch.nn as nn
-import yaml
-
-from src.models.autoencoder import FraudAutoencoder
-
-with open("configs/credit_risk.yaml") as stream:
-    config = yaml.safe_load(stream)
-model = FraudAutoencoder(input_dim=1)
-print("denylist entries:", len(config["data"]["denylist"]))
-print("linear transforms:", sum(isinstance(layer, nn.Linear) for layer in model.modules()))
-print("bottleneck units:", model.encoder[-3].out_features)
-PY
-./.venv/bin/pytest -p no:cacheprovider --no-cov -m "not network" \
-  tests/test_serve.py tests/test_capture_screenshots.py tests/data/test_download.py -q
-```
-
-## Decisions made and why
-
-- The obsolete production compose file and broken `docker-test` target were
-  removed: a documented path that deterministically fails is worse than no
-  path.
-- Playwright is a locked development dependency with an explicit Chromium
-  install target so screenshot success means a browser actually ran.
-- The verifier uses `INCOMPLETE` by default for skipped stages; only an explicit
-  `--allow-skips` request may produce `PARTIAL PASS`. `PASS` is reserved for a
-  run in which every stage executed.
-- Historical architectural decisions remain in `docs/adr/`. The amendment in
-  `docs/adr/0001-gradio-to-nextjs.md` corrects stale archaeology without
-  rewriting the original decision.
-
-## Known issues and verification limits
-
-- The ULB credential-free path gap is resolved in `e15842a` (2026-07-25);
-  this batch re-verifies the credential-source tests rather than claiming a
-  second implementation.
-- The verifier's former unconditional PASS is resolved in this uncommitted
-  batch. The RED command and observed false-success behavior are recorded
-  below.
-- The current batch is intentionally uncommitted. The fresh-clone verifier
-  cannot exercise these exact files until the owner commits them; this is a
-  property of its committed-HEAD isolation gate, not a reason to weaken it.
-- The full fresh-clone Docker stage has not been rerun for this uncommitted
-  batch. `bash -n` and the explicit false-PASS simulation cover the shell logic;
-  the complete verifier run remains a later owner-review check.
-- The screenshot success gate remains open as documented above.
-- Only the IEEE-CIS `fraud` and `fraud_autoencoder` result rows remain empty.
-- The requested single-file pytest command executes all three new assertions but
-  the repository-wide `--cov=src` configuration then exits non-zero because one
-  focused file cannot meet the global 80% coverage gate. The focused convention
-  below uses `PYTEST_ADDOPTS=--no-cov`; the coverage threshold was not weakened.
-
-## Credit-risk publication verification
-
-```bash
-MPLCONFIGDIR=/tmp/codex-matplotlib-cache PYTEST_ADDOPTS=--no-cov \
-  .venv/bin/python -m pytest tests/training/test_describe_split.py -q
-.venv/bin/python scripts/evaluate.py --markdown
-```
-
-```text
-...                                                                      [100%]
-| credit_risk | 0.3935 | 0.7160 | 0.3720 | 0.0215 | 0.5807 | 0.0457 |
-```
-
-`git diff --check` passed. The final stale-claim grep returned only the two
-blocked IEEE-CIS rows and the deliberately empty controlled comparisons.
-
-Whole-suite state after the run and the two fixes below:
-
-```text
-256 passed, 5 skipped, 12 warnings in 27.52s
-Required test coverage of 80.0% reached. Total coverage: 88.26%
-```
-
-`ruff check`, `ruff format --check` and `mypy src` are all clean.
-
-### Two bugs the first real credit-risk checkpoint exposed
-
-Both were pre-existing and both were invisible until a `credit_risk` checkpoint
-existed on disk. Neither test was weakened to make it pass.
-
-1. **The credit-risk serving path raised on every request.**
-   `tests/test_quality_gates.py::test_a_higher_fico_score_does_not_raise_default_risk`
-   skips itself when there is no checkpoint, so it had never run. With one, it
-   failed, not on the assertion, but with
-   `AttributeError: Can only use .dt accessor with datetimelike values` from
-   `src/features/credit_risk_features.py`. The adapter parses `issue_d` and
-   `earliest_cr_line` to `datetime64`, but `src/serving/preprocessing.py` builds
-   its one-row frame from the request payload, where any unsupplied key is a
-   float `NaN`, so the shared feature module met `float64` where it assumed
-   dates. Fixed by coercing both columns with `pd.to_datetime(errors="coerce")`
-   inside the shared module: a no-op on the training frame, and `NaT` (hence a
-   `NaN` feature, which LightGBM reads as "unknown") on a partial request. The
-   gate now passes on its merits. The model does score higher FICO as lower
-   default risk.
-
-2. **`KAGGLEHUB_TOKEN_PATH` was frozen at import time.**
-   `tests/data/test_download.py::test_real_kaggle_canary` failed in a full-suite
-   run but passed alone. `src/data/kaggle_credentials.py` bound the OAuth token
-   path as a module-level constant, and the module is first imported inside a
-   test that redirects `Path.home()` to a `tmp_path`, pinning the constant to a
-   temporary directory for the rest of the process, so every later credential
-   check reported "no token" against a home that never existed. Replaced with
-   `kagglehub_token_path()`, resolved per call, matching what
-   `load_kaggle_creds` already did.
-
-### Reproducibility of the credit-risk number
-
-`credit_risk` was trained twice at seed 42 on 2026-07-26, the second time after
-fix 1 above touched a training code path. Every metric in
-`reports/credit_risk_metrics.csv` was byte-identical across both runs; only
-`trained_at` differs. The checkpoint on disk is the second run.
-
-## RED/GREEN evidence for the prior audit batch
-
-RED commands:
-
-```bash
-PATH=/usr/bin:/bin SKIP_WEB=1 SKIP_DOCKER=1 ./scripts/verify_fresh_clone.sh
-./.venv/bin/pytest -p no:cacheprovider --no-cov tests/test_serve.py tests/test_capture_screenshots.py -q
-```
-
-The first command exited zero while all three substantive stages were skipped
-and printed an unconditional PASS. The focused pytest command failed for the
-missing reserved-port constant, both privileged ports reaching uvicorn, and a
-missing Playwright import being counted as one capture.
-
-Focused GREEN:
-
-```text
-...........................                                              [100%]
-```
-
-Command:
-
-```bash
-./.venv/bin/pytest -p no:cacheprovider --no-cov -m "not network" \
-  tests/test_serve.py tests/test_capture_screenshots.py tests/data/test_download.py -q
-```
-
-Final non-network suite:
-
-```bash
-./.venv/bin/pytest -p no:cacheprovider --no-cov -m "not network" 2>&1 | tail -5
-```
-
-```text
-  <repo>/.venv/lib/python3.11/site-packages/mlflow/tracking/_tracking_service/utils.py:184: FutureWarning: The filesystem tracking backend (e.g., './mlruns') is deprecated as of February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://mlflow.org/docs/latest/self-hosting/migrate-from-file-store for migration guidance.
-    return FileStore(store_uri, store_uri)
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-246 passed, 11 skipped, 1 deselected, 13 warnings in 35.66s
-```
-
-Final lint/format gate:
-
-```bash
-./.venv/bin/ruff check . && ./.venv/bin/ruff format --check .
-```
-
-```text
-All checks passed!
-87 files already formatted
-```
-
-`bash -n scripts/verify_fresh_clone.sh` and
-`cd web && pnpm exec tsc --noEmit` both exited zero with no output. The required
-retraction grep returned only values inside explicitly historical/retraction
-narratives; its verbatim output belongs in the final audit handoff rather than
-being copied here and recursively becoming a new grep result.
+- Restore the documented OpenML row-id attribute instead of using row order or a
+  random split.
+- Retract the invalid result rather than preserving its larger score.
+- Do not invent an expected range for the corrected ULB run after seeing it.
+- Persist temporal test predictions locally for audits, but keep them ignored
+  because real row-level derivatives are not redistributable.
+- Commit only aggregate metrics, generated public run records, split reports,
+  figure hashes, and publication figures.
+- Treat source-tree bytes as run provenance when policy requires training from
+  an uncommitted worktree.
+- Keep sample smoke training isolated from every publication artifact.

@@ -1,0 +1,89 @@
+{
+  "fresh_clone_limitation": "The row-level prediction CSVs are intentionally not redistributed. A fresh clone verifies the committed image, metrics, and evidence digests; full rerendering requires locally regenerated held-out predictions.",
+  "generator": "scripts/make_figures.py --published-only",
+  "outputs": {
+    "calibration_curves.png": {
+      "finding_title": "Observed event rates rise with model scores in all three datasets",
+      "sha256": "2f1f1d3f62e9cd060dfba83607054d22a7230d8f41d8a18ffbfa489552d96ba5"
+    },
+    "precision_recall_curves.png": {
+      "finding_title": "LightGBM PR point estimates exceed logistic regression on all measured sets",
+      "sha256": "8a751608f5efcc955ad23e76eb2fd74d199f7258f10f72c78946c97ae57641a8"
+    }
+  },
+  "schema_version": 1,
+  "sources": {
+    "churn": {
+      "calibration_observed_rate": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0009871668311944718,
+        0.001976284584980237,
+        0.0029615004935834156,
+        0.03260869565217391,
+        0.577492596248766,
+        0.9901283316880553
+      ],
+      "calibration_zero_event_bins": 4,
+      "metrics_sha256": "0227ffd64b51c23ce726ed04f9d009725eea52cc01b459bfde09b1b0ba73fa47",
+      "n_rows": 10127,
+      "pooled_average_precision": {
+        "logistic_regression": 0.7783724438164548,
+        "model": 0.9734909100023329
+      },
+      "positive_count": 1627,
+      "predictions_kind": "out_of_fold",
+      "predictions_sha256": "27ca2c7123aad5bad3797734d87e4b4a9211ffde54a6c674ed6810876f671e2a"
+    },
+    "credit_risk": {
+      "calibration_observed_rate": [
+        0.03674520797030078,
+        0.07587696037578605,
+        0.11614516251231154,
+        0.14682930525039775,
+        0.17971058413516175,
+        0.21880445488294567,
+        0.2589211303886658,
+        0.3070308356693689,
+        0.3689294643533601,
+        0.4674596560345481
+      ],
+      "calibration_zero_event_bins": 0,
+      "metrics_sha256": "778bc51266cd1dbc25b59ca2af2f75bfa97ce69f81c0688ae20f7f4943c2cc89",
+      "n_rows": 263980,
+      "pooled_average_precision": {
+        "logistic_regression": 0.3720193047121432,
+        "model": 0.39347984405877384
+      },
+      "positive_count": 57454,
+      "predictions_kind": "held_out_test_partition",
+      "predictions_sha256": "e3865c4552c9e0141c221527b6cbd2c9fd9a8de8bedf7e08723e45381fd6a9d3"
+    },
+    "fraud_ulb": {
+      "calibration_observed_rate": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.00017556179775280898,
+        0.00035112359550561797,
+        0.00035112359550561797,
+        0.01228932584269663
+      ],
+      "calibration_zero_event_bins": 6,
+      "metrics_sha256": "0a71f4e5385d68b7ecbf4333da0e6d428f16f5b16b845bb71476ce632f853803",
+      "n_rows": 56961,
+      "pooled_average_precision": {
+        "logistic_regression": 0.7460682908811601,
+        "model": 0.8072544401971411
+      },
+      "positive_count": 75,
+      "predictions_kind": "held_out_test_partition",
+      "predictions_sha256": "c7e764bee8b3265d5da20edd6b4c70fe1cca4fea6faab931b12882a490da2053"
+    }
+  }
+}

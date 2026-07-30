@@ -2,10 +2,9 @@
 """Read the committed metrics CSVs and print the results table.
 
 This script **never computes a metric**. It reads ``reports/*_metrics.csv``, which
-are written by training runs, and renders them. That is deliberate: it is
-structurally impossible for a number to appear in a table here that was not
-produced by a training run, which is the failure mode this repository was rebuilt
-to fix.
+are written by training runs, validates each file against its generated public
+run record, and renders them. This closes the direct metrics path. Richer prose
+and captions remain separately guarded by publication-integrity tests.
 
 With ``--markdown`` it emits a compact one-row-per-problem metrics summary. The
 README and ``reports/RESULTS.md`` use richer tables with dataset and per-model
@@ -20,17 +19,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
 from src.config import get_project_root
+from src.training.publication import read_metrics_csv, validate_run_record
 
 console = Console()
 #: One row per *config*, not per problem: fraud has two datasets. Names match
@@ -55,12 +53,13 @@ COLUMNS = [
 
 
 def _read(problem: str) -> dict[str, float]:
-    """Return ``{metric: value}`` from a problem's committed CSV, or ``{}``."""
+    """Return validated ``{metric: value}`` pairs, or ``{}`` when no CSV exists."""
     path = get_project_root() / "reports" / f"{problem}_metrics.csv"
     if not path.exists():
         return {}
-    frame = pd.read_csv(path)
-    return dict(zip(frame["metric"], frame["value"]))
+    metrics = read_metrics_csv(path)
+    validate_run_record(path, path.with_name(f"{problem}_run.json"))
+    return metrics
 
 
 def _pick(metrics: dict[str, float], bare: str) -> str:
@@ -69,7 +68,10 @@ def _pick(metrics: dict[str, float], bare: str) -> str:
     if mean is not None:
         return f"{mean:.4f} ± {std:.4f}" if std is not None else f"{mean:.4f}"
     value = metrics.get(f"test_{bare}")
-    return f"{value:.4f}" if isinstance(value, (int, float)) else ""
+    spread = metrics.get(f"test_{bare}_temporal_block_std")
+    if isinstance(value, (int, float)):
+        return f"{value:.4f} ± {spread:.4f}" if spread is not None else f"{value:.4f}"
+    return ""
 
 
 def main() -> int:
@@ -107,12 +109,13 @@ def main() -> int:
         )
         return 0
 
-    # Surface any leak warning the trainer recorded, so it cannot be missed.
+    # Surface any public warning the trainer recorded, so it cannot be missed.
     for problem in measured:
-        metadata_path = get_project_root() / "checkpoints" / problem / "metadata.json"
-        if not metadata_path.exists():
-            continue
-        warning = json.loads(metadata_path.read_text()).get("sanity_band_warning")
+        record_path = get_project_root() / "reports" / f"{problem}_run.json"
+        warning = validate_run_record(
+            get_project_root() / "reports" / f"{problem}_metrics.csv",
+            record_path,
+        ).get("sanity_band_warning")
         if warning:
             console.print(f"\n[bold yellow]{problem}: {warning}[/bold yellow]")
 

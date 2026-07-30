@@ -18,8 +18,8 @@ data:
 
   # The published CSV ships two pre-computed Naive-Bayes posterior columns that
   # the dataset's own author instructs you to delete. They are the target,
-  # laundered. reports/RESULTS.md reports the AUC with AND without them as an
-  # explicit leakage demonstration.
+  # laundered. The published run excludes them; the controlled with-column
+  # comparison has not been measured.
   denylist:
     - CLIENTNUM
     - Attrition_Flag

@@ -22,7 +22,7 @@ data:
   # Every column below is recorded AFTER origination. A model that sees
   # `recoveries` or `total_rec_prncp` reveals post-outcome information and makes
   # the model worthless: those fields only change after loan origination.
-  # reports/RESULTS.md carries the with/without delta.
+  # reports/RESULTS.md leaves the controlled with/without comparison unmeasured.
   # ─────────────────────────────────────────────────────────────────────────
   denylist:
     - recoveries

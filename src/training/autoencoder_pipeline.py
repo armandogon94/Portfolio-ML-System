@@ -38,6 +38,7 @@ import pandas as pd
 from src.data.split import make_splits
 from src.evaluation.classification_metrics import compute_classification_metrics
 from src.models.autoencoder import FraudAutoencoder
+from src.training.publication import write_run_record
 from src.training.tabular import TabularTrainer, _git_sha
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,13 @@ class AutoencoderTrainer(TabularTrainer):
         logger.info("Autoencoder baseline for %s (sample=%s)", self.problem, self.sample)
 
         frame = self.load_data()
+        target = self.config["data"]["target"]
+        self.dataset_summary = {
+            "n_rows": int(len(frame)),
+            "n_columns": int(len(frame.columns)),
+            "positive_count": int(frame[target].sum()),
+            "positive_rate": float(frame[target].mean()),
+        }
         split = make_splits(frame, self.config["split"], self.config["data"]["target"], self.seed)[
             0
         ]
@@ -239,6 +247,8 @@ class AutoencoderTrainer(TabularTrainer):
             "git_sha": _git_sha(),
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "dataset": self.config["data"]["source"],
+            "dataset_summary": self.dataset_summary,
+            "source_integrity": self.source_integrity,
             "split": self.config["split"],
             "feature_columns": self.numeric_columns,
             "n_features": len(self.numeric_columns),
@@ -290,7 +300,9 @@ class AutoencoderTrainer(TabularTrainer):
         pd.DataFrame([{"metric": k, "value": v} for k, v in sorted(metrics.items())]).to_csv(
             csv_path, index=False
         )
-        logger.info("Wrote %s and %s", directory, csv_path)
+        run_record_path = reports_dir / f"{self.config_name}_autoencoder_run.json"
+        write_run_record(metadata, csv_path, run_record_path)
+        logger.info("Wrote %s, %s and %s", directory, csv_path, run_record_path)
         return directory
 
 

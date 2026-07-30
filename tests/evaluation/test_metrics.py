@@ -11,6 +11,7 @@ from src.evaluation.classification_metrics import (
     compute_classification_metrics,
     precision_at_k,
     recall_at_fpr,
+    temporal_block_spread,
 )
 
 
@@ -100,3 +101,37 @@ def test_aggregate_folds_handles_a_single_fold():
 
 def test_aggregate_folds_on_no_folds_is_empty():
     assert aggregate_folds([]) == {}
+
+
+def test_temporal_block_spread_reports_variation_without_crossing_time_ties():
+    labels = np.array([0, 1] * 8)
+    scores = np.array(
+        [
+            0.1,
+            0.9,
+            0.2,
+            0.8,
+            0.3,
+            0.7,
+            0.4,
+            0.6,
+            0.6,
+            0.4,
+            0.7,
+            0.3,
+            0.8,
+            0.2,
+            0.9,
+            0.1,
+        ]
+    )
+    times = np.repeat(np.arange(8), 2)
+
+    spread = temporal_block_spread(labels, scores, times, n_blocks=4)
+
+    block_pr = [
+        average_precision_score(labels[start : start + 4], scores[start : start + 4])
+        for start in range(0, 16, 4)
+    ]
+    assert spread["test_pr_auc_temporal_block_std"] == pytest.approx(np.std(block_pr, ddof=1))
+    assert spread["test_n_temporal_blocks"] == 4.0

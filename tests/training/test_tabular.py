@@ -12,7 +12,7 @@ from sklearn.dummy import DummyClassifier
 
 from src.config import get_project_root
 from src.data.split import make_splits
-from src.training.tabular import TabularTrainer
+from src.training.tabular import TabularTrainer, _source_tree_sha256
 
 CONFIGS = ["fraud", "fraud_ulb", "credit_risk", "churn"]
 
@@ -88,6 +88,35 @@ def test_sample_mode_refuses_to_write_a_checkpoint(tmp_path):
     trainer.finish()
 
 
+def test_sample_temporal_run_skips_publication_only_block_spread(monkeypatch):
+    trainer = TabularTrainer("fraud", sample=True)
+    monkeypatch.setattr(
+        trainer,
+        "_temporal_spread",
+        lambda *args, **kwargs: pytest.fail("sample mode attempted publication uncertainty"),
+    )
+
+    metrics = trainer.run()
+
+    assert "test_pr_auc_temporal_block_std" not in metrics
+
+
+def test_training_source_digest_changes_when_executable_source_changes(monkeypatch, tmp_path):
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "model.py"
+    source.write_text("VALUE = 1\n")
+    (tmp_path / "configs" / "run.yaml").write_text("seed: 42\n")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    monkeypatch.setattr("src.training.tabular.get_project_root", lambda: tmp_path)
+
+    before = _source_tree_sha256()
+    source.write_text("VALUE = 2\n")
+
+    assert _source_tree_sha256() != before
+
+
 def test_sample_mode_does_not_write_to_the_production_mlflow_experiment(monkeypatch, tmp_path):
     """A fixture run must not exist in MLflow, even as an untagged partial run."""
     import mlflow
@@ -155,14 +184,13 @@ def test_a_score_inside_the_band_is_not_flagged():
     trainer.finish()
 
 
-def test_ulb_uses_its_pr_auc_sanity_band():
+def test_ulb_does_not_backfill_a_sanity_range_after_the_temporal_fix():
     trainer = TabularTrainer("fraud_ulb", sample=True)
     try:
-        assert trainer._check_sanity_band({"cv_pr_auc_mean": 0.75}) is None
-        upper = trainer.config["sanity_band"]["max"]
-        warning = trainer._check_sanity_band({"cv_pr_auc_mean": upper + 0.01})
+        assert "sanity_band" not in trainer.config
+        warning = trainer._check_sanity_band({"test_score_std": 0.0})
         assert warning is not None
-        assert warning.startswith("PR-AUC")
+        assert "DEGENERATE" in warning
     finally:
         trainer.finish()
 

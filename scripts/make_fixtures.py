@@ -51,7 +51,7 @@ def make_ieee_cis_fixture() -> pd.DataFrame:
     The label is drawn INDEPENDENTLY of the features, a Bernoulli(0.035) draw
     with no relationship to any column. That is deliberate and it is the opposite
     of what the deleted ``generate_fraud.py`` did. A model trained on this fixture
-    should score ~0.5 AUC. If a test ever reports a good score here, the test is
+    should score near chance. If a test ever reports a good score here, the test is
     broken.
     """
     rng = _rng()

@@ -1,10 +1,9 @@
 """Classification metrics for heavily imbalanced binary problems.
 
-**PR-AUC (average precision) is the primary metric here, not ROC-AUC.** At 3.5%
-positives (IEEE-CIS) or 0.17% (ULB), ROC-AUC is dominated by the enormous
-true-negative mass and a weak model still scores 0.8+. Average precision moves
-when the top of the ranking changes, which is the only part a fraud-review queue
-ever sees.
+**PR-AUC (average precision) is the primary metric here, not ROC-AUC.** ROC-AUC
+measures pairwise ranking and does not express positive predictive value at a
+rare base rate. Average precision responds to precision across recall levels,
+which is closer to the ranking behavior a fraud-review queue needs.
 
 Two operational metrics matter more than either AUC to a fintech reviewer:
 
@@ -154,4 +153,89 @@ def aggregate_folds(per_fold: list[dict[str, float]], *, prefix: str = "cv") -> 
         bare = name.split("_", 1)[1] if "_" in name else name
         out[f"{prefix}_{bare}_mean"] = float(np.nanmean(values))
         out[f"{prefix}_{bare}_std"] = float(np.nanstd(values, ddof=1)) if len(values) > 1 else 0.0
+    return out
+
+
+def temporal_block_spread(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    time_values: np.ndarray,
+    *,
+    n_blocks: int = 5,
+    prefix: str = "test",
+    comparison_score: np.ndarray | None = None,
+) -> dict[str, float]:
+    """Measure metric variation across tie-safe chronological test blocks.
+
+    The full held-out metric remains the point estimate. The returned standard
+    deviation describes temporal heterogeneity across adjacent test blocks; it
+    is not a confidence interval.
+    """
+    labels = np.asarray(y_true)
+    scores = np.asarray(y_score, dtype=float)
+    times = np.asarray(time_values)
+    if labels.ndim != 1 or scores.shape != labels.shape or times.shape != labels.shape:
+        raise ValueError("labels, scores, and time_values must be equal-length vectors.")
+    if n_blocks < 2 or len(labels) < n_blocks:
+        raise ValueError("Temporal spread requires at least two nonempty blocks.")
+    comparison = None if comparison_score is None else np.asarray(comparison_score, dtype=float)
+    if comparison is not None and comparison.shape != labels.shape:
+        raise ValueError("comparison_score must match the label vector.")
+    missing_time = np.asarray(
+        [value is None or (isinstance(value, float) and np.isnan(value)) for value in times]
+    )
+    if missing_time.any():
+        raise ValueError("Temporal spread cannot place a row with a missing time value.")
+
+    order = np.argsort(times, kind="stable")
+    ordered_times = times[order]
+    boundaries = [0]
+    for target in [int(round(len(order) * index / n_blocks)) for index in range(1, n_blocks)]:
+        cut = target
+        while cut < len(order) and ordered_times[cut - 1] == ordered_times[cut]:
+            cut += 1
+        if cut <= boundaries[-1] or cut >= len(order):
+            raise ValueError("Time ties prevent the requested number of nonempty temporal blocks.")
+        boundaries.append(cut)
+    boundaries.append(len(order))
+
+    block_metrics = []
+    comparison_metrics = []
+    for start, end in zip(boundaries[:-1], boundaries[1:], strict=True):
+        indices = order[start:end]
+        if len(np.unique(labels[indices])) < 2:
+            raise ValueError(
+                "A temporal test block contains one class; use fewer blocks before "
+                "reporting a PR-AUC or ROC-AUC spread."
+            )
+        block_metrics.append(
+            compute_classification_metrics(labels[indices], scores[indices], prefix="block")
+        )
+        if comparison is not None:
+            comparison_metrics.append(
+                compute_classification_metrics(
+                    labels[indices],
+                    comparison[indices],
+                    prefix="comparison",
+                )
+            )
+
+    out = {f"{prefix}_n_temporal_blocks": float(len(block_metrics))}
+    for metric in (
+        "pr_auc",
+        "roc_auc",
+        "precision_at_1pct",
+        "recall_at_1pct_fpr",
+        "brier",
+    ):
+        values = np.array([block[f"block_{metric}"] for block in block_metrics], dtype=float)
+        out[f"{prefix}_{metric}_temporal_block_std"] = float(np.std(values, ddof=1))
+    if comparison_metrics:
+        deltas = np.array(
+            [
+                model["block_pr_auc"] - baseline["comparison_pr_auc"]
+                for model, baseline in zip(block_metrics, comparison_metrics, strict=True)
+            ]
+        )
+        out[f"{prefix}_pr_auc_delta_temporal_block_std"] = float(np.std(deltas, ddof=1))
     return out

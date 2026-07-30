@@ -82,6 +82,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--model", choices=list(available_config_names()), required=True)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a table.")
+    parser.add_argument(
+        "--data-path",
+        type=Path,
+        help="Optional existing source file. The path is not written to the report.",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Write the generated JSON report to this path.",
+    )
     args = parser.parse_args()
 
     config = load_config(args.model)
@@ -89,7 +99,7 @@ def main() -> int:
     column = config["split"].get("column")
 
     adapter = get_adapter(config["data"]["source"]["adapter"])
-    frame = adapter.load()
+    frame = adapter.load(path=args.data_path) if args.data_path is not None else adapter.load()
     splits = make_splits(frame, config["split"], target, config["seed"])
 
     report: dict = {
@@ -119,6 +129,10 @@ def main() -> int:
             report["partitions"].append(
                 _partition_record(f"fold{index}_test", frame, split.test, column, target)
             )
+
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, indent=2) + "\n")
 
     if args.json:
         print(json.dumps(report, indent=2))

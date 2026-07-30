@@ -16,7 +16,7 @@ Produces, per problem:
 Requires a trained checkpoint. Without one it says so and exits non-zero rather
 than drawing an empty axis; a blank chart in a README is worse than no chart.
 
-The two README figures are rebuilt directly from persisted out-of-fold scores:
+The two README figures are rebuilt directly from persisted held-out scores:
   reports/figures/precision_recall_curves.png
   reports/figures/calibration_curves.png
 
@@ -29,7 +29,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,6 +65,7 @@ from src.data.adapters import get_adapter
 from src.data.split import make_splits
 from src.features.schema import apply_category_dtypes
 from src.serving.registry import CheckpointRegistry
+from src.training.publication import validate_run_record
 
 console = Console()
 
@@ -70,6 +73,8 @@ REPORTS_DIR = get_project_root() / "reports"
 FIGURE_DIR = get_project_root() / "reports" / "figures"
 DPI = 160
 WILSON_Z_95 = 1.959963984540054
+PUBLISHED_PR_TITLE = "LightGBM PR point estimates exceed logistic regression on all measured sets"
+PUBLISHED_CALIBRATION_TITLE = "Observed event rates rise with model scores in all three datasets"
 
 
 @dataclass(frozen=True)
@@ -99,24 +104,63 @@ def _rebuild_model_matrix(problem: str, loaded):
     return frame, matrix
 
 
-def _load_oof_frame(problem: str, *, reports_dir: Path | None = None) -> pd.DataFrame:
-    """Load and validate persisted held-out predictions."""
+def _evaluation_prediction_path(problem: str, *, reports_dir: Path) -> tuple[Path, str]:
+    """Resolve the row-level evidence named by the public run record."""
+    metrics_path = reports_dir / f"{problem}_metrics.csv"
+    record_path = reports_dir / f"{problem}_run.json"
+    if record_path.exists():
+        record = validate_run_record(metrics_path, record_path)
+        evidence = record.get("evaluation_predictions", {})
+        relative = evidence.get("path")
+        kind = evidence.get("kind")
+        if not isinstance(relative, str) or kind not in {
+            "out_of_fold",
+            "held_out_test_partition",
+        }:
+            raise ValueError(f"{record_path} does not identify its row-level predictions.")
+        return reports_dir / Path(relative).name, kind
+
+    candidates = (
+        (reports_dir / f"{problem}_oof_predictions.csv", "out_of_fold"),
+        (reports_dir / f"{problem}_test_predictions.csv", "held_out_test_partition"),
+    )
+    present = [(path, kind) for path, kind in candidates if path.exists()]
+    if len(present) != 1:
+        raise FileNotFoundError(
+            f"Expected exactly one row-level prediction file for {problem!r}; "
+            f"found {[str(path) for path, _ in present]}."
+        )
+    return present[0]
+
+
+def _load_evaluation_frame(problem: str, *, reports_dir: Path | None = None) -> pd.DataFrame:
+    """Load and validate persisted out-of-fold or chronological test scores."""
     root = reports_dir or REPORTS_DIR
-    path = root / f"{problem}_oof_predictions.csv"
+    path, kind = _evaluation_prediction_path(problem, reports_dir=root)
     if not path.exists():
         raise FileNotFoundError(
-            f"Cross-validation figures require {path}. Retrain {problem!r}; "
-            "the trainer writes one held-out prediction for every row."
+            f"Publication figures require {path}. Retrain {problem!r}; "
+            "the trainer writes one held-out prediction for every evaluated row."
         )
     frame = pd.read_csv(path).sort_values("row_index")
-    required = {"row_index", "fold", "y_true", "score_model"}
+    required = {"row_index", "y_true", "score_model"}
+    if kind == "out_of_fold":
+        required.add("fold")
     missing = required - set(frame.columns)
     if missing:
-        raise ValueError(f"{path} is missing required OOF columns: {sorted(missing)}")
+        raise ValueError(f"{path} is missing required prediction columns: {sorted(missing)}")
     if frame["row_index"].duplicated().any():
-        raise ValueError(f"{path} contains duplicate OOF row_index values.")
+        raise ValueError(f"{path} contains duplicate row_index values.")
     if not frame["y_true"].isin([0, 1]).all():
         raise ValueError(f"{path} contains labels outside 0 and 1.")
+    return frame
+
+
+def _load_oof_frame(problem: str, *, reports_dir: Path | None = None) -> pd.DataFrame:
+    """Load an out-of-fold frame for the detailed cross-validation figures."""
+    frame = _load_evaluation_frame(problem, reports_dir=reports_dir)
+    if "fold" not in frame:
+        raise ValueError(f"{problem} has held-out test rows, not out-of-fold rows.")
     return frame
 
 
@@ -143,6 +187,16 @@ def _load_oof_predictions(
     return frame["y_true"].to_numpy(), scores
 
 
+def _sample_summary(frame: pd.DataFrame) -> str:
+    """Derive the positive and total counts shown in a published figure."""
+    if "y_true" not in frame:
+        raise ValueError("A published sample summary needs a y_true column.")
+    labels = frame["y_true"]
+    if not labels.isin([0, 1]).all():
+        raise ValueError("A published sample summary needs binary labels.")
+    return f"{int(labels.sum()):,} positives in {len(labels):,} rows"
+
+
 def _wilson_interval(
     positive_count: np.ndarray,
     count: np.ndarray,
@@ -166,7 +220,9 @@ def _wilson_interval(
         * np.sqrt(proportion * (1.0 - proportion) / total + z_squared / (4.0 * total**2))
         / denominator
     )
-    return np.maximum(0.0, centre - half_width), np.minimum(1.0, centre + half_width)
+    lower = np.minimum(proportion, np.maximum(0.0, centre - half_width))
+    upper = np.maximum(proportion, np.minimum(1.0, centre + half_width))
+    return lower, upper
 
 
 def _quantile_calibration_bins(
@@ -220,29 +276,36 @@ def _metric_value(problem: str, metric: str, *, reports_dir: Path | None = None)
     return float(matches.iloc[0])
 
 
-def _validated_fold_metric(
+def _validated_evaluation_metric(
     problem: str,
     score_column: str,
-    metric_name: str,
+    metric: str,
     scorer,
     *,
     reports_dir: Path | None = None,
 ) -> float:
-    """Cross-check a persisted fold metric against the OOF rows used in a figure."""
-    frame = _load_oof_frame(problem, reports_dir=reports_dir)
-    measured = float(
-        frame.groupby("fold", sort=True)
-        .apply(
-            lambda fold: scorer(fold["y_true"], fold[score_column]),
-            include_groups=False,
+    """Cross-check a recorded metric against the rows used in a figure."""
+    frame = _load_evaluation_frame(problem, reports_dir=reports_dir)
+    if "fold" in frame:
+        metric_name = f"cv_{metric}_mean"
+        measured = float(
+            frame.groupby("fold", sort=True)
+            .apply(
+                lambda fold: scorer(fold["y_true"], fold[score_column]),
+                include_groups=False,
+            )
+            .mean()
         )
-        .mean()
-    )
+        evidence_label = "OOF rows"
+    else:
+        metric_name = f"test_{metric}"
+        measured = float(scorer(frame["y_true"], frame[score_column]))
+        evidence_label = "test rows"
     recorded = _metric_value(problem, metric_name, reports_dir=reports_dir)
     if not np.isclose(measured, recorded, rtol=1e-12, atol=1e-15):
         raise ValueError(
-            f"{problem} {metric_name} does not match its persisted OOF predictions: "
-            f"metrics CSV={recorded!r}, OOF rows={measured!r}."
+            f"{problem} {metric_name} does not match its persisted predictions: "
+            f"metrics CSV={recorded!r}, {evidence_label}={measured!r}."
         )
     return recorded
 
@@ -256,19 +319,83 @@ def _save(fig, name: str) -> Path:
     return path
 
 
+def _sha256(path: Path) -> str:
+    """Return the digest used to tie a committed artifact to its generator."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_published_manifest(outputs: tuple[Path, ...]) -> Path:
+    """Record the exact row-level evidence and image bytes used in publication."""
+    sources = {}
+    for problem in ("fraud_ulb", "credit_risk", "churn"):
+        prediction_path, prediction_kind = _evaluation_prediction_path(
+            problem, reports_dir=REPORTS_DIR
+        )
+        metrics_path = REPORTS_DIR / f"{problem}_metrics.csv"
+        record = validate_run_record(metrics_path, REPORTS_DIR / f"{problem}_run.json")
+        frame = _load_evaluation_frame(problem)
+        bins = _quantile_calibration_bins(
+            frame["y_true"].to_numpy(),
+            frame["score_model"].to_numpy(),
+        )
+        sources[problem] = {
+            "predictions_kind": prediction_kind,
+            "predictions_sha256": _sha256(prediction_path),
+            "metrics_sha256": record["metrics_sha256"],
+            "n_rows": len(frame),
+            "positive_count": int(frame["y_true"].sum()),
+            "calibration_zero_event_bins": int((bins.positive_count == 0).sum()),
+            "calibration_observed_rate": [float(value) for value in bins.observed],
+            "pooled_average_precision": {
+                "model": float(average_precision_score(frame["y_true"], frame["score_model"])),
+                "logistic_regression": float(
+                    average_precision_score(frame["y_true"], frame["score_logreg"])
+                ),
+            },
+        }
+
+    title_by_name = {
+        "precision_recall_curves.png": PUBLISHED_PR_TITLE,
+        "calibration_curves.png": PUBLISHED_CALIBRATION_TITLE,
+    }
+    manifest = {
+        "schema_version": 1,
+        "generator": "scripts/make_figures.py --published-only",
+        "sources": sources,
+        "outputs": {
+            path.name: {
+                "sha256": _sha256(path),
+                "finding_title": title_by_name[path.name],
+            }
+            for path in outputs
+        },
+        "fresh_clone_limitation": (
+            "The row-level prediction CSVs are intentionally not redistributed. "
+            "A fresh clone verifies the committed image, metrics, and evidence digests; "
+            "full rerendering requires locally regenerated held-out predictions."
+        ),
+    }
+    destination = FIGURE_DIR / "manifest.json"
+    destination.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    console.print(f"    {destination.relative_to(get_project_root())}")
+    return destination
+
+
 def _published_precision_recall(*, reports_dir: Path | None = None) -> Path:
-    """Build the README PR figure from the two persisted OOF score files."""
+    """Build the README PR figure from persisted held-out score files."""
     root = reports_dir or REPORTS_DIR
     specifications = (
-        ("fraud_ulb", "ULB fraud", "492 positives in 284,807 rows"),
-        ("churn", "Card attrition", "1,627 positives in 10,127 rows"),
+        ("fraud_ulb", "ULB fraud"),
+        ("credit_risk", "Consumer credit risk"),
+        ("churn", "Card attrition"),
     )
-    fig, axes = plt.subplots(1, 2, figsize=(12.4, 5.1))
+    fig, axes = plt.subplots(1, 3, figsize=(17.8, 5.1))
     colours = {"score_model": "#2563eb", "score_logreg": "#ea580c"}
     labels = {"score_model": "LightGBM", "score_logreg": "Logistic regression"}
 
-    for ax, (problem, title, sample_text) in zip(axes, specifications, strict=True):
-        frame = _load_oof_frame(problem, reports_dir=root)
+    for ax, (problem, title) in zip(axes, specifications, strict=True):
+        frame = _load_evaluation_frame(problem, reports_dir=root)
+        sample_text = _sample_summary(frame)
         for column in ("score_model", "score_logreg"):
             precision, recall, _ = precision_recall_curve(
                 frame["y_true"],
@@ -299,7 +426,7 @@ def _published_precision_recall(*, reports_dir: Path | None = None) -> Path:
         ax.grid(alpha=0.2)
         ax.legend(loc="upper right", fontsize=8.5, framealpha=0.95)
 
-    fig.suptitle("Precision-recall performance on held-out rows", fontsize=14, y=0.98)
+    fig.suptitle(PUBLISHED_PR_TITLE, fontsize=14, y=0.98)
     fig.subplots_adjust(left=0.075, right=0.985, bottom=0.12, top=0.82, wspace=0.22)
     return _save(fig, "precision_recall_curves")
 
@@ -422,21 +549,22 @@ def _published_calibration(*, reports_dir: Path | None = None) -> Path:
     root = reports_dir or REPORTS_DIR
     specifications = (
         ("fraud_ulb", "ULB fraud", "#2563eb"),
+        ("credit_risk", "Consumer credit risk", "#059669"),
         ("churn", "Card attrition", "#ea580c"),
     )
-    fig, axes = plt.subplots(1, 2, figsize=(12.8, 6.1))
+    fig, axes = plt.subplots(1, 3, figsize=(18.0, 6.1))
 
     for ax, (problem, title, color) in zip(axes, specifications, strict=True):
-        frame = _load_oof_frame(problem, reports_dir=root)
+        frame = _load_evaluation_frame(problem, reports_dir=root)
         bins = _quantile_calibration_bins(
             frame["y_true"].to_numpy(),
             frame["score_model"].to_numpy(),
         )
         _draw_calibration_panel(ax, bins, color=color)
-        brier = _validated_fold_metric(
+        brier = _validated_evaluation_metric(
             problem,
             "score_model",
-            "cv_brier_mean",
+            "brier",
             brier_score_loss,
             reports_dir=root,
         )
@@ -455,7 +583,7 @@ def _published_calibration(*, reports_dir: Path | None = None) -> Path:
         Line2D(
             [],
             [],
-            color="#2563eb",
+            color="#4b5563",
             marker="o",
             linestyle="none",
             markersize=6,
@@ -488,7 +616,7 @@ def _published_calibration(*, reports_dir: Path | None = None) -> Path:
         fontsize=9,
         bbox_to_anchor=(0.5, 0.015),
     )
-    fig.suptitle("Calibration across ten probability quantiles", fontsize=14, y=0.985)
+    fig.suptitle(PUBLISHED_CALIBRATION_TITLE, fontsize=14, y=0.985)
     fig.subplots_adjust(left=0.08, right=0.985, bottom=0.19, top=0.82, wspace=0.24)
     return _save(fig, "calibration_curves")
 
@@ -701,9 +829,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.published_only:
-        _published_precision_recall()
-        _published_calibration()
-        console.print("\n[green]2 published figures rebuilt from OOF predictions.[/green]")
+        outputs = (_published_precision_recall(), _published_calibration())
+        _write_published_manifest(outputs)
+        console.print("\n[green]2 published figures rebuilt from held-out predictions.[/green]")
         return 0
 
     registry = CheckpointRegistry()

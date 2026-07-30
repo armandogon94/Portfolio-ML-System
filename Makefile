@@ -8,7 +8,7 @@ COMPOSE_DEV := $(COMPOSE) -f infra/compose/dev.yml
 MMDC ?= npx -y @mermaid-js/mermaid-cli@11.16.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup data train train-sample evaluate figures diagrams diagrams-check \
+.PHONY: help setup data train train-sample evaluate publication-check figures diagrams diagrams-check \
         screenshots-install screenshots serve \
         test test-all lint format typecheck verify clean \
         docker-build docker-up docker-down docker-logs docker-clean \
@@ -36,7 +36,10 @@ train-sample:  ## Smoke-train on the committed CI fixtures (writes NO checkpoint
 evaluate:  ## Print the results table, read from reports/*_metrics.csv
 	uv run python scripts/evaluate.py
 
-figures:  ## Regenerate the published PR and calibration figures from OOF scores
+publication-check:  ## Cross-check result tables, provenance, and figure digests
+	uv run python scripts/check_publication.py
+
+figures:  ## Regenerate published PR and calibration figures from held-out scores
 	uv run python scripts/make_figures.py --published-only
 
 diagrams:  ## Export docs/diagrams/*.mmd to SVG

@@ -46,6 +46,10 @@ jobs:
         if: matrix.python-version == '3.11'
         run: make diagrams-check
 
+      - name: Publication evidence
+        if: matrix.python-version == '3.11'
+        run: make publication-check
+
       - name: Lint
         run: |
           uv run ruff check src/ scripts/ tests/
@@ -98,6 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
 
       # The historical correction no longer belongs in README. CI still blocks
       # the retired 0.964 metric, placeholder copy, and unsupported claims while
@@ -129,7 +134,7 @@ jobs:
 
       - name: Every relative README link resolves to a real file
         run: |
-          python3 - <<'PY'
+          uv run --no-project python - <<'PY'
           import re
           from pathlib import Path
 

@@ -17,6 +17,7 @@ env/
 # rights are unresolved (see data/README.md). Committing 284,807 scored rows of a
 # possibly-ODbL database is exactly the derived database share-alike attaches to.
 reports/*_oof_predictions.csv
+reports/*_test_predictions.csv
 
 # Data (regenerated via scripts)
 data/raw/*

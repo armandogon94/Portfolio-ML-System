@@ -113,8 +113,8 @@ def _logreg(params: dict[str, Any], *, seed: int):
 
     Numeric columns: median impute then standardise.
     Categorical columns: most-frequent impute then one-hot, capped at
-    ``max_categories=20``. The cap matters: ``card1`` has ~17,000 levels and an
-    uncapped one-hot would produce a matrix wider than the dataset is tall.
+    ``max_categories=20``. The cap bounds the width of high-cardinality inputs;
+    no uncapped-width measurement is published.
     Unseen levels at predict time are ignored rather than raising.
     """
     from sklearn.compose import ColumnTransformer, make_column_selector

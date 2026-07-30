@@ -1,8 +1,8 @@
 """Repository-wide typography guard.
 
 The house style forbids U+2014 (the em dash) anywhere in the tree, prose and code
-alike. This module enforces that over **every tracked file**, enumerated with
-``git ls-files -z``, not over a hand-written glob.
+alike. This module enforces that over every tracked file and every untracked,
+nonignored file, enumerated with ``git ls-files``, not over a hand-written glob.
 
 That scope is the whole point. An earlier sweep checked ``git ls-files '*.md'``,
 reported zero, and was accurate about markdown while 103 tracked source files still
@@ -65,31 +65,51 @@ _FIX = (
 )
 
 
-def _tracked_paths() -> list[Path]:
-    """Every file git tracks, as absolute paths.
+def _repository_paths() -> list[Path]:
+    """Every tracked or untracked nonignored file, as absolute paths.
 
     Skips rather than passes when git is unavailable. A vacuous pass here would
     recreate exactly the failure mode this module exists to prevent.
     """
     try:
         result = subprocess.run(
-            ["git", "ls-files", "-z"],
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             cwd=REPO_ROOT,
             capture_output=True,
             check=False,
         )
     except OSError as exc:  # pragma: no cover - git is present in CI and locally
-        pytest.skip(f"git is not runnable, so tracked files cannot be enumerated: {exc}")
+        pytest.skip(f"git is not runnable, so repository files cannot be enumerated: {exc}")
     if result.returncode != 0:  # pragma: no cover - only outside a checkout
         pytest.skip("not a git checkout, so the tracked-file list cannot be enumerated")
     names = result.stdout.decode("utf-8").split("\0")
     return [REPO_ROOT / name for name in names if name]
 
 
+def test_repository_walk_includes_untracked_nonignored_files(monkeypatch):
+    """A new public file must not sit outside the typography gate."""
+    listing = b"tracked.py\0new_report.md\0"
+
+    class Completed:
+        returncode = 0
+        stdout = listing
+
+    def fake_run(command, **kwargs):
+        assert "--others" in command
+        assert "--exclude-standard" in command
+        return Completed()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert _repository_paths() == [
+        REPO_ROOT / "tracked.py",
+        REPO_ROOT / "new_report.md",
+    ]
+
+
 def _text_payloads() -> list[tuple[Path, bytes]]:
-    """Tracked files that git would treat as text, with their raw bytes."""
+    """Public repository candidates that git would treat as text, with raw bytes."""
     payloads = []
-    for path in _tracked_paths():
+    for path in _repository_paths():
         if not path.is_file():
             continue
         data = path.read_bytes()

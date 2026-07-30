@@ -26,9 +26,17 @@ cleanly in tests.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import logging
+import os
+import re
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +79,11 @@ def kaggle_dataset_cached(slug: str, *, filename: str | None = None) -> Path:
     Raises:
         DatasetAccessError: Credentials missing, or the download failed.
     """
+    cached = _cached_kaggle_dataset(slug, filename=filename)
+    if cached is not None:
+        logger.info("Using cached Kaggle dataset %s at %s", slug, cached)
+        return cached
+
     _require_credentials(slug, kind="dataset")
 
     import kagglehub
@@ -85,6 +98,31 @@ def kaggle_dataset_cached(slug: str, *, filename: str | None = None) -> Path:
 
     logger.info("Kaggle dataset %s cached at %s", slug, cache_dir)
     return _resolve_within(cache_dir, filename)
+
+
+def _cached_kaggle_dataset(slug: str, *, filename: str | None) -> Path | None:
+    """Return the newest complete kagglehub cache version without a network call."""
+    cache_root = Path(os.environ.get("KAGGLEHUB_CACHE", Path.home() / ".cache" / "kagglehub"))
+    versions = cache_root / "datasets" / slug / "versions"
+    if not versions.is_dir():
+        return None
+
+    def version_key(path: Path) -> tuple[int, str]:
+        return (int(path.name), path.name) if path.name.isdigit() else (-1, path.name)
+
+    for version in sorted(
+        (path for path in versions.iterdir() if path.is_dir()),
+        key=version_key,
+        reverse=True,
+    ):
+        if filename is None:
+            if any(path.is_file() for path in version.rglob("*")):
+                return version
+            continue
+        matches = sorted(version.rglob(filename))
+        if matches:
+            return matches[0]
+    return None
 
 
 def kaggle_competition_cached(slug: str, *, filename: str | None = None) -> Path:
@@ -136,6 +174,75 @@ def kaggle_competition_cached(slug: str, *, filename: str | None = None) -> Path
     return _resolve_within(cache_dir, filename)
 
 
+def _restore_openml_row_id(
+    frame: pd.DataFrame,
+    details: dict[str, Any],
+    *,
+    data_home: str | Path,
+) -> pd.DataFrame:
+    """Restore a documented OpenML row id that scikit-learn omits from ``frame``."""
+    import pandas as pd
+
+    row_id = details.get("row_id_attribute")
+    if not isinstance(row_id, str) or not row_id or row_id in frame.columns:
+        return frame
+
+    source_url = details.get("url")
+    if not isinstance(source_url, str):
+        raise RuntimeError(f"OpenML documents row id {row_id!r} but provides no source URL.")
+    parsed = urlparse(source_url)
+    host = parsed.netloc.removeprefix("www.")
+    cached = Path(data_home) / "openml" / host / parsed.path.lstrip("/")
+    candidates = (cached, Path(f"{cached}.gz"))
+    source = next((path for path in candidates if path.is_file()), None)
+    if source is None:
+        raise RuntimeError(
+            f"OpenML documents row id {row_id!r}, but its cached ARFF was not found at "
+            f"{candidates}. Refusing to discard the temporal split key."
+        )
+
+    attributes: list[str] = []
+    data_line = 0
+    if source.suffix == ".gz":
+        handle = gzip.open(source, "rt", encoding="utf-8")
+    else:
+        handle = source.open("rt", encoding="utf-8")
+    with handle:
+        for line_number, line in enumerate(handle, start=1):
+            stripped = line.strip()
+            match = re.match(
+                r"@attribute\s+(?:'([^']+)'|\"([^\"]+)\"|(\S+))",
+                stripped,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                attributes.append(next(group for group in match.groups() if group is not None))
+            if stripped.casefold() == "@data":
+                data_line = line_number
+                break
+    if row_id not in attributes or data_line == 0:
+        raise RuntimeError(f"{source} does not contain documented OpenML row id {row_id!r}.")
+
+    row_ids = pd.read_csv(
+        source,
+        compression="gzip" if source.suffix == ".gz" else None,
+        header=None,
+        names=attributes,
+        skiprows=data_line,
+        usecols=[row_id],
+        quotechar="'",
+    )[row_id]
+    if len(row_ids) != len(frame) or row_ids.isna().any():
+        raise RuntimeError(
+            f"OpenML row id {row_id!r} has {len(row_ids)} usable rows; "
+            f"the parsed frame has {len(frame)}."
+        )
+
+    restored = frame.copy()
+    restored.insert(0, row_id, pd.to_numeric(row_ids, errors="raise").astype("float32"))
+    return restored
+
+
 def openml_cached(data_id: int):
     """Fetch an OpenML dataset as a pandas DataFrame. Requires no credentials.
 
@@ -145,10 +252,10 @@ def openml_cached(data_id: int):
     Returns:
         ``pandas.DataFrame`` with the features and the target column appended.
     """
-    from sklearn.datasets import fetch_openml
+    from sklearn.datasets import fetch_openml, get_data_home
 
     bunch = fetch_openml(data_id=data_id, as_frame=True, parser="auto")
-    frame = bunch.frame
+    frame = _restore_openml_row_id(bunch.frame, bunch.details, data_home=get_data_home())
     logger.info("OpenML dataset %s loaded: %d rows x %d cols", data_id, *frame.shape)
     return frame
 

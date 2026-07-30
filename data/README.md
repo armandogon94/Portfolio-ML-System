@@ -90,9 +90,9 @@ kagglehub login
 # One-time IEEE-CIS rules acceptance (browser, cannot be scripted)
 #   https://www.kaggle.com/competitions/ieee-fraud-detection/rules
 
-uv run python scripts/download_data.py --dataset cc-churn       # ~2 MB
-uv run python scripts/download_data.py --dataset ieee-cis       # ~118 MB zipped
-uv run python scripts/download_data.py --dataset lending-club   # 648 MB gzipped; ~3.9 GB cache after extraction
+uv run python scripts/download_data.py --dataset cc-churn
+uv run python scripts/download_data.py --dataset ieee-cis
+uv run python scripts/download_data.py --dataset lending-club
 ```
 
 Without credentials the script prints the remediation and exits non-zero. **There
@@ -113,9 +113,9 @@ warning because vendors can re-upload a dataset.
 |---|---|
 | Source | <https://www.kaggle.com/competitions/ieee-fraud-detection/data> |
 | Licence | Kaggle competition rules: **not redistributable** |
-| Scale | `train_transaction.csv` 590,540 × 394; `train_identity.csv` ~144,000 × 41 |
-| Positive rate | ~3.5% (20,663 fraudulent transactions) |
-| Size | ~118 MB zipped, ~1.35 GB expanded |
+| Scale | **not measured locally:** the competition download is blocked |
+| Positive rate | **not measured locally:** the competition download is blocked |
+| Size | **not measured locally:** the competition download is blocked |
 | Adapter | [`src/data/adapters/ieee_cis.py`](../src/data/adapters/ieee_cis.py) |
 | Target | `isFraud`: ships with the dataset, nothing here derives it |
 | Split | Time-based on `TransactionDT`, first 80% train / last 20% test |
@@ -132,9 +132,9 @@ therefore the only honest evaluation available, and a random split would be
 actively wrong: the same card and device appear on both sides of a random
 boundary, and the resulting AUC does not survive deployment.
 
-**Memory.** 590,540 × 393 in float32 is about 0.93 GB: comfortable in 32 GB. The
-adapter downcasts every numeric column on read and converts strings to pandas
-`category`; the naive float64-plus-object load is roughly four times larger.
+**Memory control.** The adapter downcasts numeric columns on read and converts
+strings to pandas `category`. Peak memory has not been measured because the
+competition download is blocked.
 
 ### Columns the model sees
 
@@ -144,11 +144,11 @@ Not all 394. The adapter reads the transaction base, `C1`–`C14`, `D1`–`D15`,
 
 | Feature | Why |
 |---|---|
-| `amt_decimal`, `amt_is_round` | The cents portion is signal: card-testing bots produce round amounts, humans do not |
-| `tx_hour`, `tx_weekday`, `tx_is_night` | Card testing peaks overnight |
-| `D*_detrend` | `D` columns drift with `TransactionDT`; subtracting the transaction day stops the model learning the calendar |
-| `card1_freq`, `addr1_freq`, … | "How often has this card been seen" generalises; the raw id memorises |
-| `uid_amt_ratio` | This amount against the account's typical spend |
+| `amt_decimal`, `amt_is_round` | Encodes the amount remainder and whether the amount is round; predictive value is not measured because this run is blocked |
+| `tx_hour`, `tx_weekday`, `tx_is_night` | Encodes periodic time-of-day and day-of-week context; predictive value is not measured |
+| `D*_detrend` | Subtracts transaction day from elapsed-time fields to reduce direct calendar encoding; benefit is not measured |
+| `card1_freq`, `addr1_freq`, … | Training-only frequency encodings avoid passing raw high-cardinality identifiers directly; benefit is not measured |
+| `uid_amt_ratio` | Compares the amount with a training-derived account aggregate; benefit is not measured |
 
 Frequency maps are fitted on the **training split only** and carried forward as
 artifacts. Fitting them on the full frame leaks the test distribution.
@@ -162,15 +162,15 @@ artifacts. Fitting them on the full frame leaks the test distribution.
 | Source | <https://www.kaggle.com/datasets/wordsforthewise/lending-club> |
 | Licence | Uploader tags CC0; upstream authority unverified: do not redistribute rows |
 | File | `accepted_2007_to_2018Q4.csv.gz` |
-| Scale | 2,260,701 raw rows × 151 columns; matched `expected_rows` exactly |
-| Size | 392.6 MB |
+| Scale | 2,260,701 source rows; matched `expected_rows` exactly |
+| Size | **not published:** the exact byte count is not in the committed provenance record |
 | Adapter | [`src/data/adapters/lending_club.py`](../src/data/adapters/lending_club.py) |
 | Target | `is_default`, derived from `loan_status` |
 | Split | Time-based on `issue_d` |
 | Rows after filtering | 1,345,310 terminal-status rows; 40.5% of raw rows dropped as unresolved |
 | Default rate after filtering | 0.1996 |
 | Accessed | 2026-07-26 (UTC) |
-| sha256 | `55c16f75120f897683f02e7aabcf080d0e4a20c4832feb1d592cfa941bd62a2d` |
+| sha256 | `55c16f75120f897683f02e7aabcf080d0e4a20c4832feb1d592cfa941bd62a2d`, enforced by the adapter |
 
 The upload originates from LendingClub itself. The uploader tags it CC0, but
 the uploader's authority to apply CC0 to the upstream data is undocumented; do
@@ -205,9 +205,8 @@ Every one is recorded **after** origination. `recoveries` changes only after a
 loan has defaulted; a model that sees it is worthless because the field is not
 available at origination. The adapter
 additionally never *reads* these columns: `usecols` is an allowlist of 30
-origination-time fields, which is also what keeps a 392.6 MB gzipped file from
-becoming a multi-gigabyte frame. The feature module turns those 30 raw fields
-into the 32 columns the model actually sees.
+origination-time fields. The feature module turns those 30 raw fields into the
+32 columns the model actually sees.
 
 `reports/RESULTS.md` leaves the with-denylist / without-denylist comparison
 empty because that controlled experiment has not been run. The accepted
@@ -224,11 +223,11 @@ credit-risk result uses the denylist-applied 32-feature matrix.
 | File | `BankChurners.csv` |
 | Scale | **10,127 rows × 23 columns** |
 | Positive rate | 16.07% attrited |
-| Size | < 2 MB |
+| Size | **not published:** the exact byte count is not in the committed provenance record |
 | Adapter | [`src/data/adapters/credit_card_churn.py`](../src/data/adapters/credit_card_churn.py) |
 | Target | `is_attrited`, mapped from `Attrition_Flag` |
 | Split | **5-fold stratified cross-validation** |
-| sha256 | *not yet recorded* |
+| sha256 | `c91b525a2a6755a1b0b80dad1d0d008ca97ec4df34552c8f47ffa12b6184b779`, enforced by the adapter |
 
 The upload originates from `leaps.analyttica.com`. The uploader tags it CC0,
 but the uploader's authority to apply CC0 to the upstream data is undocumented;
@@ -250,8 +249,8 @@ Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Depend
 These are pre-computed posterior probabilities of the target: the label
 laundered through a classifier. The dataset's own author instructs users to
 delete them. The adapter **keeps them in the returned frame on purpose** so that
-`reports/RESULTS.md` can report the AUC with and without as an explicit leakage
-demonstration. `configs/churn.yaml` is what stops them reaching the model, and
+The controlled with-column comparison is not measured. `configs/churn.yaml`
+stops them reaching the published model, and
 `tests/data/test_leakage_denylist.py` asserts the config's 130-character strings
 match the adapter's constants exactly, so a typo cannot silently disable the
 protection.
@@ -260,30 +259,30 @@ protection.
 
 ---
 
-## 4. Ungated fallback: ULB Credit Card Fraud
+## 4. Credential-free benchmark: ULB Credit Card Fraud
 
 | | |
 |---|---|
 | Source | <https://www.openml.org/d/1597> (also Kaggle `mlg-ulb/creditcardfraud`) |
 | Licence | Unresolved: OpenML records only "Public"; the Kaggle mirror indicates ODbL-style terms. Treat as NOT cleared for redistribution. |
-| Scale | **284,807 rows × 30 columns** (`V1`–`V28`, `Amount`, `Class`) |
+| Scale | **284,807 rows × 31 source columns** (`Time`, `V1`–`V28`, `Amount`, `Class`) |
 | Class counts | **`Class=0`: 284,315 · `Class=1`: 492** |
 | Positive rate | **0.1727%** |
 | Access | **No account. No token. No rules acceptance.** |
-| Fetched | **2026-07-25**, from OpenML 1597 with no credentials |
+| Run provenance | [`reports/fraud_ulb_run.json`](../reports/fraud_ulb_run.json) |
 | Adapter | [`src/data/adapters/ulb_creditcard.py`](../src/data/adapters/ulb_creditcard.py) |
 | Config | [`configs/fraud_ulb.yaml`](../configs/fraud_ulb.yaml) |
 | Target | `is_fraud`, derived from source `Class` |
-| Split | Stratified 5-fold cross-validation |
-| sha256 | n/a: OpenML returns a frame rather than a primary file |
+| Split | Chronological 70/10/20 on `Time`; tie-safe boundaries |
+| Source digest | MD5 `178bcf9bb1f31a3dfe12d0e577884add`, from OpenML metadata and enforced by the adapter |
 
-OpenML returned **no `Time` column**. The 29 model features are the PCA
-components `V1`–`V28` plus `Amount`; `Class` is the target and is denylisted from
-the matrix. Without a timestamp, this dataset cannot support a temporal split,
-and row order is not treated as undocumented time. That is why it is the
-credential-free path rather than the centrepiece: it cannot demonstrate
-time-based validation or interpretable SHAP labels. What it *can* do is let a
-reviewer with no Kaggle account verify that the pipeline runs on real data.
+OpenML documents `Time` as the row-id attribute and as seconds since the first
+transaction. The raw ARFF contains it, but scikit-learn omits row-id attributes
+from `fetch_openml(...).frame`. The download layer restores only that documented
+field from the verified cached ARFF and fails if the bytes are unavailable. The
+29 model features remain `V1`–`V28` plus `Amount`; `Time`, `Class`, and the
+derived target are excluded from the matrix. This supports chronological
+validation, but the PCA component names still limit interpretability.
 
 At 0.1727% positives, ROC-AUC is close to meaningless. Average precision is the
 primary metric.

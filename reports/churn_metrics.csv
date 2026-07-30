@@ -71,4 +71,4 @@ cv_roc_auc_std,0.0019445356977965654
 cv_score_std_mean,0.3463526283151592
 cv_score_std_std,0.0033637841081281205
 n_features,23.0
-training_time_seconds,11.1
+training_time_seconds,14.9
